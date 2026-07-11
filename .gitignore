@@ -1,0 +1,33 @@
+# 環境変数（秘密情報）
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# エディタ / ツール
+.vscode/
+.idea/
+*.swp
+.claude/settings.local.json
+
+# Rails (backend/)
+/backend/.bundle/
+/backend/log/*
+/backend/tmp/*
+/backend/storage/*
+/backend/public/assets
+/backend/config/master.key
+/backend/config/credentials/*.key
+!/backend/log/.keep
+!/backend/tmp/.keep
+!/backend/storage/.keep
+
+# Next.js (frontend/)
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+/frontend/.env*.local
+/frontend/next-env.d.ts
+/frontend/tsconfig.tsbuildinfo
