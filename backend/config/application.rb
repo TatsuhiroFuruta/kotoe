@@ -40,6 +40,14 @@ module Kotoe
 
     # config.eager_load_paths << Rails.root.join("extras")
 
+    # ジェネレータは RSpec と FactoryBot を使う（Minitest / fixtures は作らない）。
+    config.generators do |g|
+      g.test_framework :rspec
+      g.factory_bot dir: "spec/factories"
+      # ルートは `namespace :api` 配下に手書きする方針のため、自動追記させない。
+      g.skip_routes true
+    end
+
     # Only loads a smaller set of middleware suitable for API only apps.
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.

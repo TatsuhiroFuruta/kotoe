@@ -28,6 +28,9 @@
 /config/master.key
 /config/credentials/*.key
 
+# RSpec が `--only-failures` のために書き出す実行結果。
+/spec/examples.txt
+
 # ホストで `bundle install --path vendor/bundle` を実行した場合の gem の実体。
 # 通常は BUNDLE_PATH=/usr/local/bundle（コンテナ内）に入るため生成されない。
 /vendor/bundle

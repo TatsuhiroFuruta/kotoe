@@ -1,8 +1,23 @@
-# Omakase Ruby styling for Rails
+# Rails omakase をベースにする。
 inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 
-# Overwrite or add rules to create your own house style
-#
-# # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
-# Layout/SpaceInsideArrayLiteralBrackets:
-#   Enabled: false
+AllCops:
+  # 自動生成・外部由来のファイルは規約の対象外にする。
+  Exclude:
+    - "db/schema.rb"
+    - "db/migrate/**/*"
+    - "bin/**/*"
+    - "vendor/**/*"
+    - "tmp/**/*"
+    - "storage/**/*"
+    - "node_modules/**/*"
+
+# 文字列はダブルクォートで統一する（spec も含めプロジェクト全体）。
+# omakase は引用符の種類を問わない設定なので、ここで明示的に有効化する。
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  Enabled: true
+  EnforcedStyle: double_quotes
