@@ -1,0 +1,22 @@
+# 接続情報は DATABASE_URL 環境変数から取る（値をこのファイルに書かない）。
+#   開発: docker compose が .env.development の値を渡す
+#   本番: Render のダッシュボードに Neon の「プール接続文字列」を設定する
+#         （プール接続を使わないと Neon の接続数を枯渇させる）
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  url: <%= ENV["DATABASE_URL"] %>
+  # 接続プール数。Puma のスレッド数に合わせる。
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
+development:
+  <<: *default
+
+# test は同じ DB サーバー上の別データベースを使う。
+# DATABASE_URL の末尾のデータベース名だけを kotoe_test に差し替える。
+test:
+  <<: *default
+  url: <%= ENV["DATABASE_URL"]&.sub(%r{/[^/?]+(\?|\z)}, "/kotoe_test\\1") %>
+
+production:
+  <<: *default
