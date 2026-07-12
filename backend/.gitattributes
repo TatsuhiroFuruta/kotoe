@@ -1,0 +1,17 @@
+# See https://git-scm.com/docs/gitattributes for more about git attribute files.
+
+# 自動生成ファイルとして印を付ける。GitHub の PR で差分が折りたたまれ、
+# 言語統計からも除外される。
+db/schema.rb linguist-generated
+
+# vendor 配下は自前のコードではない。
+vendor/* linguist-vendored
+
+# SQL ファイル内の @generated コメントが差分として描画されるのを防ぐ。
+*.sql linguist-generated
+
+# 暗号化クレデンシャルの差分を、暗号文ではなく復号後の内容で表示する。
+# 有効にするには clone ごとに一度 `bin/rails credentials:diff --enroll` が必要
+# （未登録でも git が無視するだけで害はない）。復号は master.key を持つ手元でのみ行われる。
+config/credentials/*.yml.enc diff=rails_credentials
+config/credentials.yml.enc diff=rails_credentials

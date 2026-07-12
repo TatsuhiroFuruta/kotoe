@@ -1,0 +1,12 @@
+# イメージのビルドコンテキストに送らないもの。
+# node_modules はコンテナ内で npm ci して作るため、ホスト側のものは不要。
+node_modules
+.next
+out
+
+# 秘密情報をイメージに焼き込まない（実行時に compose / Vercel が環境変数で渡す）
+.env
+.env.*
+!.env.example
+
+.git

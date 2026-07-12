@@ -1,0 +1,12 @@
+# イメージのビルドコンテキストに送らないもの。
+log/*
+tmp/*
+storage/*
+
+# 秘密情報をイメージに焼き込まない（実行時に compose / Render が環境変数で渡す）
+.env
+.env.*
+!.env.example
+config/master.key
+
+.git

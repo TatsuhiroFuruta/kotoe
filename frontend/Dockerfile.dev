@@ -1,0 +1,21 @@
+# 開発用イメージ。本番は Vercel（サーバーレス）にデプロイするため Docker を使わない。
+#
+# alpine ではなく slim（Debian / glibc）を使う。Next.js 16 のデフォルトである
+# Turbopack のネイティブバイナリが musl 上では起動に失敗し、"Ready" と表示しながら
+# 実際にはポートを LISTEN しないまま終了するため。
+FROM node:24-slim
+
+ENV TZ=Asia/Tokyo
+
+WORKDIR /app
+
+# package.json だけ先に入れて npm ci をレイヤキャッシュに乗せる。
+# node_modules は compose の名前付きボリュームに載せるため、ホスト（macOS）の
+# バインドマウント上には作らない（小ファイルの大量書き込みが極端に遅くなるため）。
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+EXPOSE 3000
+CMD ["npm", "run", "dev"]
