@@ -29,7 +29,7 @@ kotoe/
 - 画像保存：Cloudinary
 - 論理削除：discard
 - 検索：ransack ／ ページネーション：kaminari
-- 非同期：Sidekiq または Solid Queue
+- 非同期：Solid Queue（導入は issue 4-1。選定理由は `docs/README.md` 参照）
 - 画像生成：外部API（OpenAI GPT Image など）※実装は後段、まずはダミーで通す
 
 ## 開発の進め方
@@ -58,8 +58,9 @@ kotoe/
 - N+1 に注意（`includes` を使う）。
 - テストは RSpec：
   - model spec（関連・バリデーション・スコープ）、request spec（APIの入出力）、job spec（非同期）を用途に応じて。
+  - 置き場所は `spec/models` / `spec/requests` / `spec/jobs`、ファクトリは `spec/factories`、共通ヘルパは `spec/support`（`rails_helper` が自動で読み込む）。
   - private メソッドは public メソッド経由でテストする。
-  - FactoryBot を使う。
+  - FactoryBot を使う（`FactoryBot.create` ではなく `create` で呼べるよう設定済み）。
 
 ### Next.js（frontend/）
 - App Router + TypeScript。`any` を避け、API レスポンスに型を付ける。
@@ -95,6 +96,8 @@ kotoe/
 ```bash
 docker compose up            # 開発環境の起動
 docker compose exec backend bin/rails db:migrate
+# テスト用DB（kotoe_test）の作成・更新。初回と、マイグレーション追加後に実行する。
+docker compose exec -e RAILS_ENV=test backend bin/rails db:prepare
 docker compose exec backend bundle exec rspec
 docker compose exec backend bundle exec rubocop
 docker compose exec frontend npm run dev
