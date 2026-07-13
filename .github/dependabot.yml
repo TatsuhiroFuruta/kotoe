@@ -1,0 +1,51 @@
+version: 2
+
+# 依存の更新 PR を自動で作る。PR には CI（.github/workflows/ci.yml）が回る。
+#
+# PR のノイズを抑えるため：
+#   - 週次（月曜の朝）にまとめてチェックする
+#   - マイナー / パッチ更新は 1 本の PR にまとめる（メジャーは破壊的変更を見たいので個別に出す）
+#   - 同時に開く PR は 5 本まで（既定値。脆弱性由来の更新はこの上限に縛られない）
+updates:
+  - package-ecosystem: bundler
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ワークフローが使う action（actions/checkout など）の更新。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        update-types:
+          - minor
+          - patch
