@@ -1,0 +1,85 @@
+name: CI
+
+# main への PR と、main への push で回す。
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: backend (rubocop / rspec)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: kotoe_development
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      # database.yml は test 環境でこの URL の DB 名を kotoe_test に差し替える。
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/kotoe_development
+      # CORS の spec が「許可オリジン」を検証するために要る。
+      CORS_ALLOWED_ORIGINS: http://localhost:3001
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ruby のセットアップ（gem はキャッシュする）
+        uses: ruby/setup-ruby@v1
+        with:
+          # backend/.ruby-version を見る
+          bundler-cache: true
+          working-directory: backend
+
+      - name: テスト用DBを用意する
+        run: bin/rails db:prepare
+
+      - name: rubocop
+        run: bundle exec rubocop
+
+      - name: rspec
+        run: bundle exec rspec
+
+  security:
+    name: backend (brakeman / bundler-audit)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ruby のセットアップ（gem はキャッシュする）
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: backend
+
+      # Rails コードの静的セキュリティ解析（SQLインジェクション、マスアサインメント等）。
+      - name: brakeman
+        run: bundle exec brakeman --no-pager
+
+      # 既知の脆弱性が報告されている gem を使っていないか、Gemfile.lock を検査する。
+      - name: bundler-audit
+        run: |
+          bundle exec bundler-audit update
+          bundle exec bundler-audit check
