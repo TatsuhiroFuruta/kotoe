@@ -94,6 +94,8 @@ GEM
       irb (~> 1.10)
       reline (>= 0.3.8)
     diff-lcs (1.6.2)
+    discard (1.4.0)
+      activerecord (>= 4.2, < 9.0)
     drb (2.2.3)
     erb (6.0.4)
     erubi (1.13.1)
@@ -297,6 +299,7 @@ DEPENDENCIES
   brakeman
   bundler-audit
   debug
+  discard (~> 1.4)
   factory_bot_rails (~> 6.4)
   image_processing (~> 1.2)
   pg (~> 1.1)

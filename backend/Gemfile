@@ -27,6 +27,9 @@ gem "image_processing", "~> 1.2"
 # フロント（Vercel）とバック（Render）は別オリジンのため CORS が要る。
 gem "rack-cors"
 
+# 論理削除（ソフトデリート）。物理削除せず discarded_at フラグで消す。
+gem "discard", "~> 1.4"
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
