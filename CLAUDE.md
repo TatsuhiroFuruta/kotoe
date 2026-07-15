@@ -61,6 +61,7 @@ kotoe/
   - 置き場所は `spec/models` / `spec/requests` / `spec/jobs`、ファクトリは `spec/factories`、共通ヘルパは `spec/support`（`rails_helper` が自動で読み込む）。
   - private メソッドは public メソッド経由でテストする。
   - FactoryBot を使う（`FactoryBot.create` ではなく `create` で呼べるよう設定済み）。
+  - 関連・バリデーションの宣言は shoulda-matchers で1行で書く（`belong_to` / `have_many(...).dependent(...)` / `validate_presence_of` 等）。enum・スコープ・discard・複合ユニークなどの**振る舞い**は通常の `expect` で書く。
 
 ### Next.js（frontend/）
 - App Router + TypeScript。`any` を避け、API レスポンスに型を付ける。

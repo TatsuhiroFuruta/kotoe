@@ -32,4 +32,9 @@ RSpec.configure do |config|
 
   # バックトレースから Rails の gem 内のフレームを取り除く。
   config.filter_rails_from_backtrace!
+
+  # 1 example 内の複数 expectation を最初の失敗で止めず、まとめて報告する。
+  config.define_derived_metadata do |meta|
+    meta[:aggregate_failures] = true
+  end
 end
