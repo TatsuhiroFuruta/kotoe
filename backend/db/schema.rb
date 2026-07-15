@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_15_082659) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_15_083729) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -27,6 +27,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_082659) do
     t.index ["discarded_at"], name: "index_attempts_on_discarded_at"
     t.index ["post_id"], name: "index_attempts_on_post_id"
     t.index ["user_id"], name: "index_attempts_on_user_id"
+  end
+
+  create_table "favorites", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "post_id", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["post_id"], name: "index_favorites_on_post_id"
+    t.index ["user_id", "post_id"], name: "index_favorites_on_user_id_and_post_id", unique: true
+    t.index ["user_id"], name: "index_favorites_on_user_id"
   end
 
   create_table "likes", force: :cascade do |t|
@@ -58,6 +68,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_082659) do
 
   add_foreign_key "attempts", "posts"
   add_foreign_key "attempts", "users"
+  add_foreign_key "favorites", "posts"
+  add_foreign_key "favorites", "users"
   add_foreign_key "likes", "attempts"
   add_foreign_key "likes", "users"
   add_foreign_key "posts", "users"
