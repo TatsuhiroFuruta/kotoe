@@ -22,4 +22,10 @@ RSpec.describe Favorite, type: :model do
     other = build(:favorite, post: favorite.post)
     expect(other).to be_valid
   end
+
+  it "DB の複合ユニーク制約でも二重お気に入りを弾く" do
+    favorite = create(:favorite)
+    dup = build(:favorite, user: favorite.user, post: favorite.post)
+    expect { dup.save(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
+  end
 end

@@ -10,7 +10,7 @@ RSpec.describe Attempt, type: :model do
   end
 
   it "status は既定で draft" do
-    expect(build(:attempt).status).to eq("draft")
+    expect(Attempt.new.status).to eq("draft")
   end
 
   it "generated_image_public_id と similarity_score は null 可" do

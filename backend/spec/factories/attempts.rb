@@ -3,6 +3,5 @@ FactoryBot.define do
     association :post
     association :user
     description { "青い空と白い雲" }
-    status { "draft" }
   end
 end

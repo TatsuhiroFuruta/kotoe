@@ -22,4 +22,10 @@ RSpec.describe Like, type: :model do
     other = build(:like, attempt: like.attempt)
     expect(other).to be_valid
   end
+
+  it "DB の複合ユニーク制約でも二重いいねを弾く" do
+    like = create(:like)
+    dup = build(:like, user: like.user, attempt: like.attempt)
+    expect { dup.save(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
+  end
 end
