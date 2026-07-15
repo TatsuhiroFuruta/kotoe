@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_15_081940) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_15_082659) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -27,6 +27,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_081940) do
     t.index ["discarded_at"], name: "index_attempts_on_discarded_at"
     t.index ["post_id"], name: "index_attempts_on_post_id"
     t.index ["user_id"], name: "index_attempts_on_user_id"
+  end
+
+  create_table "likes", force: :cascade do |t|
+    t.bigint "attempt_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["attempt_id"], name: "index_likes_on_attempt_id"
+    t.index ["user_id", "attempt_id"], name: "index_likes_on_user_id_and_attempt_id", unique: true
+    t.index ["user_id"], name: "index_likes_on_user_id"
   end
 
   create_table "posts", force: :cascade do |t|
@@ -48,5 +58,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_081940) do
 
   add_foreign_key "attempts", "posts"
   add_foreign_key "attempts", "users"
+  add_foreign_key "likes", "attempts"
+  add_foreign_key "likes", "users"
   add_foreign_key "posts", "users"
 end
