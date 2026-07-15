@@ -5,11 +5,8 @@ RSpec.describe Favorite, type: :model do
     expect(build(:favorite)).to be_valid
   end
 
-  it "user と post に紐づく" do
-    favorite = create(:favorite)
-    expect(favorite.user).to be_a(User)
-    expect(favorite.post).to be_a(Post)
-  end
+  it { is_expected.to belong_to(:user) }
+  it { is_expected.to belong_to(:post) }
 
   it "同じ user と post の組み合わせは二重に作れない" do
     favorite = create(:favorite)

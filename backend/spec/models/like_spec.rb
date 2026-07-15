@@ -5,11 +5,8 @@ RSpec.describe Like, type: :model do
     expect(build(:like)).to be_valid
   end
 
-  it "user と attempt に紐づく" do
-    like = create(:like)
-    expect(like.user).to be_a(User)
-    expect(like.attempt).to be_a(Attempt)
-  end
+  it { is_expected.to belong_to(:user) }
+  it { is_expected.to belong_to(:attempt) }
 
   it "同じ user と attempt の組み合わせは二重に作れない" do
     like = create(:like)

@@ -5,7 +5,11 @@ RSpec.describe User, type: :model do
     expect(build(:user)).to be_valid
   end
 
-  it "name が無いと無効" do
-    expect(build(:user, name: nil)).to be_invalid
-  end
+  it { is_expected.to have_many(:posts).dependent(:restrict_with_exception) }
+  it { is_expected.to have_many(:attempts).dependent(:restrict_with_exception) }
+  it { is_expected.to have_many(:likes).dependent(:destroy) }
+  it { is_expected.to have_many(:favorites).dependent(:destroy) }
+  it { is_expected.to have_many(:reports).with_foreign_key(:reporter_id) }
+
+  it { is_expected.to validate_presence_of(:name) }
 end

@@ -5,15 +5,10 @@ RSpec.describe Report, type: :model do
     expect(build(:report)).to be_valid
   end
 
-  it "reason が無いと無効" do
-    expect(build(:report, reason: nil)).to be_invalid
-  end
+  it { is_expected.to belong_to(:reporter).class_name("User") }
+  it { is_expected.to belong_to(:attempt) }
 
-  it "reporter（User）と attempt に紐づく" do
-    report = create(:report)
-    expect(report.reporter).to be_a(User)
-    expect(report.attempt).to be_a(Attempt)
-  end
+  it { is_expected.to validate_presence_of(:reason) }
 
   it "User から reporter として reports を辿れる" do
     user = create(:user)

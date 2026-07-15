@@ -5,20 +5,12 @@ RSpec.describe Post, type: :model do
     expect(build(:post)).to be_valid
   end
 
-  it "title が無いと無効" do
-    expect(build(:post, title: nil)).to be_invalid
-  end
+  it { is_expected.to belong_to(:user) }
+  it { is_expected.to have_many(:attempts).dependent(:restrict_with_exception) }
+  it { is_expected.to have_many(:favorites).dependent(:destroy) }
 
-  it "image_public_id が無いと無効" do
-    expect(build(:post, image_public_id: nil)).to be_invalid
-  end
-
-  it "user と attempts に紐づく" do
-    post = create(:post)
-    attempt = create(:attempt, post: post)
-    expect(post.user).to be_a(User)
-    expect(post.attempts).to include(attempt)
-  end
+  it { is_expected.to validate_presence_of(:title) }
+  it { is_expected.to validate_presence_of(:image_public_id) }
 
   it "discard すると kept から外れ discarded に入る" do
     post = create(:post)

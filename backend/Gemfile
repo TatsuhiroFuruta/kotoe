@@ -47,3 +47,8 @@ group :development, :test do
   gem "rspec-rails", "~> 8.0"
   gem "factory_bot_rails", "~> 6.4"
 end
+
+group :test do
+  # 関連・バリデーションを1行で書くためのマッチャ集。
+  gem "shoulda-matchers", "~> 6.0"
+end
