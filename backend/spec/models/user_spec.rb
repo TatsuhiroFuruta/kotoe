@@ -9,7 +9,7 @@ RSpec.describe User, type: :model do
   it { is_expected.to have_many(:attempts).dependent(:restrict_with_exception) }
   it { is_expected.to have_many(:likes).dependent(:destroy) }
   it { is_expected.to have_many(:favorites).dependent(:destroy) }
-  it { is_expected.to have_many(:reports).with_foreign_key(:reporter_id) }
+  it { is_expected.to have_many(:reports).with_foreign_key(:reporter_id).dependent(:restrict_with_exception) }
 
   it { is_expected.to validate_presence_of(:name) }
 end
