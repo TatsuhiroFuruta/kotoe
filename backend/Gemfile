@@ -30,6 +30,11 @@ gem "rack-cors"
 # 論理削除（ソフトデリート）。物理削除せず discarded_at フラグで消す。
 gem "discard", "~> 1.4"
 
+# 認証。フロント（Vercel）とバック（Render）は別ドメインで cookie を共有できないため、
+# JWT を Authorization ヘッダで運ぶ。失効は devise-jwt の Denylist 戦略。
+gem "devise"
+gem "devise-jwt"
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"

@@ -33,6 +33,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:password@localhost:5432/kotoe_development
       # CORS の spec が「許可オリジン」を検証するために要る。
       CORS_ALLOWED_ORIGINS: http://localhost:3001
+      # JWT の署名鍵。CI は使い捨てなので固定のダミー値でよい（本番の鍵は Render に置く）。
+      JWT_SECRET_KEY: dummy-jwt-secret-for-ci-do-not-use-in-production
 
     defaults:
       run:

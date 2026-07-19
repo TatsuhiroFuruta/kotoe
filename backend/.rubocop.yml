@@ -11,6 +11,9 @@ AllCops:
     - "tmp/**/*"
     - "storage/**/*"
     - "node_modules/**/*"
+    # devise generator が生成するひな形。将来 devise アップグレード時の
+    # 再生成・差分比較をしやすくするため、規約に合わせて書き換えない。
+    - "config/initializers/devise.rb"
 
 # 文字列はダブルクォートで統一する（spec も含めプロジェクト全体）。
 # omakase は引用符の種類を問わない設定なので、ここで明示的に有効化する。
