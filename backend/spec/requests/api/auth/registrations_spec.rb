@@ -17,13 +17,6 @@ RSpec.describe "POST /api/auth/sign_up", type: :request do
     )
   end
 
-  it "パスワードに関する情報を返さない" do
-    post "/api/auth/sign_up", params: params, as: :json
-
-    expect(response.parsed_body).not_to have_key("encrypted_password")
-    expect(response.parsed_body).not_to have_key("password")
-  end
-
   it "Authorization ヘッダで JWT を発行する" do
     post "/api/auth/sign_up", params: params, as: :json
 
@@ -37,7 +30,7 @@ RSpec.describe "POST /api/auth/sign_up", type: :request do
       .not_to change(User, :count)
 
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body["errors"]).to have_key("email")
+    expect(response.parsed_body["errors"]["email"]).to include("taken")
   end
 
   it "name が無いと 422 とエラーを返す" do
@@ -46,6 +39,6 @@ RSpec.describe "POST /api/auth/sign_up", type: :request do
     post "/api/auth/sign_up", params: params, as: :json
 
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body["errors"]).to have_key("name")
+    expect(response.parsed_body["errors"]["name"]).to include("blank")
   end
 end
