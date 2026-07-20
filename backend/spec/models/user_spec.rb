@@ -18,7 +18,7 @@ RSpec.describe User, type: :model do
   it "email はユニーク" do
     create(:user, email: "taken@example.com")
 
-    expect(build(:user, email: "taken@example.com")).not_to be_valid
+    expect(build(:user, email: "taken@example.com")).to be_invalid
   end
 
   it "パスワードを暗号化して保存し、照合できる" do
@@ -32,6 +32,6 @@ RSpec.describe User, type: :model do
 
   it "パスワードが短すぎると無効" do
     # devise の validatable が既定で6文字以上を要求する。
-    expect(build(:user, password: "12345")).not_to be_valid
+    expect(build(:user, password: "12345")).to be_invalid
   end
 end
