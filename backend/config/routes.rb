@@ -12,6 +12,10 @@ Rails.application.routes.draw do
   namespace :api do
     # 疎通確認用（DB 接続も確認する）
     get "health" => "health#show"
+
+    # ログイン中のユーザー自身の情報。
+    # マイページの一覧API（/api/me/posts 等）は issue 6-3 で追加する。
+    get "me" => "me#show"
   end
 
   # Rails 標準のヘルスチェック。アプリが例外なく起動できたかだけを見る（DB は見ない）。
