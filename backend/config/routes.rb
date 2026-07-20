@@ -1,13 +1,14 @@
 Rails.application.routes.draw do
-  # 認証。パスは docs/screen_and_api_design.md に合わせて /api/auth/* にする。
-  # path_names の registration がリソース部分（既定は "users"）を "sign_up" に置き換える。
-  devise_for :users,
-    path: "api/auth",
-    path_names: { sign_in: "sign_in", sign_out: "sign_out", registration: "sign_up" },
-    controllers: {
-      sessions: "api/auth/sessions",
-      registrations: "api/auth/registrations"
-    }
+  # 公開するのはこの3本だけ。devise_for の既定は退会（DELETE）・パスワード変更（PATCH）・
+  # HTML フォーム用の new/edit/cancel まで生やしてしまう。退会は将来 discard で
+  # 実装する（物理削除しない）ため、ここでは経路ごと塞ぐ。
+  devise_for :users, skip: :all
+
+  devise_scope :user do
+    post   "api/auth/sign_up"  => "api/auth/registrations#create"
+    post   "api/auth/sign_in"  => "api/auth/sessions#create"
+    delete "api/auth/sign_out" => "api/auth/sessions#destroy"
+  end
 
   namespace :api do
     # 疎通確認用（DB 接続も確認する）

@@ -328,9 +328,12 @@ Devise.setup do |config|
   config.jwt do |jwt|
     jwt.secret = ENV["JWT_SECRET_KEY"]
     jwt.expiration_time = 24.hours.to_i
-    # sign_in は devise-jwt が既定で JWT を発行する。sign_up は明示的に指定が要る。
+    # devise-jwt は既定で mapping.routes（devise_for の生成ルート）から
+    # sign_in の発行対象を推測する。devise_for :users, skip: :all で
+    # ルートを空にした（routes.rb）ため、sign_in も明示しないと JWT が発行されなくなる。
     jwt.dispatch_requests = [
-      [ "POST", %r{^/api/auth/sign_up$} ]
+      [ "POST", %r{^/api/auth/sign_up$} ],
+      [ "POST", %r{^/api/auth/sign_in$} ]
     ]
     # sign_out されたトークンの jti を jwt_denylist に記録する。
     jwt.revocation_requests = [

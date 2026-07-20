@@ -27,6 +27,7 @@ RSpec.describe "GET /api/me", type: :request do
     get "/api/me", headers: auth_headers("Bearer not-a-real-token")
 
     expect(response).to have_http_status(:unauthorized)
+    expect(response.parsed_body["error"]).to eq("unauthorized")
   end
 
   # この issue の完了条件そのもの。

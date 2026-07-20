@@ -76,18 +76,31 @@ end
 ## ルーティング
 
 ```ruby
-devise_for :users,
-  path: "api/auth",
-  path_names: { sign_in: "sign_in", sign_out: "sign_out", registration: "sign_up" },
-  controllers: {
-    sessions: "api/auth/sessions",
-    registrations: "api/auth/registrations"
-  }
+devise_for :users, skip: :all
+
+devise_scope :user do
+  post   "api/auth/sign_up"  => "api/auth/registrations#create"
+  post   "api/auth/sign_in"  => "api/auth/sessions#create"
+  delete "api/auth/sign_out" => "api/auth/sessions#destroy"
+end
 
 namespace :api do
   get "me" => "me#show"
 end
 ```
+
+**`devise_for` の既定を使ってはいけない**。`registerable` が有効だと、既定で10本のルートが生える：
+
+| 生えるルート | 実際の挙動 |
+|---|---|
+| `DELETE /api/auth/sign_up` | **アカウントを物理削除する**（実測で確認） |
+| `PATCH` / `PUT /api/auth/sign_up` | 500（`DisabledSessionError`） |
+| `GET /api/auth/sign_in` | `{"id":null,"name":null,"email":""}` を返す |
+| `GET .../sign_up/sign_up`・`/edit`・`/cancel` | HTML フォーム用。API では無意味 |
+
+特に `DELETE` が危険で、**有効な JWT さえあればパスワード再入力も確認もなくアカウントが消える**。CLAUDE.md の「論理削除は必ず discard、物理削除しない」に違反し、`dependent: :destroy` が likes / favorites にも波及する。退会機能は将来 `discard` で設計するため、ここでは経路ごと塞ぐ。
+
+`skip: :all` にすると `mapping.routes` が空になり、devise-jwt が sign_in の dispatch ルールを導出できなくなる。そのため `jwt.dispatch_requests` に sign_in を**明示的に**足す必要がある（下記「設定」参照）。これを忘れるとログイン時に JWT が発行されなくなる。
 
 結果として生えるエンドポイント（`screen_and_api_design.md` の認証セクションと一致）：
 
@@ -98,7 +111,7 @@ end
 | DELETE | `/api/auth/sign_out` | ログアウト（JWT を失効） |
 | GET | `/api/me` | ログイン中のユーザー情報 |
 
-`devise_for` が生成する GET 系のフォーム用ルート（`new_user_session` 等）は API モードでは不要だが、devise の内部で参照されるため無効化はせず放置する。
+この3本以外のルートは生やさない。生えているルートは `bin/rails routes | grep api/auth` で確認でき、`spec/requests/api/auth/route_exposure_spec.rb` が意図しないルートの再出現を検知する。
 
 ## コントローラ
 
@@ -180,7 +193,7 @@ gem "devise-jwt"
 - `config.jwt do |jwt|`
   - `jwt.secret = ENV["JWT_SECRET_KEY"]`（README の環境変数一覧と一致）
   - `jwt.expiration_time = 24.hours.to_i`
-  - `jwt.dispatch_requests = [["POST", %r{^/api/auth/sign_up$}]]` … sign_in は devise が既定で dispatch するため、sign_up のみ明示的に追加する。
+  - `jwt.dispatch_requests` … **sign_up と sign_in の両方を明示する**。`devise_for :users, skip: :all` にした結果 `mapping.routes` が空になり、devise-jwt が sign_in のルールを自動導出できないため（省くとログインで JWT が出なくなる）。
   - `jwt.revocation_requests = [["DELETE", %r{^/api/auth/sign_out$}]]`
 
 ### 環境変数
