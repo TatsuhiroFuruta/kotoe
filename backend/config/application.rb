@@ -52,5 +52,12 @@ module Kotoe
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    # Devise（Warden）は sign_in 時に内部でセッションへ書き込もうとするため、
+    # api_only でも最小限のセッションミドルウェアが要る。認証自体は JWT
+    # （Authorization ヘッダ）で行うので、このセッション/Cookie を実際の認証には使わない。
+    config.session_store :cookie_store, key: "_kotoe_session"
+    config.middleware.use ActionDispatch::Cookies
+    config.middleware.use config.session_store, config.session_options
   end
 end

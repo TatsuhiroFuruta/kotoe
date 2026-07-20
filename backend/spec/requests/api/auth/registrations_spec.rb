@@ -1,0 +1,51 @@
+require "rails_helper"
+
+RSpec.describe "POST /api/auth/sign_up", type: :request do
+  let(:params) do
+    { user: { name: "テスト太郎", email: "new@example.com", password: "password123" } }
+  end
+
+  it "ユーザーを作成し 201 とユーザー JSON を返す" do
+    expect { post "/api/auth/sign_up", params: params, as: :json }
+      .to change(User, :count).by(1)
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body).to eq(
+      "id" => User.last.id,
+      "name" => "テスト太郎",
+      "email" => "new@example.com"
+    )
+  end
+
+  it "パスワードに関する情報を返さない" do
+    post "/api/auth/sign_up", params: params, as: :json
+
+    expect(response.parsed_body).not_to have_key("encrypted_password")
+    expect(response.parsed_body).not_to have_key("password")
+  end
+
+  it "Authorization ヘッダで JWT を発行する" do
+    post "/api/auth/sign_up", params: params, as: :json
+
+    expect(response.headers["Authorization"]).to match(/\ABearer .+\z/)
+  end
+
+  it "email が重複していると 422 とエラーを返す" do
+    create(:user, email: "new@example.com")
+
+    expect { post "/api/auth/sign_up", params: params, as: :json }
+      .not_to change(User, :count)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to have_key("email")
+  end
+
+  it "name が無いと 422 とエラーを返す" do
+    params[:user][:name] = ""
+
+    post "/api/auth/sign_up", params: params, as: :json
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to have_key("name")
+  end
+end

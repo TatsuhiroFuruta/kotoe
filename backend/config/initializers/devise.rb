@@ -320,5 +320,9 @@ Devise.setup do |config|
   config.jwt do |jwt|
     jwt.secret = ENV["JWT_SECRET_KEY"]
     jwt.expiration_time = 24.hours.to_i
+    # sign_in は devise-jwt が既定で JWT を発行する。sign_up は明示的に指定が要る。
+    jwt.dispatch_requests = [
+      [ "POST", %r{^/api/auth/sign_up$} ]
+    ]
   end
 end
