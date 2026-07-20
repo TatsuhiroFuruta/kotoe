@@ -107,6 +107,19 @@ end
 - API モードのため `ActionController::API` を継承（0-1 の既定のまま）。
 - devise のパラメータ許可：`configure_permitted_parameters` で sign_up に `name` を追加。
 
+### セッションを使わない（api_only の維持）
+
+Devise の `sign_up` / `sign_in` は内部で `warden.set_user` を呼び、既定でセッションへ書き込む。`config.api_only = true` ではセッションが無いため `DisabledSessionError` で落ちる。
+
+これを**セッションミドルウェアを戻して解決してはいけない**。cookie セッションを有効にすると `_kotoe_session` が発行され、**その cookie だけで認証が通る第二の認証経路**ができる。JWT の失効（`jwt_denylist`）はその経路に効かないため、ログアウトしても cookie でアクセスできてしまう。
+
+正しい対処は、セッション書き込みだけを飛ばすこと：
+
+- `sign_up` を上書きして `sign_in(resource_name, resource, store: false)` を呼ぶ（Registrations）。
+- `sign_in` は strategy 経由なので `config.skip_session_storage = [ :http_auth, :params_auth ]` で足りる（Sessions）。
+
+JWT は Warden の `after_set_user` フックで発行され、このフックは `store` の値に関係なく必ず走るため、トークン発行は影響を受けない。
+
 ### Api::Auth::FailureApp（`Devise::FailureApp` を継承）
 
 認証の失敗（パスワード不一致、トークン無し／失効）は**コントローラに到達せず Warden の failure app が処理する**ため、JSON を返すには failure app の差し替えが必要になる。`config.warden` で `config.failure_app = Api::Auth::FailureApp` を指定する。
@@ -120,7 +133,7 @@ end
 
 - `POST /api/auth/sign_up`
 - 成功：`201 Created`、body はユーザー JSON。devise-jwt が Authorization ヘッダに JWT を載せる。
-- 失敗（バリデーションエラー）：`422 Unprocessable Entity`、body は `{ "errors": { "email": ["..."], ... } }`（`resource.errors` をフィールド別に返す）。フロントはこれを見て文言を組み立てる。
+- 失敗（バリデーションエラー）：`422 Unprocessable Content`、body は `{ "errors": { "email": ["taken"], "name": ["blank"] } }`。`resource.errors.details` を使い、**表示用の文言ではなくエラーコード**をフィールド別に返す（`to_hash` は英語の文言を返すため使わない）。フロントがコードから日本語の文言を組み立てる。
 
 ### Api::Auth::SessionsController（`Devise::SessionsController` を継承）
 
