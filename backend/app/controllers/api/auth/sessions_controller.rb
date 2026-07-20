@@ -20,8 +20,9 @@ module Api
       end
 
       # トークンの失効（jwt_denylist への記録）は devise-jwt が行う。
+      # body は空だが、JSON API として 401 の応答と content-type を揃える。
       def respond_to_on_destroy(non_navigational_status: :no_content)
-        head :ok
+        head :ok, content_type: "application/json"
       end
     end
   end

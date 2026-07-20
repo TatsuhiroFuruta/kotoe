@@ -109,16 +109,22 @@ end
 
 ### セッションを使わない（api_only の維持）
 
-Devise の `sign_up` / `sign_in` は内部で `warden.set_user` を呼び、既定でセッションへ書き込む。`config.api_only = true` ではセッションが無いため `DisabledSessionError` で落ちる。
+Devise の `sign_up` / `sign_in` は内部で `warden.set_user` を呼び、既定でセッションへ書き込む。`config.api_only = true` ではセッションが無いため、条件次第で `DisabledSessionError` で落ちる。
 
 これを**セッションミドルウェアを戻して解決してはいけない**。cookie セッションを有効にすると `_kotoe_session` が発行され、**その cookie だけで認証が通る第二の認証経路**ができる。JWT の失効（`jwt_denylist`）はその経路に効かないため、ログアウトしても cookie でアクセスできてしまう。
 
-正しい対処は、セッション書き込みだけを飛ばすこと：
+#### sign_up と sign_in で挙動が違う理由（実測で確認済み）
 
-- `sign_up` を上書きして `sign_in(resource_name, resource, store: false)` を呼ぶ（Registrations）。
-- `sign_in` は strategy 経由なので `config.skip_session_storage = [ :http_auth, :params_auth ]` で足りる（Sessions）。
+`env["rack.session"]` は最初 nil で、誰かが `request.session` を触った瞬間に「無効化されたセッションオブジェクト」が入る。Warden はセッションを `env["rack.session"] || {}` として読むため、**nil のうちは使い捨ての `{}` に書いて捨てられ、実体化した後に書くと例外になる**。この順序の差が挙動を分けている。
 
-JWT は Warden の `after_set_user` フックで発行され、このフックは `store` の値に関係なく必ず走るため、トークン発行は影響を受けない。
+- **sign_up**：`build_resource` が `new_with_session(hash, session)` で `request.session` を触り、**set_user より先にセッションを実体化してしまう**。その後の書き込みで `DisabledSessionError`。
+  → 対処：`sign_up` を上書きして `sign_in(resource_name, resource, store: false)` を呼ぶ。**この `store: false` は必須**（外すと sign_up が 500 になることを実証済み）。
+- **sign_in**：`warden.authenticate!` の時点ではまだ `env["rack.session"]` が nil なので、書き込みは捨てられて例外にならない。その後 Devise は「既に同じユーザーが入っている」と判断して `set_user` を再実行しないため、実体化後の書き込みも起きない。
+  → 対処：**不要**。コントローラの上書きも設定変更もいらない。
+
+`config.skip_session_storage` は**この問題に無関係**。`Devise::Strategies::Authenticatable#store?` は params 認証に対して true を返すため、`:params_auth` を足しても書き込みは止まらない。
+
+JWT は Warden の `after_set_user` フックで発行され、このフックは `store` の値に関係なく必ず走るため、トークン発行はどちらの経路でも影響を受けない。
 
 ### Api::Auth::FailureApp（`Devise::FailureApp` を継承）
 
