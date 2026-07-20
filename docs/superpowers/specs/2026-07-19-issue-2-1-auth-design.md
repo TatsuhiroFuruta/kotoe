@@ -140,7 +140,7 @@ end
 ### ユーザー JSON の形
 
 ```json
-{ "id": 1, "name": "たつひろ", "email": "user@example.com" }
+{ "id": 1, "name": "テスト太郎", "email": "user@example.com" }
 ```
 
 当面はコントローラ内でこの形を組み立てる。本格的なシリアライザ整備は 3-2（Post CRUD API）でまとめて行う。`encrypted_password` 等を絶対に返さないため、モデルの `as_json` に頼らず**返す属性を明示的に指定する**。
