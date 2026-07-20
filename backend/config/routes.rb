@@ -4,7 +4,10 @@ Rails.application.routes.draw do
   devise_for :users,
     path: "api/auth",
     path_names: { sign_in: "sign_in", sign_out: "sign_out", registration: "sign_up" },
-    controllers: { registrations: "api/auth/registrations" }
+    controllers: {
+      sessions: "api/auth/sessions",
+      registrations: "api/auth/registrations"
+    }
 
   namespace :api do
     # 疎通確認用（DB 接続も確認する）

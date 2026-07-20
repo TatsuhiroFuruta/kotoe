@@ -90,7 +90,10 @@ Devise.setup do |config|
   # It will change confirmation, password recovery and other workflows
   # to behave the same regardless if the e-mail provided was right or wrong.
   # Does not affect registerable.
-  # config.paranoid = true
+  # 「メールが存在しない」と「パスワードが違う」を区別しないことでアカウント列挙を防ぐ。
+  # FailureApp の error_code も :invalid 以外は "unauthorized" にしか倒さない設計
+  # なので、この2つを常に同じ warden_message（:invalid）に揃える必要がある。
+  config.paranoid = true
 
   # By default Devise will store the user in session. You can skip storage for
   # particular strategies by setting this option.
@@ -269,6 +272,11 @@ Devise.setup do |config|
   # 空にすると Devise は常に JSON 等の非ナビゲーショナル応答として扱う。
   config.navigational_formats = []
 
+  # 認証失敗を HTML リダイレクトではなく JSON の 401 で返す。
+  config.warden do |manager|
+    manager.failure_app = Api::Auth::FailureApp
+  end
+
   # The default HTTP method used to sign out a resource. Default is :delete.
   config.sign_out_via = :delete
 
@@ -323,6 +331,10 @@ Devise.setup do |config|
     # sign_in は devise-jwt が既定で JWT を発行する。sign_up は明示的に指定が要る。
     jwt.dispatch_requests = [
       [ "POST", %r{^/api/auth/sign_up$} ]
+    ]
+    # sign_out されたトークンの jti を jwt_denylist に記録する。
+    jwt.revocation_requests = [
+      [ "DELETE", %r{^/api/auth/sign_out$} ]
     ]
   end
 end
