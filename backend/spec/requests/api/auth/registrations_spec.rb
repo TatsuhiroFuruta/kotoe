@@ -41,4 +41,13 @@ RSpec.describe "POST /api/auth/sign_up", type: :request do
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.parsed_body["errors"]["name"]).to include("blank")
   end
+
+  it "email がドメイン部にドットを含まないと 422 とエラーを返す" do
+    params[:user][:email] = "aaa@aaa"
+
+    post "/api/auth/sign_up", params: params, as: :json
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]["email"]).to include("invalid")
+  end
 end

@@ -28,6 +28,11 @@ RSpec.describe User, type: :model do
     expect(build(:user, email: "aaa@.com")).to be_invalid
   end
 
+  it "ドメイン部に空ラベル（連続ドット・先頭ドット）を含む email は無効" do
+    expect(build(:user, email: "aaa@example..com")).to be_invalid
+    expect(build(:user, email: "aaa@.example.com")).to be_invalid
+  end
+
   it "通常の email は有効" do
     expect(build(:user, email: "aaa@example.com")).to be_valid
     expect(build(:user, email: "a.b+tag@sub.example.co.jp")).to be_valid
