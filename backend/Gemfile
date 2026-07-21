@@ -55,5 +55,5 @@ end
 
 group :test do
   # 関連・バリデーションを1行で書くためのマッチャ集。
-  gem "shoulda-matchers", "~> 6.0"
+  gem "shoulda-matchers", "~> 8.0"
 end
