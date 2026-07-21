@@ -189,7 +189,12 @@ Devise.setup do |config|
   # Email regex used to validate email formats. It simply asserts that
   # one (and only one) @ exists in the given string. This is mainly
   # to give user feedback and not to assert the e-mail validity.
-  config.email_regexp = /\A[^@\s]+@[^@\s]+\z/
+  # devise 既定（/\A[^@\s]+@[^@\s]+\z/）は @ が1つあれば通るため aaa@aaa を許してしまう。
+  # ドメイン部にドットを要求して打ち間違いを弾く。MVP では確認メール（confirmable）を
+  # 持たないぶん、登録時点で拾えるものは拾っておく。
+  # 正規表現で到達可能性までは検証できないため、これは打ち間違い対策であって
+  # 実在確認ではない。実在確認が要るなら confirmable を入れること。
+  config.email_regexp = /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
 
   # ==> Configuration for :timeoutable
   # The time you want to timeout the user session without activity. After this

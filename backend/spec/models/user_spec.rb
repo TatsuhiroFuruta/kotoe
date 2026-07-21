@@ -21,6 +21,18 @@ RSpec.describe User, type: :model do
     expect(build(:user, email: "taken@example.com")).to be_invalid
   end
 
+  # devise 既定の email_regexp は aaa@aaa を通してしまうため、
+  # ドメイン部にドットを要求する設定に差し替えている（config/initializers/devise.rb）。
+  it "ドメイン部にドットが無い email は無効" do
+    expect(build(:user, email: "aaa@aaa")).to be_invalid
+    expect(build(:user, email: "aaa@.com")).to be_invalid
+  end
+
+  it "通常の email は有効" do
+    expect(build(:user, email: "aaa@example.com")).to be_valid
+    expect(build(:user, email: "a.b+tag@sub.example.co.jp")).to be_valid
+  end
+
   it "パスワードを暗号化して保存し、照合できる" do
     user = create(:user, password: "password123")
 
