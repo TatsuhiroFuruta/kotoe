@@ -112,6 +112,14 @@ RSpec.describe Cors::AllowedOrigins do
       it "2番目のブランチの末尾に文字列を足したオリジンを拒否する" do
         expect(allowed.allow?("https://staging.kotoe.example.com.attacker.test")).to be false
       end
+
+      # 括り忘れの穴は前後で非対称になる。最初のブランチは \A だけ残って
+      # 末尾が開き、最後のブランチは \z だけ残って先頭が開く。
+      # 末尾に足すケースだけでは後者を検知できない（バグ版でも通ってしまう）ため、
+      # 最後のブランチには先頭に足すケースを当てる。
+      it "最後のブランチの先頭に文字列を足したオリジンを拒否する" do
+        expect(allowed.allow?("https://attacker.test/https://staging.kotoe.example.com")).to be false
+      end
     end
 
     context "pattern が未設定" do

@@ -23,8 +23,11 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
   end
 end
 
-# 不正な正規表現を設定したまま本番へ出ると、全リクエストが CORS エラーになって
-# 原因を追いにくい。起動時に一度評価して落とす。
+# 設定の異常は起動時に落とす。壊れた設定のまま本番へ出ると、全リクエストが
+# CORS エラーになって原因を追いにくいため。落とす対象は2種類ある。
+#
+#   1. 不正な正規表現 … current の評価時に RegexpError で落ちる
+#   2. 許可オリジンが空 … 本番のみ raise（下の if を参照）
 #
 # initializer の本体からは Cors::AllowedOrigins を参照できない。この時点では
 # Zeitwerk の autoloader が未設定で uninitialized constant になるため、

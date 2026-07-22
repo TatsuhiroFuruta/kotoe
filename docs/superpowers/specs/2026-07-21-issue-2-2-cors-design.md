@@ -85,10 +85,11 @@ end
 # 1. 不正な正規表現 … current の評価時に RegexpError で落ちる
 # 2. 許可オリジンが空 … production のみ raise（test/CI は未設定が正常なため）
 Rails.application.config.after_initialize do
-  allowed = Cors::AllowedOrigins.current
+  allowed_origins = Cors::AllowedOrigins.current
 
-  if Rails.env.production? && !allowed.configured?
-    raise "CORS_ALLOWED_ORIGINS も CORS_ALLOWED_ORIGIN_REGEX も設定されていません"
+  if !allowed_origins.configured? && Rails.env.production?
+    raise "CORS の許可オリジンが設定されていません。" \
+          "CORS_ALLOWED_ORIGINS または CORS_ALLOWED_ORIGIN_REGEX を設定してください。"
   end
 end
 ```
