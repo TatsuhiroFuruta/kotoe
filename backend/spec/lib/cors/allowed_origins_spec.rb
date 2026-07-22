@@ -87,6 +87,33 @@ RSpec.describe Cors::AllowedOrigins do
       end
     end
 
+    context "正規表現がトップレベルの | を含む場合" do
+      # | は Ruby の正規表現で最も優先順位が低い。\A#{pattern}\z のように
+      # 括らずにアンカーを付けると、\A は最初のブランチにしか、\z は最後の
+      # ブランチにしかかからない。その場合、最初のブランチに一致する接頭辞を
+      # 持ちつつ末尾に任意の文字列を足したオリジン（攻撃者が取得できるドメイン）
+      # が通ってしまう。非捕獲グループで括ってアンカーを両ブランチにかけることで防ぐ。
+      subject(:allowed) do
+        described_class.new(
+          origins: [],
+          pattern: "https://kotoe-[a-z0-9-]+-team\\.vercel\\.app|https://staging\\.kotoe\\.example\\.com"
+        )
+      end
+
+      it "両方のブランチを許可する" do
+        expect(allowed.allow?("https://kotoe-abc-team.vercel.app")).to be true
+        expect(allowed.allow?("https://staging.kotoe.example.com")).to be true
+      end
+
+      it "最初のブランチの末尾に文字列を足した攻撃者ドメインを拒否する" do
+        expect(allowed.allow?("https://kotoe-abc-team.vercel.app.attacker.test")).to be false
+      end
+
+      it "2番目のブランチの末尾に文字列を足したオリジンを拒否する" do
+        expect(allowed.allow?("https://staging.kotoe.example.com.attacker.test")).to be false
+      end
+    end
+
     context "pattern が未設定" do
       it "空文字なら完全一致のみで判定する" do
         allowed = described_class.new(origins: [ "https://kotoe.example.com" ], pattern: "")
@@ -108,6 +135,35 @@ RSpec.describe Cors::AllowedOrigins do
 
         expect(allowed.allow?("https://kotoe.example.com")).to be false
       end
+    end
+  end
+
+  describe "#configured?" do
+    it "完全一致リストのみ設定されていれば true を返す" do
+      allowed = described_class.new(origins: [ "https://kotoe.example.com" ], pattern: nil)
+
+      expect(allowed.configured?).to be true
+    end
+
+    it "正規表現のみ設定されていれば true を返す" do
+      allowed = described_class.new(origins: [], pattern: "https://kotoe\\.example\\.com")
+
+      expect(allowed.configured?).to be true
+    end
+
+    it "両方設定されていれば true を返す" do
+      allowed = described_class.new(
+        origins: [ "https://kotoe.example.com" ],
+        pattern: "https://staging\\.kotoe\\.example\\.com"
+      )
+
+      expect(allowed.configured?).to be true
+    end
+
+    it "どちらも設定されていなければ false を返す" do
+      allowed = described_class.new(origins: [], pattern: nil)
+
+      expect(allowed.configured?).to be false
     end
   end
 
@@ -140,6 +196,10 @@ RSpec.describe Cors::AllowedOrigins do
   end
 
   describe ".current" do
+    # .current はメモ化されており、リセットしないとテストコンテナの実 ENV から
+    # 組み立てたインスタンスがスイートの以降のテストに残り続けてしまう。
+    after { described_class.instance_variable_set(:@current, nil) }
+
     it "ENV から組み立てたインスタンスを返す" do
       expect(described_class.current).to be_a(described_class)
     end

@@ -30,5 +30,15 @@ end
 # Zeitwerk の autoloader が未設定で uninitialized constant になるため、
 # autoload が効く after_initialize で参照する。
 Rails.application.config.after_initialize do
-  Cors::AllowedOrigins.current
+  allowed_origins = Cors::AllowedOrigins.current
+
+  # CORS_ALLOWED_ORIGINS / CORS_ALLOWED_ORIGIN_REGEX が未設定（または
+  # Render の環境変数名を打ち間違えた）だと、起動は成功するのに全リクエストが
+  # 拒否される。この状態はデプロイが green に見えるぶん気づきにくいため、
+  # 本番では起動時に落として気づけるようにする。
+  # test/development は env 未設定のまま動かす運用のため、本番のみに限定する。
+  if !allowed_origins.configured? && Rails.env.production?
+    raise "CORS の許可オリジンが設定されていません。" \
+          "CORS_ALLOWED_ORIGINS または CORS_ALLOWED_ORIGIN_REGEX を設定してください。"
+  end
 end

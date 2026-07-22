@@ -37,6 +37,12 @@ module Cors
       @origins.include?(origin) || matches_pattern?(origin)
     end
 
+    # 完全一致リスト・正規表現のどちらも未設定なら false。
+    # 起動時のフェイルファスト（config/initializers/cors.rb）で使う。
+    def configured?
+      @origins.any? || @pattern.present?
+    end
+
     private
 
     def normalize(origins)
@@ -46,10 +52,15 @@ module Cors
     # 前後を \A \z で囲んでからコンパイルする。
     # Ruby の ^ / $ は行頭・行末にマッチするため、設定値に書かせると
     # 改行を含むオリジンで意図しないマッチが起きうる。実装側で保証する。
+    #
+    # 非捕獲グループ (?:...) で括ってから \A \z を付ける。
+    # | はRubyの正規表現で最も優先順位が低いため、括らずに \A#{pattern}\z と
+    # すると、pattern 側の | の右辺・左辺にしか \A \z がかからず、
+    # 「先頭ブランチ + 末尾に任意の文字列」のようなオリジンを通してしまう。
     def compile(pattern)
       return nil if pattern.blank?
 
-      Regexp.new("\\A#{pattern}\\z")
+      Regexp.new("\\A(?:#{pattern})\\z")
     end
 
     def matches_pattern?(origin)
