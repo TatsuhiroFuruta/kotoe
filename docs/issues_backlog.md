@@ -102,9 +102,9 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 依存：2-1
 - 前提：`rack-cors` の導入と許可オリジンの環境変数化（`CORS_ALLOWED_ORIGINS`）は **0-3 で実施済み**（ローカルの疎通に必要だったため）。ここでは JWT と本番向けの設定を詰める。
 - タスク：
-  - [ ] Authorization ヘッダの露出設定（`expose: ["Authorization"]`）
-  - [ ] 本番（Vercel）のオリジンを許可オリジンに追加
-  - [ ] request spec（許可オリジンからの認証API呼び出しで JWT を受け取れる）
+  - [x] Authorization ヘッダの露出設定（`expose: ["Authorization"]`）
+  - 許可オリジンの env 化（`CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_ORIGIN_REGEX`）と production 未設定時の fail-fast は実装済み（0-3・2-2）。**本番 Vercel オリジンの実値投入は 8-2a に委譲**（Vercel URL 確定後に Render の env へ設定するため、ここではチェックしない）。
+  - [x] request spec（許可オリジンからの認証API呼び出しで JWT を受け取れる）
 - 完了条件：Next.js（別オリジン）から認証APIを叩けて JWT を受け取れる。
 
 ---
