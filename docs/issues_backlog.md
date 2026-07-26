@@ -267,9 +267,9 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 目的：本番のつなぎ目（Vercel↔Render の CORS/JWT・Neon プール接続・env vars）を、差分が小さいうちに一度固める。後段の一括デプロイで原因が特定しづらくなるのを防ぐ。
 - 依存：2-2（認証・CORS が通っていること）
 - タスク：
-  - [ ] Rails を Render、Next.js を Vercel、DB を Neon に**最小構成**でデプロイ
-  - [ ] 疎通スモーク：health ＋ 認証1本（sign_in → JWT → 認証必須API）が本番URLで通る
-  - [ ] Vercel プレビューの向き先を本番バックエンド（スケルトン）にして、以降 PR ごとに継続検証
+  - [x] Rails を Render、Next.js を Vercel、DB を Neon に**最小構成**でデプロイ
+  - [x] 疎通スモーク：health ＋ 認証1本（sign_in → JWT → 認証必須API）が本番URLで通る
+  - [x] Vercel プレビューの向き先を本番バックエンド（スケルトン）にして、以降 PR ごとに継続検証
 - 完了条件：本番URLで health と認証が通り、CORS/JWT・Neon プール接続が確認できる。
 - 補足：本番固有の統合（Cloudinary=3-1、画像生成キー=4-3）は、その機能を実装した回にその都度スモーク確認して積み増す（フル継続"本番"デプロイはしない）。
 
