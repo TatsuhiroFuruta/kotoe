@@ -48,12 +48,15 @@ Render は production で許可オリジン未設定だと boot で raise する
 3. **Vercel** — Project を作成（Root Directory=`frontend`）。`NEXT_PUBLIC_API_BASE_URL`=Render の URL
    を設定してデプロイ → 本番URLを確定する。
 4. **Render** — `CORS_ALLOWED_ORIGINS`=Vercel 本番URL を追加保存する（Render が再起動する）。
-5. **ブラウザ** — Vercel の `/smoke` を開いて「スモーク実行」→ 別オリジンの CORS/JWT を実機確認する。
+5. **ブラウザ（別オリジンの CORS/JWT 実機確認）** — 8-2a では一時ページ `/smoke` で
+   health→sign_up→sign_in→me を実行し、別オリジンの JS から `Authorization` ヘッダを
+   読めることを確認済み（**この `/smoke` ページは検証後に削除済み**）。以降の別オリジン
+   実機確認は、7-1 のログインUIが載って以降に Vercel プレビューURLで行う。
 
 ## curl スモーク（サーバ側疎通・CORS 不要）
 
-`$API` を Render の URL に置き換えて実行する。`/smoke` を先に開いていない場合は、
-最初にスモークユーザーを作成する（User は `name` が必須）。
+`$API` を Render の URL に置き換えて実行する（スモークユーザーは `name` 必須。
+未作成なら手順2で作成される）。
 
 ```bash
 API="https://kotoe-api.onrender.com"   # ← Render の URL
@@ -75,8 +78,9 @@ curl -si -X POST "$API/api/auth/sign_in" \
 # 期待: authorization: Bearer eyJ...
 ```
 
-> 注意：curl は CORS を強制しないため、**CORS/JWT の実機確認はブラウザの `/smoke` で行う**
-> （別オリジンの JS から `Authorization` ヘッダを読めるかが要件）。
+> 注意：curl は CORS を強制しない。別オリジンの CORS/JWT 実機確認（JS から `Authorization`
+> ヘッダを読めるか）は、8-2a では一時ページ `/smoke` で確認済み（削除済み）。以降は 7-1 の
+> 実UI＋Vercel プレビューで担保する。
 
 ## Vercel プレビューの継続検証
 
