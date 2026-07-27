@@ -48,7 +48,7 @@
 | `backend/spec/lib/images/validation_spec.rb` | 新規 | 境界値・形式・詐称ケース |
 | `backend/spec/lib/images/uploader_spec.rb` | 新規 | 渡すオプション・戻り値・例外の包み直し |
 | `backend/spec/support/cloudinary.rb` | 新規 | 全 spec 共通の既定スタブ |
-| `backend/spec/fixtures/files/` | 新規 | 各形式の小さいサンプル（1KB 未満）と非画像ファイル |
+| `backend/spec/support/image_fixtures.rb` | 新規 | 各形式のマジックバイト定数とサンプル IO の組み立て |
 | `backend/app/controllers/api/smoke_controller.rb` | 新規（**一時**） | 本番スモーク用。確認後に削除 PR |
 | `backend/config/routes.rb` | 更新 | スモークルート（**一時**） |
 | `render.yaml` | 更新 | `CLOUDINARY_URL`（`sync: false`） |
@@ -82,9 +82,21 @@ result.error_code  #=> nil / "image_missing" / "image_too_large" / "image_type_n
 - **形式判定は `Marcel::MimeType.for(io)` でファイル先頭のマジックバイトから行う。クライアント申告の `Content-Type` とファイル名は使わない**（どちらも詐称できるため）。
 - 返すのは**エラーコードのみ**。日本語文言は持たない（CLAUDE.md: i18n はフロントに集約）。
 
-### リスクと対応
+### Marcel の判定結果（実測で確認済み）
 
-**Marcel が HEIC を `image/heic` と判定するかを実ファイルで未確認。** Marcel は Apache Tika の定義を使っており HEIC のエントリはあるはずだが、バージョン差がありうる。実装時に実際の HEIC ファイルで確認し、判定できなければ `Validation` 側に HEIC のマジックバイト（`ftyp` ブランド）を直接見る判定を足す。どちらに転んでも外部に見える仕様は変わらない。
+計画時に marcel 1.2.1 で実際に確認した。許可・拒否したい形式がすべて期待どおりに判定される。
+
+| 与えたマジックバイト | Marcel の判定 | 扱い |
+|---|---|---|
+| `ftyp` + `heic` ブランド | `image/heic` | 許可 |
+| `ftyp` + `mif1` ブランド | `image/heif` | 許可 |
+| JPEG (`FF D8 FF E0` + JFIF) | `image/jpeg` | 許可 |
+| PNG (`89 50 4E 47 …`) | `image/png` | 許可 |
+| WebP (`RIFF` … `WEBP`) | `image/webp` | 許可 |
+| PDF (`%PDF-1.4`) | `application/pdf` | 拒否 |
+| プレーンテキスト | `application/octet-stream` | 拒否 |
+
+また `Marcel::MimeType.for(io)` は**読み取り後に IO の位置を 0 に戻す**ことも確認した（`StringIO` / `Tempfile` の両方）。判定の直後にそのまま Cloudinary へ渡せる。なお `Validation` 側でも読み取り前に明示的に `rewind` する（呼び出し側が既に読んでいる可能性があるため）。
 
 ## `Images::Uploader`
 
@@ -125,9 +137,13 @@ Images::Uploader.call(file, kind: :post)
 
 太字のケースがこのクラスの存在意義。マジックバイトで判定する設計がここで効いていることを spec で固定する。
 
-サイズ境界のテストで 5MB のバイナリをリポジトリに置くのは避け、**fixture の小さな JPEG のマジックバイト ＋ パディングで Tempfile を組み立てて**目的のサイズを作る。コミットする画像は各形式 1KB 未満のものだけ。
+**画像ファイルはリポジトリにコミットしない。** 判定はファイル先頭のマジックバイトしか見ないので、本物の画像は不要。`spec/support/image_fixtures.rb` にマジックバイトを定数で持ち、そこから `StringIO` / `ActionDispatch::Http::UploadedFile` を組み立てるヘルパを提供する。
 
-fixture を `file_fixture` で引くために `rails_helper` で `config.file_fixture_path` を設定する（RSpec の既定は `spec/fixtures/files` だが、明示しておく）。
+この方が優れている理由:
+
+- **何をテストしているかが diff で読める**。バイナリ fixture は中身が見えず、レビューで検証できない
+- サイズ境界（5MB ちょうど / +1 バイト）を、巨大ファイルをコミットせずに作れる（マジックバイト + パディング）
+- 3-2 の request spec でも同じヘルパを使い回せる
 
 ### `spec/lib/images/uploader_spec.rb`（`Cloudinary::Uploader.upload` をスタブ）
 
