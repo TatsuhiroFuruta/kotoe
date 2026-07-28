@@ -115,8 +115,11 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 目的：画像の保存先を用意する。
 - 依存：1-1
 - タスク：
-  - [ ] Cloudinary gem 設定（`CLOUDINARY_URL` 環境変数）
-  - [ ] 画像アップロードの仕組み（direct or サーバー経由）を決めて実装
+  - [x] Cloudinary gem 設定（`CLOUDINARY_URL` 環境変数）
+  - [x] 画像アップロードの仕組み（direct or サーバー経由）を決めて実装
+        → **サーバー経由**（Rails が Cloudinary へ上げる）。`Images::Validation`（受け入れ判定）
+        と `Images::Uploader`（アップロード）の 2 つの PORO に分割。判断の根拠は
+        `docs/superpowers/specs/2026-07-27-issue-3-1-cloudinary-design.md`
 - 完了条件：画像をアップロードして URL/public_id を保存・取得できる。
 
 ### 🟢 3-2. Post CRUD API
