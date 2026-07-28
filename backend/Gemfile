@@ -35,6 +35,10 @@ gem "discard", "~> 1.4"
 gem "devise"
 gem "devise-jwt"
 
+# 画像の保存先。CLOUDINARY_URL（api_secret を含む）はサーバー側のみに置き、
+# フロントに渡すのは cloud_name だけ（配信URLに必ず現れる公開値）。
+gem "cloudinary", "~> 2.4"
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
