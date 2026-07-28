@@ -20,3 +20,4 @@ services:
       - { key: DATABASE_URL, sync: false }
       - { key: CORS_ALLOWED_ORIGINS, sync: false }
       - { key: CORS_ALLOWED_ORIGIN_REGEX, sync: false }
+      - { key: CLOUDINARY_URL, sync: false }

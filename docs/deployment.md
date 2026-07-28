@@ -22,10 +22,33 @@
 | `DATABASE_URL` | **手入力** | Neon の**プール接続文字列**（`-pooler` 付きホスト） |
 | `CORS_ALLOWED_ORIGINS` | **手入力** | Vercel 本番URL（完全一致、カンマ区切り可） |
 | `CORS_ALLOWED_ORIGIN_REGEX` | **手入力** | Vercel プレビュー用。**チーム slug を必ず含める**（`\A \z` は実装側が付けるので書かない） |
+| `CLOUDINARY_URL` | **手入力** | Cloudinary の API Environment variable。api_secret を含むためサーバー専用。未設定だと boot で raise する |
 
 - `sync: false` の項目は秘密/環境依存のためリポジトリに置かず、ダッシュボードで手入力する。
 - 許可オリジン（`CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_ORIGIN_REGEX`）が両方未設定のまま
   production を起動すると、boot 時に raise して気づけるようにしてある。
+
+### Cloudinary（画像の保存先）
+
+1. Cloudinary のダッシュボードにログインし、Settings → **API Keys** を開く
+2. 使う API キーの **role にアセットの作成（create）権限があること**を確認する。
+   `Media Library User` では**アップロードが 403 で拒否される**
+   （`Request forbidden due to missing permissions (actions=["create"])`）。
+   無料プランでは実質 `Admin` 以上が必要
+3. `cloudinary://<api_key>:<api_secret>@<cloud_name>` の形に組み立てる
+   （Dashboard トップの **API Environment variable** は既定キーの値なので、
+   別のキーを使う場合はそちらを見ないこと）
+4. Render の kotoe-api → Environment に `CLOUDINARY_URL` として貼る
+4. あわせて Cloudinary 側で**使用量アラート**を設定する（Settings → Account → Usage alerts）。
+   画像の配信URLに含まれる cloud_name は公開値で、第三者が任意サイズの変換URLを
+   作れてしまうため、変換クレジットの異常消費に気づけるようにしておく
+
+ローカルと本番は同じ Cloudinary アカウントを使い、保存先を `kotoe/development/` と
+`kotoe/production/` のフォルダで分けている（`Images::Uploader` がパスに `Rails.env` を含める）。
+
+`CLOUDINARY_URL` が未設定のまま本番を起動すると、`config/initializers/cloudinary.rb`
+が起動時に例外を出して落ちる。設定漏れに気づかないままデプロイが green に見える
+状態を防ぐため、意図的にそうしてある。
 
 ### Vercel（Next.js）
 
