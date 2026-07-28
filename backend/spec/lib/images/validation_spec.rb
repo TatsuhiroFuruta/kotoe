@@ -69,6 +69,28 @@ RSpec.describe Images::Validation do
       end
     end
 
+    # params[:image] の型はクライアントが決められる。ファイルパートではなく
+    # 普通のフォーム値（image=foo）を送られても 500 にせず、エラーコードで弾く。
+    context "ファイルとして扱えないものが来たとき" do
+      it "文字列を拒否する" do
+        expect(described_class.call("hello").error_code).to eq("image_missing")
+      end
+
+      it "配列を拒否する" do
+        expect(described_class.call([ "a" ]).error_code).to eq("image_missing")
+      end
+
+      it "read / rewind を持たないオブジェクトを拒否する" do
+        expect(described_class.call(Object.new).error_code).to eq("image_missing")
+      end
+
+      it "ActionController::Parameters を拒否する" do
+        params = ActionController::Parameters.new(filename: "x.jpg")
+
+        expect(described_class.call(params).error_code).to eq("image_missing")
+      end
+    end
+
     # 判定のあと、呼び出し側がそのまま Cloudinary へ渡せる状態にしておく。
     it "判定後に IO の位置を先頭へ戻す" do
       io = image_io(:png)

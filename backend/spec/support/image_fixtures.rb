@@ -42,6 +42,12 @@ module ImageFixtures
     magic = MAGIC_BYTES.fetch(format).dup.force_encoding(Encoding::BINARY)
     return magic if bytesize.nil?
 
+    if bytesize < magic.bytesize
+      raise ArgumentError,
+        "bytesize (#{bytesize}) が #{format} のマジックバイト長 (#{magic.bytesize}) より小さい。" \
+        "途中で切れたファイルを作りたい場合は image_bytes ではなく直接組み立てること。"
+    end
+
     magic + ("\0".b * (bytesize - magic.bytesize))
   end
 end

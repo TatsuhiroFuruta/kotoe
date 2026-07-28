@@ -39,7 +39,7 @@
    （Dashboard トップの **API Environment variable** は既定キーの値なので、
    別のキーを使う場合はそちらを見ないこと）
 4. Render の kotoe-api → Environment に `CLOUDINARY_URL` として貼る
-4. あわせて Cloudinary 側で**使用量アラート**を設定する（Settings → Account → Usage alerts）。
+5. あわせて Cloudinary 側で**使用量アラート**を設定する（Settings → Account → Usage alerts）。
    画像の配信URLに含まれる cloud_name は公開値で、第三者が任意サイズの変換URLを
    作れてしまうため、変換クレジットの異常消費に気づけるようにしておく
 

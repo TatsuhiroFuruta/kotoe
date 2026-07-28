@@ -28,7 +28,11 @@ module Images
       # 未知の kind はここで KeyError。プログラミングエラーなので UploadError に包まない。
       target = folder
 
-      upload_to(target).fetch("public_id")
+      response = upload_to(target)
+
+      # レスポンス形状が変わるのは Cloudinary 側の問題なので、KeyError を素通り
+      # させて 500 にせず UploadError に寄せる（呼び出し側は 502 を返せる）。
+      response["public_id"] || raise(UploadError, "Cloudinary response has no public_id")
     end
 
     private
@@ -43,6 +47,12 @@ module Images
     # 元例外の message は含めない。Cloudinary のエラー本文に接続文字列や
     # キーが混ざる可能性があり、ログに秘密情報を出さないため。
     def upload_to(target)
+      # cloudinary gem の handle_file_param（utils.rb）は StringIO のときしか
+      # rewind しない。Tempfile と ActionDispatch::Http::UploadedFile は
+      # 現在位置から読まれるため、呼び出し側が先に読んでいると例外なしで
+      # 切り詰められた画像が上がる。gem の挙動に依存せずここで戻しておく。
+      @file.rewind if @file.respond_to?(:rewind)
+
       Cloudinary::Uploader.upload(@file, folder: target, resource_type: "image")
     rescue StandardError => e
       raise UploadError, "Cloudinary upload failed: #{e.class}"

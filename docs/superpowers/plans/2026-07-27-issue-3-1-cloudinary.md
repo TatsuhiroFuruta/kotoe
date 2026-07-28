@@ -12,6 +12,16 @@
 
 **ブランチ:** `feature/issue-3-1`（作成済み。設計ドキュメントのコミット `a42f6d0` が載っている）
 
+## 実装時にこの計画から変えたこと
+
+1. **env ファイルを分割した（Task 1 Step 5 は stale）。** 計画では `CLOUDINARY_URL` をルートの
+   `.env.example` に足すとしていたが、実装では `backend/.env.example` を新設し、
+   `JWT_SECRET_KEY` ごと backend 配下へ移した。`docker-compose.yml` に issue 0-1 の時点で
+   書かれていた「Rails 専用の秘密は backend/.env.development に分ける（issue 3-1 で追加）」
+   という予告コメントを実装したもの。db / frontend コンテナに秘密が渡らなくなる。
+2. **コードレビューの指摘を別 PR で反映した。** 詳細と検証根拠は
+   `docs/superpowers/plans/2026-07-27-issue-3-1-review-fixes.md`。
+
 ## Global Constraints
 
 - 文字列は**ダブルクォート**。spec ファイルも含めプロジェクト全体で統一（`.rubocop.yml` の `Style/StringLiterals`）。

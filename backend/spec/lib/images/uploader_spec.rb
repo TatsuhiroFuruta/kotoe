@@ -21,6 +21,24 @@ RSpec.describe Images::Uploader do
       end
     end
 
+    # cloudinary gem の handle_file_param（utils.rb）は StringIO のときしか rewind しない。
+    # Tempfile / ActionDispatch::Http::UploadedFile は現在位置から読まれるため、
+    # 呼び出し側が先に読んでいると無言で切り詰められた画像が上がる。ここで戻す。
+    it "アップロード前に IO の位置を先頭へ戻す" do
+      file.read
+      expect(file.pos).not_to eq(0)
+
+      described_class.call(file, kind: :post)
+
+      expect(Cloudinary::Uploader).to have_received(:upload) do |uploaded, _options|
+        expect(uploaded.pos).to eq(0)
+      end
+    end
+
+    it "rewind を持たない入力でも落ちない" do
+      expect { described_class.call(Object.new, kind: :post) }.not_to raise_error
+    end
+
     # ローカルと本番で同じ Cloudinary アカウントを共用するため、
     # 保存先に環境名を含めて資産が混ざらないようにしている。
     it "お題画像を kotoe/<env>/posts へ上げる" do
@@ -54,6 +72,17 @@ RSpec.describe Images::Uploader do
     end
 
     context "Cloudinary が失敗したとき" do
+      # レスポンス形状が変わったときに 500 ではなく 502 を返せるようにする。
+      # kind の KeyError（プログラミングエラー）とは区別したままにする。
+      it "レスポンスに public_id が無ければ UploadError に包む" do
+        allow(Cloudinary::Uploader).to receive(:upload).and_return(
+          "secure_url" => "https://res.cloudinary.com/demo/image/upload/abc123.png"
+        )
+
+        expect { described_class.call(file, kind: :post) }
+          .to raise_error(Images::Uploader::UploadError, /public_id/)
+      end
+
       it "タイムアウトを UploadError に包み直す" do
         allow(Cloudinary::Uploader).to receive(:upload).and_raise(Timeout::Error)
 

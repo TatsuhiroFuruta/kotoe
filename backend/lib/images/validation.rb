@@ -31,7 +31,11 @@ module Images
     end
 
     # 最初に見つかった 1 件だけを返す（フロントの表示は 1 行のトーストで足りる）。
-    # サイズを形式より先に見るのは、巨大なファイルの中身を読まずに弾くため。
+    #
+    # サイズを形式より先に見るのは、Marcel に中身を読ませずに済ませるため。
+    # ただし転送量が減るわけではない：この判定に来る時点で Rack が body を
+    # すべてテンポラリファイルに書き終えている。転送段階で止めたいなら
+    # エッジ側のボディサイズ上限が別途要る。
     def call
       return Result.new(error_code: "image_missing") if missing?
       return Result.new(error_code: "image_too_large") if too_large?
@@ -42,8 +46,18 @@ module Images
 
     private
 
+    # params[:image] の型はクライアントが決められる。ファイルパートではなく
+    # 普通のフォーム値（image=foo）や配列を送られても、500 ではなく
+    # エラーコードで弾く。型のガードはルールを持つこのクラスの責務であって、
+    # 呼び出し側のコントローラに漏らさない。
     def missing?
-      @file.nil? || @file.size.to_i.zero?
+      return true unless file_like?
+
+      @file.size.to_i.zero?
+    end
+
+    def file_like?
+      %i[read rewind size].all? { |method| @file.respond_to?(method) }
     end
 
     def too_large?

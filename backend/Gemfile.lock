@@ -359,6 +359,7 @@ DEPENDENCIES
   discard (~> 1.4)
   factory_bot_rails (~> 6.4)
   image_processing (~> 1.2)
+  marcel
   pg (~> 1.1)
   puma (>= 5.0)
   rack-cors
