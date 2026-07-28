@@ -30,9 +30,15 @@
 
 ### Cloudinary（画像の保存先）
 
-1. Cloudinary のダッシュボードにログインし、Programmable Media の Dashboard を開く
-2. **API Environment variable** に表示されている `cloudinary://<api_key>:<api_secret>@<cloud_name>` をコピーする
-3. Render の kotoe-api → Environment に `CLOUDINARY_URL` として貼る
+1. Cloudinary のダッシュボードにログインし、Settings → **API Keys** を開く
+2. 使う API キーの **role にアセットの作成（create）権限があること**を確認する。
+   `Media Library User` では**アップロードが 403 で拒否される**
+   （`Request forbidden due to missing permissions (actions=["create"])`）。
+   無料プランでは実質 `Admin` 以上が必要
+3. `cloudinary://<api_key>:<api_secret>@<cloud_name>` の形に組み立てる
+   （Dashboard トップの **API Environment variable** は既定キーの値なので、
+   別のキーを使う場合はそちらを見ないこと）
+4. Render の kotoe-api → Environment に `CLOUDINARY_URL` として貼る
 4. あわせて Cloudinary 側で**使用量アラート**を設定する（Settings → Account → Usage alerts）。
    画像の配信URLに含まれる cloud_name は公開値で、第三者が任意サイズの変換URLを
    作れてしまうため、変換クレジットの異常消費に気づけるようにしておく

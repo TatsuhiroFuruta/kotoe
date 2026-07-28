@@ -18,7 +18,9 @@
 
 ```bash
 # 1. 設定ファイルを用意する（.env.development は git 管理外）
+#    backend/ は Rails 専用の秘密（JWT 署名鍵・Cloudinary）。db/frontend には渡さない。
 cp .env.example .env.development
+cp backend/.env.example backend/.env.development
 cp frontend/.env.example frontend/.env.development
 
 # 2. コンテナを起動する

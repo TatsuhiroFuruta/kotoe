@@ -27,9 +27,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     env_file:
-      # Rails 専用の秘密（CLOUDINARY_URL / OPENAI_API_KEY）は backend/.env.development に
-      # 分けて置き、frontend コンテナには渡さない（issue 3-1 で追加）。
+      # 共通の値（DB接続・CORS）はルート。
       - .env.development
+      # Rails 専用の秘密（JWT_SECRET_KEY / CLOUDINARY_URL / 将来の OPENAI_API_KEY）は
+      # こちらに分ける。このファイルは backend サービスの env_file にしか無いため、
+      # db / frontend コンテナには渡らない（秘密の到達範囲を最小にする）。
+      - backend/.env.development
     environment:
       RAILS_ENV: development
       TZ: Asia/Tokyo

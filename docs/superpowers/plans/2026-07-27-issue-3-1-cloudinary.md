@@ -134,11 +134,14 @@ CLOUDINARY_URL=
 CLOUDINARY_URL=cloudinary://実際のkey:実際のsecret@実際のcloud名
 ```
 
-書いたらコンテナを再起動して env を読み直す。
+書いたらコンテナを**作り直して** env を読み込ませる。
 
 ```bash
-docker compose restart backend
+docker compose up -d backend
 ```
+
+`docker compose restart` では読み込まれない。環境変数はコンテナ生成時に確定するため、
+既存コンテナを再起動しても `env_file` は読み直されない。
 
 - [ ] **Step 7: 既存の spec が壊れていないことを確認**
 
