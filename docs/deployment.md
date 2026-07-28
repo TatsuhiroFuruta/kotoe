@@ -114,11 +114,26 @@ curl -si -X POST "$API/api/auth/sign_in" \
 
 ## スモークユーザーの cleanup
 
-スモークで作った固定ユーザーは本番 DB に1件残る。Render の Shell（またはワンオフジョブ）で削除する。
+疎通確認で作ったユーザーが本番 DB に残っている。**未処理**：
+
+| メール | 作成した issue |
+|---|---|
+| `smoke@kotoe.test` | 8-2a（本番スケルトン疎通） |
+| `smoke-3-1@example.com` | 3-1（Cloudinary 疎通） |
+
+**Render の Shell / ワンオフジョブは free プランでは使えない**ため、Neon に直接つないで削除する。
+接続文字列は Render の `DATABASE_URL` と同じもの（Neon ダッシュボードでも確認できる）。
 
 ```bash
-bin/rails runner "User.where(email: 'smoke@kotoe.test').destroy_all"
+psql "<Neon のプール接続文字列>" \
+  -c "DELETE FROM users WHERE email IN ('smoke@kotoe.test', 'smoke-3-1@example.com');"
 ```
+
+`users` は他テーブルから参照されうるが、これらのユーザーは投稿も挑戦も作っていないため
+物理削除して問題ない（通常のユーザーは discard を使うこと）。
+
+Cloudinary 側にも疎通確認で上げた 1x1 の PNG が `kotoe/production/posts/` に残る。
+Media Library から削除する。
 
 ## 運用上の注意
 

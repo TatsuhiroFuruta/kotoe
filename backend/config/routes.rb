@@ -17,10 +17,6 @@ Rails.application.routes.draw do
     # ログイン中のユーザー自身の情報。
     # マイページの一覧API（/api/me/posts 等）は issue 6-3 で追加する。
     get "me" => "me#show"
-
-    # 【一時】issue 3-1 の本番疎通確認用。Cloudinary の本番キーが通ることを
-    # 確認したら、smoke_controller.rb ごと削除PRで消す。
-    post "smoke/cloudinary" => "smoke#cloudinary"
   end
 
   # Rails 標準のヘルスチェック。アプリが例外なく起動できたかだけを見る（DB は見ない）。
