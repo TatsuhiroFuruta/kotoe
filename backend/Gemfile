@@ -39,6 +39,12 @@ gem "devise-jwt"
 # フロントに渡すのは cloud_name だけ（配信URLに必ず現れる公開値）。
 gem "cloudinary", "~> 2.4"
 
+# ファイル先頭のマジックバイトから MIME タイプを判定する（lib/images/validation.rb）。
+# activestorage の依存として既に入ってはいるが、直接使うので明示的に宣言する。
+# 宣言がないと、application.rb から active_storage/engine を外したときに
+# bundle は通るのに実行時だけ壊れる。
+gem "marcel"
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
