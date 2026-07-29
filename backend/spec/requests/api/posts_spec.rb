@@ -271,3 +271,66 @@ RSpec.describe "GET /api/posts/:id", type: :request do
     expect(response.parsed_body["error"]).to eq("not_found")
   end
 end
+
+RSpec.describe "DELETE /api/posts/:id", type: :request do
+  let(:user) { create(:user) }
+  let(:token) { sign_in_and_get_token(user) }
+
+  it "自分のお題を論理削除する" do
+    post_record = create(:post, user: user)
+
+    expect {
+      delete "/api/posts/#{post_record.id}", headers: auth_headers(token)
+    }.not_to change(Post.unscoped, :count)
+
+    expect(response).to have_http_status(:no_content)
+    expect(post_record.reload.discarded?).to be true
+  end
+
+  it "削除しても紐づく挑戦は残る" do
+    post_record = create(:post, user: user)
+    attempt = create(:attempt, :published, post: post_record)
+
+    delete "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    expect(response).to have_http_status(:no_content)
+    expect(attempt.reload).to be_kept
+  end
+
+  it "削除したお題は一覧に出ない" do
+    post_record = create(:post, user: user)
+    delete "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    get "/api/posts"
+
+    expect(response.parsed_body["posts"]).to be_empty
+  end
+
+  it "他人のお題は 404 を返す（削除もされない）" do
+    others = create(:post)
+
+    delete "/api/posts/#{others.id}", headers: auth_headers(token)
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body["error"]).to eq("not_found")
+    expect(others.reload).to be_kept
+  end
+
+  it "既に削除済みのお題は 404 を返す" do
+    post_record = create(:post, user: user)
+    post_record.discard!
+
+    delete "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "未認証だと 401 を返す" do
+    post_record = create(:post, user: user)
+
+    delete "/api/posts/#{post_record.id}"
+
+    expect(response).to have_http_status(:unauthorized)
+    expect(post_record.reload).to be_kept
+  end
+end

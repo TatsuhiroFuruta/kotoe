@@ -2,7 +2,7 @@ module Api
   # お題（Post）の CRUD。絞り込み・集計の判定はモデル（Post.listing）に、
   # JSON の形はシリアライザに寄せ、ここは HTTP の入出力だけを扱う。
   class PostsController < ApplicationController
-    before_action :authenticate_user!, only: %i[create]
+    before_action :authenticate_user!, only: %i[create destroy]
 
     def index
       posts = Post.listing(q: params[:q], sort: params[:sort]).page(params[:page])
@@ -41,6 +41,14 @@ module Api
         attempts: attempts.map { |attempt| AttemptSerializer.call(attempt) },
         meta: PaginationSerializer.call(attempts)
       }
+    end
+
+    def destroy
+      # current_user.posts に限定することで、所有チェックの書き忘れが起こりようがない。
+      # 他人のお題・存在しない ID・削除済みは、すべて RecordNotFound → 404 になる。
+      # 403 と分けないのは、お題自体が一覧・詳細で公開されており隠せる情報が無いため。
+      current_user.posts.kept.find(params[:id]).discard!
+      head :no_content
     end
 
     private
