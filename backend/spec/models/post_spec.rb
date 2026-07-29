@@ -19,4 +19,8 @@ RSpec.describe Post, type: :model do
     expect(Post.kept).not_to include(post)
     expect(Post.discarded).to include(post)
   end
+
+  it "1 ページは 12 件" do
+    expect(Post.page(1).limit_value).to eq(12)
+  end
 end
