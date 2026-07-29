@@ -197,3 +197,77 @@ RSpec.describe "POST /api/posts", type: :request do
     expect(response.parsed_body["error"]).to eq("unauthorized")
   end
 end
+
+RSpec.describe "GET /api/posts/:id", type: :request do
+  it "認証なしでお題と挑戦一覧を取得できる" do
+    challenger = create(:user, name: "挑戦者")
+    post_record = create(:post, title: "夕暮れの交差点")
+    attempt = create(:attempt, :published,
+      post: post_record, user: challenger,
+      description: "夕日に染まる横断歩道", similarity_score: nil)
+    create_list(:like, 3, attempt: attempt)
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"]["id"]).to eq(post_record.id)
+    expect(response.parsed_body["attempts"].first).to eq(
+      "id" => attempt.id,
+      "description" => "夕日に染まる横断歩道",
+      "generated_image_public_id" => "kotoe/test/generated/sample",
+      "status" => "published",
+      "similarity_score" => nil,
+      "user" => { "id" => challenger.id, "name" => "挑戦者" },
+      "likes_count" => 3,
+      "created_at" => attempt.created_at.utc.iso8601
+    )
+    expect(response.parsed_body["meta"]).to eq(
+      "current_page" => 1, "total_pages" => 1, "total_count" => 1
+    )
+  end
+
+  it "他人の下書きは出ない" do
+    post_record = create(:post)
+    create(:attempt, post: post_record)
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["attempts"]).to be_empty
+  end
+
+  it "削除済みの挑戦は出ない" do
+    post_record = create(:post)
+    create(:attempt, :published, post: post_record).discard!
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["attempts"]).to be_empty
+  end
+
+  it "挑戦一覧も 1 ページ 12 件でページングする" do
+    post_record = create(:post)
+    create_list(:attempt, 13, :published, post: post_record)
+
+    get "/api/posts/#{post_record.id}", params: { page: 2 }
+
+    expect(response.parsed_body["attempts"].size).to eq(1)
+    expect(response.parsed_body["meta"]["total_count"]).to eq(13)
+  end
+
+  it "削除済みのお題は 404 を返す" do
+    post_record = create(:post)
+    post_record.discard!
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body["error"]).to eq("not_found")
+  end
+
+  it "存在しない ID は 404 を返す" do
+    get "/api/posts/999999"
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body["error"]).to eq("not_found")
+  end
+end

@@ -30,6 +30,19 @@ module Api
       render json: { error: "image_upload_failed" }, status: :bad_gateway
     end
 
+    def show
+      post = Post.kept.includes(:user).with_counts.find(params[:id])
+      attempts = Attempt.listing_for(post).page(params[:page])
+
+      render json: {
+        post: PostSerializer.call(post),
+        # 挑戦の並びは新着順で固定。いいね順（ベスト再現）は 6-1 で
+        # ここに sort の分岐を足す。
+        attempts: attempts.map { |attempt| AttemptSerializer.call(attempt) },
+        meta: PaginationSerializer.call(attempts)
+      }
+    end
+
     private
 
     # 画像とタイトルのエラーをまとめて返す。片方ずつ返すと往復が増えるうえ、
