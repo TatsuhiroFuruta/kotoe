@@ -34,8 +34,11 @@ class Post < ApplicationRecord
   scope :search_by_title, ->(query) { query.blank? ? all : ransack(title_cont: query).result }
 
   # 一覧の組み立て口。コントローラはこれだけを呼ぶ。
-  # search_by_title を最初に置くのは、ransack に with_counts の独自 SELECT を
-  # 見せないため（ransack は自前で関係を組み直す）。
+  #
+  # search_by_title を先頭に置いている。ransack は受け取った関係から Post.all を
+  # 組み直す（現在のスコープは scoping 経由で引き継がれる）ので、実は後ろに置いても
+  # 同じ SQL になる。それでも先頭に固定するのは、その引き継ぎの挙動に依存せずに
+  # 読めるようにするため。
   def self.listing(q: nil, sort: nil)
     relation = search_by_title(q).kept.includes(:user).with_counts
 

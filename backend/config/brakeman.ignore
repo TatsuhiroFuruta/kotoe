@@ -21,7 +21,7 @@
       "cwe_id": [
         89
       ],
-      "note": "補間しているのは ActiveRecord が組み立てた SQL のみで、ユーザー入力は通っていない。この式は Attempt.kept.published / Like のスコープを to_sql したもので、引数も外部入力も受け取らない（app/models/post.rb の attempts_count_sql / likes_count_sql）。検索語は ransack がプレースホルダ化するため別経路。設計の根拠は docs/superpowers/specs/2026-07-29-issue-3-2-post-crud-design.md"
+      "note": "補間しているのは ActiveRecord が組み立てた SQL のみで、ユーザー入力は通っていない。この式は app/models/attempt.rb の likes_count_sql（Like のスコープを to_sql したもの）で、引数も外部入力も受け取らない。検索語は ransack がプレースホルダ化するため別経路。設計の根拠は docs/superpowers/specs/2026-07-29-issue-3-2-post-crud-design.md"
     },
     {
       "warning_type": "SQL Injection",

@@ -30,7 +30,7 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
 | `/` | トップ | 不要 | |
 | `/login` | ログイン | 不要 | |
 | `/signup` | 新規登録 | 不要 | |
-| `/posts` | お題一覧・検索 | 不要（投稿は要） | クエリで検索・ページ指定 `?q=&page=` |
+| `/posts` | お題一覧・検索 | 不要（投稿は要） | クエリで検索・並び替え・ページ指定 `?q=&sort=new\|popular&page=` |
 | `/posts/new` | お題投稿 | 必要 | |
 | `/posts/[id]` | お題詳細 | 閲覧は不要／描写は要 | コアループの起点 |
 | `/attempts/[id]` | 挑戦詳細・比較 | 閲覧は不要 | 共有用パーマリンク |
@@ -54,7 +54,7 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
 ### お題（Post）
 | メソッド | パス | 役割 | 画面 |
 |---|---|---|---|
-| GET | `/api/posts` | お題一覧（ransack 検索・kaminari ページング） | 一覧 |
+| GET | `/api/posts` | お題一覧（ransack 検索・kaminari ページング）。`?q=` タイトル部分一致／`?sort=new\|popular`（popular＝いいね合計の降順）／`?page=`（1ページ12件固定） | 一覧 |
 | POST | `/api/posts` | お題投稿 | 投稿 |
 | GET | `/api/posts/:id` | お題詳細＋挑戦一覧（`sort=likes` で再現度順＝ベスト再現の取得にも使用） | 詳細 |
 | DELETE | `/api/posts/:id` | 自分のお題を削除（ソフトデリート） | マイページ |

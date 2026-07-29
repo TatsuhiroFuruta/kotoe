@@ -68,6 +68,26 @@ RSpec.describe Post, type: :model do
       expect(Post.listing.first.likes_count).to eq(0)
     end
 
+    # 同着の順序が不定だと、ページをまたいで同じレコードが重複したり抜けたりする。
+    # created_at が同一になるのはテストの中だけの話ではなく、連投すれば普通に起きる。
+    it "新着順の同着は id の降順で並ぶ" do
+      time = 1.day.ago
+      first = create(:post, created_at: time)
+      second = create(:post, created_at: time)
+
+      expect(Post.listing.map(&:id)).to eq([ second.id, first.id ])
+    end
+
+    it "人気順の同着は id の降順で並ぶ" do
+      time = 1.day.ago
+      first = create(:post, created_at: time)
+      second = create(:post, created_at: time)
+      create(:like, attempt: create(:attempt, :published, post: first))
+      create(:like, attempt: create(:attempt, :published, post: second))
+
+      expect(Post.listing(sort: "popular").map(&:id)).to eq([ second.id, first.id ])
+    end
+
     it "sort: popular はいいね合計の降順" do
       quiet = create(:post, created_at: 1.day.ago)
       loud = create(:post, created_at: 2.days.ago)

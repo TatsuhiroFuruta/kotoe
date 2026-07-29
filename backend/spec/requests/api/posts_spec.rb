@@ -94,6 +94,20 @@ RSpec.describe "GET /api/posts", type: :request do
     expect(response.parsed_body["posts"].map { |post| post["id"] }).to eq([ newer.id, older.id ])
   end
 
+  # 認証不要のエンドポイントなので、誰でも投げられる値で 500 にできてはいけない。
+  # kaminari の OFFSET は 12 * (page - 1) で、桁が大きいと int8 を溢れる。
+  it "page が巨大でも配列でも 500 にならない" do
+    create(:post)
+
+    get "/api/posts", params: { page: "10000000000000000000" }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["posts"]).to be_empty
+
+    get "/api/posts", params: { page: [ "1" ] }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["meta"]["current_page"]).to eq(1)
+  end
+
   it "お題が増えてもクエリ数が増えない（N+1 を作り込まない）" do
     create(:post)
     with_one = count_select_queries { get "/api/posts" }
@@ -167,6 +181,17 @@ RSpec.describe "POST /api/posts", type: :request do
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.parsed_body["errors"]).to eq("image" => [ "image_missing" ])
+  end
+
+  # params[:post] の型はクライアントが決められる。ハッシュ以外を送られても
+  # 500 ではなく通常の検証エラーとして扱う。
+  it "post がハッシュでなくても 500 にせず 422 を返す" do
+    post "/api/posts", params: { post: "foo" }, headers: auth_headers(token)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq(
+      "title" => [ "blank" ], "image" => [ "image_missing" ]
+    )
   end
 
   it "検証で落ちたときは Cloudinary へ上げない" do
