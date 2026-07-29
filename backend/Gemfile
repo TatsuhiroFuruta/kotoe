@@ -45,6 +45,14 @@ gem "cloudinary", "~> 2.4"
 # bundle は通るのに実行時だけ壊れる。
 gem "marcel"
 
+# ページネーション。1 ページの件数は config/initializers/kaminari_config.rb で固定し、
+# クライアントからは指定させない（per を開放すると一度に全件取られる）。
+gem "kaminari"
+
+# 検索。公開 API のクエリは ?q= の平らな形に固定し、ransack の生パラメータ
+# （q[title_cont]）は外に出さない。詳細は 3-2 の設計ドキュメント参照。
+gem "ransack"
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"

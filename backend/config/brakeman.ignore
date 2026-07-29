@@ -1,0 +1,52 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "3ff4b7597a43a64a1b2ab8b842bdb38057ee5f382616651f59a9f29cc6be59b2",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/attempt.rb",
+      "line": 17,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "select(\"attempts.*\", \"(#{likes_count_sql}) AS likes_count\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Attempt",
+        "method": "with_likes_count"
+      },
+      "user_input": "likes_count_sql",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "補間しているのは ActiveRecord が組み立てた SQL のみで、ユーザー入力は通っていない。この式は app/models/attempt.rb の likes_count_sql（Like のスコープを to_sql したもの）で、引数も外部入力も受け取らない。検索語は ransack がプレースホルダ化するため別経路。設計の根拠は docs/superpowers/specs/2026-07-29-issue-3-2-post-crud-design.md"
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "ab97c04312f2908d287d0c843c48a95d89fa65a674d349430266ce4d9a673d0b",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/post.rb",
+      "line": 20,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "select(\"posts.*\", \"(#{attempts_count_sql}) AS attempts_count\", \"(#{likes_count_sql}) AS likes_count\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Post",
+        "method": "with_counts"
+      },
+      "user_input": "attempts_count_sql",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "補間しているのは ActiveRecord が組み立てた SQL のみで、ユーザー入力は通っていない。この式は Attempt.kept.published / Like のスコープを to_sql したもので、引数も外部入力も受け取らない（app/models/post.rb の attempts_count_sql / likes_count_sql）。検索語は ransack がプレースホルダ化するため別経路。設計の根拠は docs/superpowers/specs/2026-07-29-issue-3-2-post-crud-design.md"
+    }
+  ],
+  "updated": "2026-07-29T16:47:33.167686",
+  "brakeman_version": "8.0.5"
+}

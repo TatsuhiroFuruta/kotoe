@@ -17,6 +17,9 @@ Rails.application.routes.draw do
     # ログイン中のユーザー自身の情報。
     # マイページの一覧API（/api/me/posts 等）は issue 6-3 で追加する。
     get "me" => "me#show"
+
+    # お題（issue 3-2）。一覧・詳細は認証不要、投稿・削除は要ログイン。
+    resources :posts, only: %i[index create show destroy]
   end
 
   # Rails 標準のヘルスチェック。アプリが例外なく起動できたかだけを見る（DB は見ない）。

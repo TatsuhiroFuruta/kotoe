@@ -1,0 +1,96 @@
+module Api
+  # お題（Post）の CRUD。絞り込み・集計の判定はモデル（Post.listing）に、
+  # JSON の形はシリアライザに寄せ、ここは HTTP の入出力だけを扱う。
+  class PostsController < ApplicationController
+    # kaminari は OFFSET = 12 * (page - 1) を組み立てるため、巨大な値を渡されると
+    # int8 を溢れてアダプタが例外になる。認証不要の一覧が誰でも 500 にできてしまうので
+    # 上限を設ける。12 * 100 万件ぶんあれば実用上の到達点より十分に先。
+    MAX_PAGE = 1_000_000
+
+    before_action :authenticate_user!, only: %i[create destroy]
+
+    def index
+      posts = Post.listing(q: params[:q], sort: params[:sort]).page(page_param)
+
+      render json: {
+        posts: posts.map { |post| PostSerializer.call(post) },
+        meta: PaginationSerializer.call(posts)
+      }
+    end
+
+    def create
+      attributes = post_attributes
+      image = attributes[:image]
+      post = current_user.posts.new(title: attributes[:title])
+
+      errors = collect_errors(post, Images::Validation.call(image))
+      return render json: { errors: errors }, status: :unprocessable_content if errors.any?
+
+      post.image_public_id = Images::Uploader.call(image, kind: :post)
+      post.save!
+
+      # 新規レコードには with_counts の別名属性が乗っていないため、
+      # 一覧と同じ表現を返せるよう取り直す。
+      created = Post.includes(:user).with_counts.find(post.id)
+      render json: { post: PostSerializer.call(created) }, status: :created
+    rescue Images::Uploader::UploadError
+      render json: { error: "image_upload_failed" }, status: :bad_gateway
+    end
+
+    def show
+      post = Post.kept.includes(:user).with_counts.find(params[:id])
+      attempts = Attempt.listing_for(post).page(page_param)
+
+      render json: {
+        post: PostSerializer.call(post),
+        # 挑戦の並びは新着順で固定。いいね順（ベスト再現）は 6-1 で
+        # ここに sort の分岐を足す。
+        attempts: attempts.map { |attempt| AttemptSerializer.call(attempt) },
+        meta: PaginationSerializer.call(attempts)
+      }
+    end
+
+    def destroy
+      # current_user.posts に限定することで、所有チェックの書き忘れが起こりようがない。
+      # 他人のお題・存在しない ID・削除済みは、すべて RecordNotFound → 404 になる。
+      # 403 と分けないのは、お題自体が一覧・詳細で公開されており隠せる情報が無いため。
+      current_user.posts.kept.find(params[:id]).discard!
+      head :no_content
+    end
+
+    private
+
+    # 数値以外・配列・巨大な値のいずれで来ても 1 ページ目〜上限に収める。
+    # 0 以下や数値でない値は kaminari 自身が 1 ページ目に丸めるが、
+    # 上限側と「配列を渡されて to_i が無い」ケースはこちらで潰す必要がある。
+    def page_param
+      params[:page].to_s.to_i.clamp(1, MAX_PAGE)
+    end
+
+    # params[:post] の型はクライアントが決められる。post=foo のようなスカラーを
+    # 送られても dig で TypeError にせず、通常の検証エラー（422）として扱う。
+    def post_attributes
+      params[:post].respond_to?(:dig) ? params[:post] : {}
+    end
+
+    # 画像とタイトルのエラーをまとめて返す。片方ずつ返すと往復が増えるうえ、
+    # 先にアップロードしてからタイトル未入力に気づくと、誰からも参照されない
+    # 画像が Cloudinary に残る。
+    #
+    # 形は { field => [code] }。Api::Auth::RegistrationsController と揃えてある。
+    def collect_errors(post, validation)
+      post.valid?
+
+      # 「見る項目」ではなく「除く項目」を挙げる。image_public_id はアップロード後に
+      # 入るのでこの段階では必ずエラーになるが、それ以外は素通しする。
+      # title だけを拾う書き方にすると、Post にバリデーションが増えたときに
+      # 黙って落ち、アップロード後の save! が 500 になって参照されない画像が
+      # Cloudinary に残る（この順序で検証している目的そのものが崩れる）。
+      errors = post.errors.details.except(:image_public_id)
+                   .transform_values { |details| details.pluck(:error) }
+
+      errors[:image] = [ validation.error_code ] unless validation.valid?
+      errors
+    end
+  end
+end
