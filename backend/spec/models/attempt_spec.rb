@@ -38,4 +38,40 @@ RSpec.describe Attempt, type: :model do
     expect(Attempt.kept).not_to include(attempt)
     expect(Attempt.discarded).to include(attempt)
   end
+
+  describe ".listing_for" do
+    let(:post) { create(:post) }
+
+    it "published かつ未削除の挑戦を新着順で返す" do
+      older = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      newer = create(:attempt, :published, post: post, created_at: 1.day.ago)
+
+      expect(Attempt.listing_for(post).map(&:id)).to eq([ newer.id, older.id ])
+    end
+
+    it "下書きを含めない" do
+      create(:attempt, post: post)
+
+      expect(Attempt.listing_for(post)).to be_empty
+    end
+
+    it "削除済みの挑戦を含めない" do
+      create(:attempt, :published, post: post).discard!
+
+      expect(Attempt.listing_for(post)).to be_empty
+    end
+
+    it "他のお題の挑戦を含めない" do
+      create(:attempt, :published, post: create(:post))
+
+      expect(Attempt.listing_for(post)).to be_empty
+    end
+
+    it "likes_count を持つ" do
+      attempt = create(:attempt, :published, post: post)
+      create_list(:like, 2, attempt: attempt)
+
+      expect(Attempt.listing_for(post).first.likes_count).to eq(2)
+    end
+  end
 end
