@@ -104,3 +104,96 @@ RSpec.describe "GET /api/posts", type: :request do
     expect(with_three).to eq(with_one)
   end
 end
+
+RSpec.describe "POST /api/posts", type: :request do
+  let(:user) { create(:user) }
+  let(:token) { sign_in_and_get_token(user) }
+  let(:image) { multipart_image(:jpeg, filename: "sunset.jpg", type: "image/jpeg") }
+
+  it "画像とタイトルを送るとお題を作成する" do
+    expect {
+      post "/api/posts",
+        params: { post: { title: "夕暮れの交差点", image: image } },
+        headers: auth_headers(token)
+    }.to change(Post, :count).by(1)
+
+    expect(response).to have_http_status(:created)
+
+    created = Post.last
+    expect(created.user).to eq(user)
+    expect(created.title).to eq("夕暮れの交差点")
+    # spec/support/cloudinary.rb の既定スタブが保存先フォルダから public_id を作る。
+    expect(created.image_public_id).to eq("kotoe/test/posts/stubbed")
+
+    expect(response.parsed_body["post"]).to include(
+      "id" => created.id,
+      "title" => "夕暮れの交差点",
+      "attempts_count" => 0,
+      "likes_count" => 0
+    )
+  end
+
+  it "投稿者は current_user になる（user_id を送っても無視する）" do
+    other = create(:user)
+
+    post "/api/posts",
+      params: { post: { title: "夕暮れ", image: image, user_id: other.id } },
+      headers: auth_headers(token)
+
+    expect(response).to have_http_status(:created)
+    expect(Post.last.user).to eq(user)
+  end
+
+  it "タイトルが空と画像が過大なとき、両方のエラーを一度に返す" do
+    too_large = multipart_image(:jpeg, filename: "big.jpg", type: "image/jpeg", bytesize: 5.megabytes + 1)
+
+    expect {
+      post "/api/posts",
+        params: { post: { title: "", image: too_large } },
+        headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq(
+      "title" => [ "blank" ],
+      "image" => [ "image_too_large" ]
+    )
+  end
+
+  it "画像が無いと image_missing を返す" do
+    post "/api/posts",
+      params: { post: { title: "夕暮れ" } },
+      headers: auth_headers(token)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq("image" => [ "image_missing" ])
+  end
+
+  it "検証で落ちたときは Cloudinary へ上げない" do
+    post "/api/posts",
+      params: { post: { title: "夕暮れ" } },
+      headers: auth_headers(token)
+
+    expect(Cloudinary::Uploader).not_to have_received(:upload)
+  end
+
+  it "Cloudinary が失敗したら 502 と image_upload_failed を返す" do
+    allow(Cloudinary::Uploader).to receive(:upload).and_raise(StandardError, "boom")
+
+    expect {
+      post "/api/posts",
+        params: { post: { title: "夕暮れ", image: image } },
+        headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:bad_gateway)
+    expect(response.parsed_body["error"]).to eq("image_upload_failed")
+  end
+
+  it "未認証だと 401 を返す" do
+    post "/api/posts", params: { post: { title: "夕暮れ", image: image } }
+
+    expect(response).to have_http_status(:unauthorized)
+    expect(response.parsed_body["error"]).to eq("unauthorized")
+  end
+end

@@ -27,16 +27,34 @@ module ImageFixtures
 
   # フォームから飛んでくる形。filename / type はクライアント申告の値なので、
   # 中身と食い違う組み合わせ（詐称）も作れる。
+  # PORO に直接渡す spec（spec/lib/images/）用。
   def uploaded_file(format, filename:, type:, bytesize: nil)
+    ActionDispatch::Http::UploadedFile.new(
+      tempfile: image_tempfile(format, bytesize: bytesize), filename: filename, type: type
+    )
+  end
+
+  # request spec で multipart のファイルパートとして送る形。
+  #
+  # 統合テストのパラメータを multipart に組み立てるのは Rack::Test で、
+  # ファイルとして扱われるのは Rack::Test::UploadedFile だけ。
+  # ActionDispatch::Http::UploadedFile を渡すと例外にはならず、文字列に潰れて
+  # サーバー側に届く（＝ image_missing になる）ため、request spec ではこちらを使う。
+  def multipart_image(format, filename:, type:, bytesize: nil)
+    Rack::Test::UploadedFile.new(
+      image_tempfile(format, bytesize: bytesize), type, original_filename: filename
+    )
+  end
+
+  private
+
+  def image_tempfile(format, bytesize: nil)
     tempfile = Tempfile.new("image-fixture")
     tempfile.binmode
     tempfile.write(image_bytes(format, bytesize: bytesize))
     tempfile.rewind
-
-    ActionDispatch::Http::UploadedFile.new(tempfile: tempfile, filename: filename, type: type)
+    tempfile
   end
-
-  private
 
   def image_bytes(format, bytesize: nil)
     magic = MAGIC_BYTES.fetch(format).dup.force_encoding(Encoding::BINARY)
