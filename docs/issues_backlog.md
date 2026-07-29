@@ -126,11 +126,17 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 目的：お題の投稿・一覧・詳細・削除。
 - 依存：2-1, 3-1
 - タスク：
-  - [ ] `GET /api/posts`（ransack 検索 + kaminari ページング）
-  - [ ] `POST /api/posts`（画像＋タイトル、要ログイン）
-  - [ ] `GET /api/posts/:id`（お題＋挑戦一覧、`sort=likes` 対応＝ベスト再現）
-  - [ ] `DELETE /api/posts/:id`（自分のお題を論理削除）
-  - [ ] JSON シリアライザ整備、request spec
+  - [x] `GET /api/posts`（ransack 検索 + kaminari ページング）
+        → 公開クエリは `?q=&sort=new|popular&page=` の平らな形。ransack の生パラメータは外に出さない
+  - [x] `POST /api/posts`（画像＋タイトル、要ログイン）
+  - [x] `GET /api/posts/:id`（お題＋挑戦一覧）
+        → `sort=likes`（ベスト再現）は **6-1 に委譲**。6-1 は 5-1（いいね API）に依存しており、
+        3-2 の時点ではいいねを作る手段が無いため。設計は
+        `docs/superpowers/specs/2026-07-29-issue-3-2-post-crud-design.md`
+  - [x] `DELETE /api/posts/:id`（自分のお題を論理削除）
+  - [x] JSON シリアライザ整備（`app/serializers/` の PORO）、request spec
+- 補足：お題の**編集（PATCH）は作らない**。お題は既に他人が挑戦した対象であり、画像を差し替えると
+  既存の挑戦の描写文と比較ビューが成立しなくなる。誤字の修正は「論理削除して投稿し直す」で賄う。
 - 完了条件：一覧・検索・詳細・投稿・削除が spec 込みで動く。論理削除したお題は一覧に出ない。
 
 ---
