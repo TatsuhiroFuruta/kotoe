@@ -9,7 +9,7 @@ module Api
       # 責務（CLAUDE.md）なので、英語の説明文ではなくコードで返す。
       def respond_with(resource, _opts = {})
         if resource.persisted?
-          render json: user_json(resource), status: :created
+          render json: UserSerializer.private_profile(resource), status: :created
         else
           render json: { errors: error_codes(resource) }, status: :unprocessable_content
         end

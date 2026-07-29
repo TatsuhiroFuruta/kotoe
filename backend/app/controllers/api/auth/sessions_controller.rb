@@ -16,7 +16,7 @@ module Api
 
       # JWT は devise-jwt が Authorization ヘッダに載せる（ここでは触らない）。
       def respond_with(resource, _opts = {})
-        render json: user_json(resource), status: :ok
+        render json: UserSerializer.private_profile(resource), status: :ok
       end
 
       # トークンの失効（jwt_denylist への記録）は devise-jwt が行う。

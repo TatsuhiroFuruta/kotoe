@@ -4,7 +4,7 @@ module Api
 
     # 「いま誰でログインしているか」だけを返す。
     def show
-      render json: user_json(current_user)
+      render json: UserSerializer.private_profile(current_user)
     end
   end
 end
