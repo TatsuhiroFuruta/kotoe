@@ -176,9 +176,12 @@ Create `backend/app/serializers/user_serializer.rb`:
 # API が返すユーザーの表現。
 #
 # 属性は 1 つずつ明示する。render json: user と書くと Rails は as_json を呼び、
-# 既定では全カラム（encrypted_password を含む）を出す。さらに怖いのは、
-# 将来 users にカラムを足したときにコードを変えていないのに漏れることで、
-# 明示列挙にしておけばその事故が起きない。
+# 既定では全カラムを出すため。
+#
+# ただし User に限っては devise が最初の一枚を守ってくれる（Authenticatable が
+# serializable_hash を上書きし、encrypted_password 等を除外する）。それでも
+# 明示列挙にするのは、除外リストが固定で、あとから足したカラムや email・
+# timestamps は素通りするため。詳しい理由は実装後のファイルのコメントを参照。
 class UserSerializer
   # 本人向け。/api/me と sign_up / sign_in の応答で使う。
   def self.private_profile(user)
