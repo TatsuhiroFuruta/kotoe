@@ -59,6 +59,23 @@ jobs:
       - name: rspec
         run: bundle exec rspec
 
+      # Solid Queue のジョブ実行スレッド数に対して DB の接続プールが足りているかを、
+      # 本番と同じ RAILS_MAX_THREADS で検証する。足りないと長いジョブが重なったときに
+      # ActiveRecord::ConnectionTimeoutError で間欠的に落ち、切り分けが難しい。
+      # ローカルは RAILS_MAX_THREADS 未設定でプールに余裕があるため、ここでしか出ない。
+      #
+      # `bin/jobs check` は警告を出しても exit 0 を返すため、警告の有無で明示的に落とす。
+      - name: solid queue の設定チェック
+        env:
+          RAILS_MAX_THREADS: 3
+        run: |
+          output=$(bundle exec bin/jobs check 2>&1)
+          echo "$output"
+          if echo "$output" | grep -qi "^Warning:"; then
+            echo "::error::Solid Queue の設定に警告があります（config/database.yml の max_connections を確認）"
+            exit 1
+          fi
+
   security:
     name: backend (brakeman / bundler-audit)
     runs-on: ubuntu-latest

@@ -214,7 +214,9 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   - [ ] 1日あたり生成回数上限のロジック
   - [ ] request spec / job spec
   - [ ] **本番でのワーカー稼働確認（4-1 から委譲）**：`generate` を叩いて status が
-        `generating` → `published` に変わることを本番URLで確認する
+        `generating` → `published` に変わることを本番URLで確認する。あわせて Render の
+        Environment に `SOLID_QUEUE_IN_PUMA` が実在することを目視確認する（未設定でも
+        デプロイは成功し、ジョブが積まれるだけで無言で処理されないため）
   - [ ] **Render 無料枠のメモリ実測（4-1 から委譲）**：512 MB に Puma＋supervisor＋
         dispatcher＋worker が収まるか。収まらなければ有料ワーカーへの切り出しを検討
 - 完了条件：描写の保存・生成（ダミー）・即公開・削除が動き、生成回数制限が効く。

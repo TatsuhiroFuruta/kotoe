@@ -47,4 +47,8 @@ pidfile ENV["PIDFILE"] if ENV["PIDFILE"]
 # この連鎖が切れ、Neon の無料枠（100 CU-hours/月）も維持できなくなる。
 #
 # ローカルは docker-compose の worker サービスが担当するため有効にしない。
-plugin :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"]
+#
+# `== "true"` で比較する。Ruby では "" も "false" も truthy なので、存在チェックだと
+# SOLID_QUEUE_IN_PUMA=false で無効化しようとした時に有効なままになる。有料ワーカーへ
+# 切り出す場面（deployment.md 参照）はまさにこの値を触るときなので、事故りにくくしておく。
+plugin :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"] == "true"

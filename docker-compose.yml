@@ -97,6 +97,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # depends_on は db の healthy までしか待たず、マイグレーション適用は待たない。
+    # 初回 clone 時は solid_queue_* テーブルが無い状態で起動して即死するため、
+    # db:migrate 後に自力で復帰できるようにしておく。
+    restart: on-failure
     # HTTP を受けないのでポートは公開しない。
     command: bundle exec bin/jobs
 

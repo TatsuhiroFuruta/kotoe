@@ -145,10 +145,18 @@ Media Library から削除する。
 - **ジョブワーカーは Web プロセスに同居する**：Render の無料プランではバックグラウンド
   ワーカーが別サービス扱いで有料になるため、`plugin :solid_queue` で Puma から fork する
   （`SOLID_QUEUE_IN_PUMA=true`）。free のスリープでワーカーごと止まるが、これは Neon の
-  オートサスペンドを促す面もあり、無料枠を維持する前提になっている。メモリは 512 MB を
-  Puma・supervisor・dispatcher・worker で分け合うため、4-2 で画像生成が乗ってから実測する。
-  収まらない場合は `plugin :solid_queue` を外し、`render.yaml` に `type: worker` の
-  サービス（$7/月〜）を足して切り出す（アプリのコードは変わらない）。
+  オートサスペンドを促す面もあり、無料枠を維持する前提になっている。
+  - メモリ 512 MB は **Puma・supervisor・dispatcher・worker・scheduler の 5 プロセス**で
+    分け合う。scheduler は `config/recurring.yml` に `production:` のタスク（完了ジョブの
+    毎時掃除）があるため fork される。ローカルには `development:` キーが無いので起動せず、
+    3 プロセスしか見えない点に注意。実測は 4-2 で画像生成が乗ってから行う。
+  - 収まらない場合は `plugin :solid_queue` を外し、`render.yaml` に `type: worker` の
+    サービス（$7/月〜）を足して切り出す（アプリのコードは変わらない）。ただし常駐ワーカーは
+    Neon のサスペンドも妨げるため、`docs/README.md` の試算を読んでから判断すること。
+  - **デプロイ後、Render ダッシュボードの Environment に `SOLID_QUEUE_IN_PUMA` が
+    実在することを目視確認する。** このサービスが Blueprint ではなく手動で作られていた
+    場合、`render.yaml` の変更は反映されない。未設定でもデプロイもヘルスチェックも成功し、
+    ジョブは `solid_queue_jobs` に積まれるだけで永久に処理されず、ログにも何も出ない。
 - **ジョブテーブルはアプリと同じ DB にある**：マイグレーションは通常どおり
   `backend/bin/render-build.sh` の `db:migrate` で適用される。追加の DB や環境変数は要らない。
 - **範囲外**：カスタムドメイン/DNS（8-2b）、Cloudinary（3-1）、画像生成キー（4-3）。
