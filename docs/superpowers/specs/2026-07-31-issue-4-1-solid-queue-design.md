@@ -83,8 +83,8 @@ Rails サーバーを落とさずに回せる。ジョブのログがリクエ�
 | `db/migrate/XXXX_create_solid_queue_tables.rb` | 新規。`solid_queue:install` が生成する `db/queue_schema.rb` の内容を通常のマイグレーションへ移す |
 | `db/queue_schema.rb` | 生成後に**削除**（単一 DB 構成のため不要） |
 | `db/schema.rb` | 自動更新（`solid_queue_*` が載る） |
-| `config/queue.yml` | 新規（後述） |
-| `config/recurring.yml` | 新規・空。MVP では cron 用途なし |
+| `config/queue.yml` | 新規。生成物をそのまま使う（後述） |
+| `config/recurring.yml` | 新規。生成物をそのまま使う。**空にしない**（後述） |
 | `config/environments/development.rb` | `config.active_job.queue_adapter = :solid_queue` |
 | `config/environments/production.rb` | 同上。`config.solid_queue.connects_to` は**入れない** |
 | `config/environments/test.rb` | `config.active_job.queue_adapter = :test` |
@@ -107,6 +107,11 @@ Rails サーバーを落とさずに回せる。ジョブのログがリクエ�
 
 ### config/queue.yml
 
+**ジェネレータの生成物をそのまま使う。**設計時は「worker の `polling_interval` を既定の 0.1 秒から
+1 秒へ緩める」つもりでいたが、生成テンプレートを確認したところ**既に 1 秒**だった
+（0.1 秒はライブラリ側のデフォルト値であって、生成される設定ファイルの値ではない）。
+`processes` も `ENV.fetch("JOB_CONCURRENCY", 1)` で既定 1。したがって手を入れる必要がない。
+
 ```yaml
 default: &default
   dispatchers:
@@ -115,7 +120,7 @@ default: &default
   workers:
     - queues: "*"
       threads: 3
-      processes: 1
+      processes: <%= ENV.fetch("JOB_CONCURRENCY", 1) %>
       polling_interval: 1
 
 development:
@@ -128,14 +133,34 @@ production:
   <<: *default
 ```
 
-- **`polling_interval: 1`（worker）** … 既定は 0.1 秒。画像生成は 10〜60 秒かかるジョブなので
-  取得が 1 秒遅れても体感に出ず、Neon へのクエリが 1/10 になる。
-- **`processes: 1`** … Render 無料枠の 512 MB を意識。スレッドはプロセス内でメモリを共有するため、
-  メモリに効くのはプロセス数。
+意図と合致していることの確認：
+
+- **`polling_interval: 1`（worker）** … 画像生成は 10〜60 秒かかるジョブなので取得が 1 秒遅れても
+  体感に出ず、ライブラリ既定の 0.1 秒に比べて Neon へのクエリが 1/10 で済む。
+- **`processes` の既定 1** … Render 無料枠の 512 MB を意識。スレッドはプロセス内でメモリを
+  共有するため、メモリに効くのはプロセス数。環境変数で後から増やせる形なのは都合がよい。
 - **`queues: "*"`** … MVP で動くジョブは実質「画像生成」1 種類。キュー名の細分化は必要になってから。
 - `test:` セクションは実際には読まれない（テスト環境の ActiveJob アダプタは `:test` で、
   `queue.yml` を読むのは supervisor / `bin/jobs` だけ）。将来テスト環境でワーカーを起こしたく
   なったときのために置いておく。
+
+### config/recurring.yml
+
+**生成物をそのまま使う。空にしない。** 設計時は「MVP では cron 用途がないので空でよい」と
+考えていたが、生成テンプレートには**完了ジョブの掃除**が入っている：
+
+```yaml
+production:
+  clear_solid_queue_finished_jobs:
+    command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+    schedule: every hour at minute 12
+```
+
+これを消すと `solid_queue_jobs` に完了ジョブが溜まり続ける。同居構成では Neon の
+ストレージ 0.5 GB をアプリのデータと共有するため、消してはいけない。
+
+なお `production:` キーしか無いため、**開発環境では掃除が走らない**。ローカルで完了ジョブが
+気になったら手動で `SolidQueue::Job.clear_finished_in_batches` を叩く。
 
 ### docker-compose.yml の worker サービス
 
