@@ -36,6 +36,12 @@ Rails.application.configure do
   # ActionMailer::Base.deliveries array.
   config.action_mailer.delivery_method = :test
 
+  # ActiveJob の既定アダプタは :async で、spec 内の perform_later が別スレッドで実際に
+  # 走ってしまう。テストでは :test アダプタ（enqueue を記録するだけで実行しない）を使い、
+  # have_enqueued_job で検証する。Solid Queue の実キューを触る spec は
+  # spec/jobs/solid_queue_spec.rb だけで、そこだけアダプタを差し替える。
+  config.active_job.queue_adapter = :test
+
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "example.com" }
 
