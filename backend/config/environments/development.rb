@@ -41,6 +41,16 @@ Rails.application.configure do
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
 
+  # docker compose の worker サービス（bin/jobs）は HTTP を受けないため、`rails server` が
+  # 行う STDOUT へのブロードキャストが効かない。何もしないとワーカーのログが backend と
+  # 共有の log/development.log に埋もれ、ログを分けるために worker を別サービスにした意味が
+  # 無くなる。RAILS_LOG_TO_STDOUT を立てたプロセスだけ docker compose logs に出す。
+  config.logger = ActiveSupport::TaggedLogging.logger($stdout) if ENV["RAILS_LOG_TO_STDOUT"].present?
+
+  # 既定は debug のまま。ワーカーは polling_interval ごとにポーリングの SQL を吐くため、
+  # docker-compose 側で info に落としている（ジョブ自身のログは info なので残る）。
+  config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "debug")
+
   # Raise an error on page load if there are pending migrations.
   config.active_record.migration_error = :page_load
 
@@ -52,6 +62,11 @@ Rails.application.configure do
 
   # Highlight code that enqueued background job in logs.
   config.active_job.verbose_enqueue_logs = true
+
+  # ジョブは Solid Queue（保存先は Postgres）で処理する。ワーカーは docker-compose の
+  # worker サービス（bin/jobs）が担当する。本番は Puma プラグインで Web プロセス内に
+  # 同居させる（config/puma.rb）ため、起動方法だけが本番と異なる。
+  config.active_job.queue_adapter = :solid_queue
 
   # Highlight code that triggered redirect in logs.
   config.action_dispatch.verbose_redirect_logs = true

@@ -6,8 +6,17 @@ default: &default
   adapter: postgresql
   encoding: unicode
   url: <%= ENV["DATABASE_URL"] %>
-  # 接続プール数。Puma のスレッド数に合わせる。
-  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  # 接続プール数。Puma のスレッド数 + 2。
+  #
+  # +2 は Solid Queue のワーカー用。ワーカープロセスは「ジョブ実行スレッド
+  # （config/queue.yml の threads）＋ ポーリング 1 ＋ ハートビート 1」の接続を使う。
+  # Puma のスレッド数にちょうど合わせると本番（RAILS_MAX_THREADS=3・queue.yml も 3）で
+  # 足りず、長いジョブが 2 本重なった時点で ActiveRecord::ConnectionTimeoutError になる。
+  # ローカルは RAILS_MAX_THREADS 未設定で pool 7 になるため、この不足は本番でしか出ない。
+  # 検証: docker compose exec -e RAILS_MAX_THREADS=3 worker bin/jobs check
+  #
+  # プール数は上限であって事前確保ではないため、Puma 側が余分に掴むことはない。
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 }.to_i + 2 %>
 
 development:
   <<: *default

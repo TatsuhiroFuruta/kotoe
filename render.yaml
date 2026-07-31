@@ -21,3 +21,6 @@ services:
       - { key: CORS_ALLOWED_ORIGINS, sync: false }
       - { key: CORS_ALLOWED_ORIGIN_REGEX, sync: false }
       - { key: CLOUDINARY_URL, sync: false }
+      # Solid Queue のワーカーを Puma プロセス内で起動する（config/puma.rb）。
+      # 無料プランではバックグラウンドワーカーが別サービス扱いで有料になるため。
+      - { key: SOLID_QUEUE_IN_PUMA, value: "true" }
