@@ -23,6 +23,7 @@
 | `CORS_ALLOWED_ORIGINS` | **手入力** | Vercel 本番URL（完全一致、カンマ区切り可） |
 | `CORS_ALLOWED_ORIGIN_REGEX` | **手入力** | Vercel プレビュー用。**チーム slug を必ず含める**（`\A \z` は実装側が付けるので書かない） |
 | `CLOUDINARY_URL` | **手入力** | Cloudinary の API Environment variable。api_secret を含むためサーバー専用。未設定だと boot で raise する |
+| `SOLID_QUEUE_IN_PUMA` | `render.yaml` | `true`。Solid Queue のワーカーを Puma プロセス内で起動する。未設定だとジョブが enqueue されるだけで処理されない |
 
 - `sync: false` の項目は秘密/環境依存のためリポジトリに置かず、ダッシュボードで手入力する。
 - 許可オリジン（`CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_ORIGIN_REGEX`）が両方未設定のまま
@@ -141,6 +142,15 @@ Media Library から削除する。
   数十秒かかる。スモークや E2E の初回が遅く見える点に留意。
 - **Neon はプール接続を使う**：`-pooler` 付きホストの接続文字列を使う（直接接続だと接続数を
   枯渇させる）。マイグレーションは `backend/bin/render-build.sh` のビルドフェーズで走る。
+- **ジョブワーカーは Web プロセスに同居する**：Render の無料プランではバックグラウンド
+  ワーカーが別サービス扱いで有料になるため、`plugin :solid_queue` で Puma から fork する
+  （`SOLID_QUEUE_IN_PUMA=true`）。free のスリープでワーカーごと止まるが、これは Neon の
+  オートサスペンドを促す面もあり、無料枠を維持する前提になっている。メモリは 512 MB を
+  Puma・supervisor・dispatcher・worker で分け合うため、4-2 で画像生成が乗ってから実測する。
+  収まらない場合は `plugin :solid_queue` を外し、`render.yaml` に `type: worker` の
+  サービス（$7/月〜）を足して切り出す（アプリのコードは変わらない）。
+- **ジョブテーブルはアプリと同じ DB にある**：マイグレーションは通常どおり
+  `backend/bin/render-build.sh` の `db:migrate` で適用される。追加の DB や環境変数は要らない。
 - **範囲外**：カスタムドメイン/DNS（8-2b）、Cloudinary（3-1）、画像生成キー（4-3）。
   スケルトンでは `config.active_storage.service = :local` のまま。これらの本番固有の統合は、
   その機能を実装した回にその都度スモーク確認して積み増す。

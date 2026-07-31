@@ -37,3 +37,14 @@ plugin :tmp_restart
 # Specify the PID file. Defaults to tmp/pids/server.pid in development.
 # In other environments, only set the PID file if requested.
 pidfile ENV["PIDFILE"] if ENV["PIDFILE"]
+
+# ジョブワーカーを Puma プロセス内で動かす（本番のみ）。Render の無料プランでは
+# バックグラウンドワーカーが別サービス扱いで有料（$7/月〜）になるため、Web サービス
+# 1 つに同居させる。
+#
+# 副次的な効果として、無料 Web が 15 分アイドルで停止すると fork した supervisor も
+# 一緒に死に、ポーリングが止まって Neon がサスペンドする。常駐ワーカーにすると
+# この連鎖が切れ、Neon の無料枠（100 CU-hours/月）も維持できなくなる。
+#
+# ローカルは docker-compose の worker サービスが担当するため有効にしない。
+plugin :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"]

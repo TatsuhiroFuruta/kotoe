@@ -69,9 +69,21 @@ Render の無料インスタンスタイプが使えるのは Web Service / Stat
 ジョブのコードを自動リロードしない。別サービスなら `docker compose restart worker` で数秒、
 Rails サーバーを落とさずに回せる。ジョブのログがリクエストログと混ざらない利点もある。
 
-代償は `plugin :solid_queue` の行がローカルで一度も実行されないこと。設定ミスがあっても
-本番デプロイまで気づけないが、失敗は明白（ジョブが処理されない）で一度きりのリスクであり、
-4-2 の本番確認で捕まえられる。
+代償は `plugin :solid_queue` の行が通常の `docker compose up` では一度も実行されないこと。
+設定ミスがあっても本番デプロイまで気づけないが、失敗は明白（ジョブが処理されない）で
+一度きりのリスクであり、4-2 の本番確認で捕まえられる。
+
+> 実装時の追加検証（2026-07-31）：この弱点は、環境変数を付けて手動で Puma を起動すれば
+> 安く潰せることが分かった。実際に supervisor が登録されることを確認済み。
+>
+> ```bash
+> docker compose exec -e SOLID_QUEUE_IN_PUMA=true -e RAILS_LOG_TO_STDOUT=true -e PORT=3999 \
+>   backend timeout 15 bundle exec puma -C config/puma.rb
+> # → SolidQueue-x.y.z Started Supervisor(fork) ... が出る
+> ```
+>
+> `config/puma.rb` を触ったときはこれを回すこと。終了時に `solid_queue_processes` の行は
+> 自動で登録解除されるため、後片付けは要らない。
 
 ## 変更するファイル
 
