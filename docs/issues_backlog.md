@@ -208,6 +208,11 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   - [ ] `POST /api/posts/:post_id/attempts`（下書き作成 status: draft）
   - [ ] `PATCH /api/attempts/:id`（下書き更新）
   - [ ] `POST /api/attempts/:id/generate`（生成ジョブ起動、status: generating→published、**生成回数を消費**）
+        → **status の更新と enqueue は必ず同じトランザクションで囲む**。ジョブテーブルを
+        アプリと同じ DB に置いてあるため、ロールバック時にジョブも消えて孤児ジョブが出ない。
+        `enqueue_after_transaction_commit` は `false` のまま変えないこと（理由は
+        `docs/superpowers/specs/2026-07-31-issue-4-1-solid-queue-design.md` の
+        「トランザクションの一体性」）
   - [ ] `GenerateImageJob`：**当面は固定のダミー画像**を返し Cloudinary 保存 → published
   - [ ] `GET /api/attempts/:id`（状況ポーリング）
   - [ ] `DELETE /api/attempts/:id`（論理削除、**回数は戻さない**）
