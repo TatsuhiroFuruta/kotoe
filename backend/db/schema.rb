@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_31_054924) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_02_064536) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -18,6 +18,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_054924) do
     t.datetime "created_at", null: false
     t.text "description", null: false
     t.datetime "discarded_at"
+    t.datetime "generated_at"
     t.string "generated_image_public_id"
     t.bigint "post_id", null: false
     t.integer "similarity_score"
@@ -26,6 +27,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_054924) do
     t.bigint "user_id", null: false
     t.index ["discarded_at"], name: "index_attempts_on_discarded_at"
     t.index ["post_id"], name: "index_attempts_on_post_id"
+    t.index ["user_id", "generated_at"], name: "index_attempts_on_user_id_and_generated_at"
     t.index ["user_id"], name: "index_attempts_on_user_id"
   end
 

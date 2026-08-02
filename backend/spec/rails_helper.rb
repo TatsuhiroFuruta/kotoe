@@ -24,6 +24,16 @@ RSpec.configure do |config|
   # FactoryBot を `FactoryBot.create` ではなく `create` で呼べるようにする。
   config.include FactoryBot::Syntax::Methods
 
+  # travel_to / freeze_time。rspec-rails はこれを type 付きの example group にしか
+  # 入れないため、type が付かない spec/lib では自分で include する必要がある
+  # （生成回数の「1日」の境界は spec/lib/attempts/generation_spec.rb で見る）。
+  config.include ActiveSupport::Testing::TimeHelpers
+
+  # perform_enqueued_jobs を job spec で使う。retry_on のリトライは
+  # 「ブロック内で enqueue されたジョブ」として再実行されるため、
+  # リトライを使い切る挙動はこれでしか書けない。
+  config.include ActiveJob::TestHelper, type: :job
+
   # 各 example をトランザクションで囲み、終了時にロールバックする。
   config.use_transactional_fixtures = true
 

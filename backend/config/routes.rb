@@ -19,7 +19,14 @@ Rails.application.routes.draw do
     get "me" => "me#show"
 
     # お題（issue 3-2）。一覧・詳細は認証不要、投稿・削除は要ログイン。
-    resources :posts, only: %i[index create show destroy]
+    resources :posts, only: %i[index create show destroy] do
+      resources :attempts, only: %i[create]
+    end
+
+    # 挑戦（issue 4-2）。閲覧（show）だけ認証不要で、公開済み以外は本人にしか見えない。
+    resources :attempts, only: %i[show update destroy] do
+      post :generate, on: :member
+    end
   end
 
   # Rails 標準のヘルスチェック。アプリが例外なく起動できたかだけを見る（DB は見ない）。

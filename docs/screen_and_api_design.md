@@ -68,6 +68,25 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
 | GET | `/api/attempts/:id` | 生成状況のポーリング／挑戦詳細 | 詳細・比較 |
 | DELETE | `/api/attempts/:id` | 自分の挑戦/下書きを削除（ソフトデリート、回数は戻さない） | 詳細・マイページ |
 
+実装は issue 4-2。確定した挙動：
+
+- 状態は `draft → generating → published`（生成成功で即公開）または `failed`。
+  **`published` / `failed` は終端**で、再試行は新しい下書きを作る。
+- `PATCH` と `generate` は **draft のときだけ**受け付ける。それ以外は 422 `attempt_not_draft`。
+- 生成回数は **1日 3 回**（`KOTOE_DAILY_GENERATION_LIMIT` で上書き可）。「1日」は JST の暦日。
+  上限到達は 422 で、補助情報を添える：
+
+  ```json
+  { "error": "generation_limit_reached", "limit": 3, "resets_at": "2026-08-02T15:00:00Z" }
+  ```
+
+- `GET /api/attempts/:id` は `{ "attempt": {...}, "post": {...} }` を返す（比較ビューが
+  元画像を必要とするため）。`published` は誰でも、それ以外は**本人のみ**で、他人・未認証からは
+  404（403 や 401 にせず存在ごと隠す）。**生成中はまだ公開されていないので、
+  フロントのポーリングは Authorization ヘッダを付ける必要がある。**
+- `DELETE` は論理削除で、`generated_at` を消さない（**回数は戻らない**）。生成中でも削除できる。
+- 描写（`description`）は **1〜1,000 文字**。超過は 422 `{ "errors": { "description": ["too_long"] } }`。
+
 > 補足：「保存」ボタン＝`POST /attempts`（draft 作成）または `PATCH`（更新）。「画像を生成」ボタン＝`POST /attempts/:id/generate`。生成を一発で行いたい場合は、内部で「draft 作成 → generate」を続けて呼ぶ。
 
 ### 再現いいね（Like）
