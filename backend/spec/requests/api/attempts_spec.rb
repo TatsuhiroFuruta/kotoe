@@ -165,4 +165,59 @@ RSpec.describe "挑戦 API", type: :request do
       expect(response).to have_http_status(:unauthorized)
     end
   end
+
+  describe "POST /api/attempts/:id/generate" do
+    let(:attempt) { create(:attempt, user: user, post: post_record) }
+
+    it "生成を起動すると 202 と generating を返し、ジョブが積まれる" do
+      expect {
+        post "/api/attempts/#{attempt.id}/generate", headers: auth_headers(token), as: :json
+      }.to have_enqueued_job(GenerateImageJob).with(attempt.id)
+
+      expect(response).to have_http_status(:accepted)
+      expect(response.parsed_body["attempt"]["status"]).to eq("generating")
+      expect(attempt.reload.generated_at).to be_present
+    end
+
+    it "他人の挑戦は 404" do
+      others = create(:attempt)
+
+      post "/api/attempts/#{others.id}/generate", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "draft でなければ 422 と attempt_not_draft" do
+      published = create(:attempt, :published, user: user)
+
+      post "/api/attempts/#{published.id}/generate", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body).to eq("error" => "attempt_not_draft")
+    end
+
+    it "未認証は 401" do
+      post "/api/attempts/#{attempt.id}/generate", as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    # 「1日」は JST の暦日。API が返す時刻は他のフィールドと同じく UTC の ISO8601 に
+    # 揃えるので、JST 翌日 0 時は …T15:00:00Z になる。
+    it "上限に達すると 422 とコード・上限・回復時刻を返す" do
+      travel_to(Time.zone.local(2026, 8, 2, 12, 0, 0)) do
+        create_list(:attempt, 3, user: user, status: "published", generated_at: Time.current)
+
+        post "/api/attempts/#{attempt.id}/generate", headers: auth_headers(token), as: :json
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body).to eq(
+          "error" => "generation_limit_reached",
+          "limit" => 3,
+          "resets_at" => "2026-08-02T15:00:00Z"
+        )
+      end
+      expect(attempt.reload.status).to eq("draft")
+    end
+  end
 end

@@ -24,6 +24,15 @@ module Api
       render json: { attempt: attempt_json(attempt) }
     end
 
+    def generate
+      attempt = owned_attempt
+      result = Attempts::Generation.call(attempt)
+
+      return render_generation_error(result) unless result.ok?
+
+      render json: { attempt: attempt_json(attempt) }, status: :accepted
+    end
+
     private
 
     # current_user.attempts に限定することで、所有チェックの書き忘れが起こりようがない。
@@ -52,6 +61,20 @@ module Api
 
     def render_error(code, extra = {})
       render json: { error: code }.merge(extra), status: :unprocessable_content
+    end
+
+    # 上限到達のときだけ、フロントが「あと◯時間で回復します」を組み立てられるよう
+    # 補助情報を足す。文言そのものは返さない（i18n はフロント）。
+    def render_generation_error(result)
+      return render_error(result.error_code) if result.limit.nil?
+
+      render_error(result.error_code, limit: result.limit, resets_at: next_reset_at)
+    end
+
+    # 「1日」は JST の暦日なので回復は JST の翌 0 時。返す形は他のフィールドと同じく
+    # UTC の ISO8601 に揃える。
+    def next_reset_at
+      Time.zone.tomorrow.beginning_of_day.utc.iso8601
     end
   end
 end
