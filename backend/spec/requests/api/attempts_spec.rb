@@ -220,4 +220,125 @@ RSpec.describe "挑戦 API", type: :request do
       expect(attempt.reload.status).to eq("draft")
     end
   end
+
+  describe "GET /api/attempts/:id" do
+    it "公開済みの挑戦は未認証でも取得でき、お題も一緒に返る" do
+      attempt = create(:attempt, :published, user: user, post: post_record)
+      create_list(:like, 2, attempt: attempt)
+
+      get "/api/attempts/#{attempt.id}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["attempt"]).to include(
+        "id" => attempt.id,
+        "status" => "published",
+        "generated_image_public_id" => "kotoe/test/generated/sample",
+        "likes_count" => 2
+      )
+      # 比較ビューが「元画像 vs 再現画像」を並べるため、元画像がこの1本で揃う。
+      expect(response.parsed_body["post"]).to include(
+        "id" => post_record.id,
+        "image_public_id" => post_record.image_public_id
+      )
+    end
+
+    it "自分の下書きは取得できる" do
+      attempt = create(:attempt, user: user)
+
+      get "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["attempt"]["status"]).to eq("draft")
+    end
+
+    it "生成中の自分の挑戦をポーリングできる" do
+      attempt = create(:attempt, :generating, user: user)
+
+      get "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response.parsed_body["attempt"]["status"]).to eq("generating")
+    end
+
+    # 403 にせず存在ごと隠す。未認証も 401 ではなく 404 にする。published が
+    # 認証不要である以上、401 は「認証すれば見える何かがある」と漏らすため。
+    it "他人の下書きは 404" do
+      others = create(:attempt)
+
+      get "/api/attempts/#{others.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "未認証で他人の下書きを取ると 404" do
+      others = create(:attempt)
+
+      get "/api/attempts/#{others.id}"
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "削除済みは本人でも 404" do
+      attempt = create(:attempt, :published, user: user)
+      attempt.discard!
+
+      get "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "お題が削除されていたら 404" do
+      attempt = create(:attempt, :published, user: user, post: post_record)
+      post_record.discard!
+
+      get "/api/attempts/#{attempt.id}"
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "DELETE /api/attempts/:id" do
+    it "自分の挑戦を論理削除できる" do
+      attempt = create(:attempt, :published, user: user)
+
+      delete "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(attempt.reload).to be_discarded
+      expect(Attempt.where(id: attempt.id)).to exist
+    end
+
+    # 削除しても回数は戻さない（無限リトライ防止とコスト対策）。
+    it "削除しても generated_at は消えない" do
+      attempt = create(:attempt, :published, user: user, generated_at: Time.current)
+
+      delete "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(attempt.reload.generated_at).to be_present
+    end
+
+    it "生成中でも削除できる" do
+      attempt = create(:attempt, :generating, user: user)
+
+      delete "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(attempt.reload).to be_discarded
+    end
+
+    it "他人の挑戦は 404" do
+      others = create(:attempt)
+
+      delete "/api/attempts/#{others.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "未認証は 401" do
+      attempt = create(:attempt, user: user)
+
+      delete "/api/attempts/#{attempt.id}"
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
 end
