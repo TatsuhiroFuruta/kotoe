@@ -205,19 +205,19 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 目的：2ボタン（保存／生成）と即公開・状態遷移を、生成をスタブにして先に通す。
 - 依存：3-2, 4-1
 - タスク：
-  - [ ] `POST /api/posts/:post_id/attempts`（下書き作成 status: draft）
-  - [ ] `PATCH /api/attempts/:id`（下書き更新）
-  - [ ] `POST /api/attempts/:id/generate`（生成ジョブ起動、status: generating→published、**生成回数を消費**）
+  - [x] `POST /api/posts/:post_id/attempts`（下書き作成 status: draft）
+  - [x] `PATCH /api/attempts/:id`（下書き更新）
+  - [x] `POST /api/attempts/:id/generate`（生成ジョブ起動、status: generating→published、**生成回数を消費**）
         → **status の更新と enqueue は必ず同じトランザクションで囲む**。ジョブテーブルを
         アプリと同じ DB に置いてあるため、ロールバック時にジョブも消えて孤児ジョブが出ない。
         `enqueue_after_transaction_commit` は `false` のまま変えないこと（理由は
         `docs/superpowers/specs/2026-07-31-issue-4-1-solid-queue-design.md` の
         「トランザクションの一体性」）
-  - [ ] `GenerateImageJob`：**当面は固定のダミー画像**を返し Cloudinary 保存 → published
-  - [ ] `GET /api/attempts/:id`（状況ポーリング）
-  - [ ] `DELETE /api/attempts/:id`（論理削除、**回数は戻さない**）
-  - [ ] 1日あたり生成回数上限のロジック
-  - [ ] request spec / job spec
+  - [x] `GenerateImageJob`：**当面は固定のダミー画像**を返し Cloudinary 保存 → published
+  - [x] `GET /api/attempts/:id`（状況ポーリング）
+  - [x] `DELETE /api/attempts/:id`（論理削除、**回数は戻さない**）
+  - [x] 1日あたり生成回数上限のロジック
+  - [x] request spec / job spec
   - [ ] **本番でのワーカー稼働確認（4-1 から委譲）**：`generate` を叩いて status が
         `generating` → `published` に変わることを本番URLで確認する。あわせて Render の
         Environment に `SOLID_QUEUE_IN_PUMA` が実在することを目視確認する（未設定でも
