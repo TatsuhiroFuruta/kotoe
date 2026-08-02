@@ -51,6 +51,47 @@ RSpec.describe GenerateImageJob do
     end
   end
 
+  describe "失敗の扱い" do
+    # Cloudinary の一時障害（UploadError）とコードのバグ（それ以外）を別々に扱う。
+    # 宣言順（rescue_from を先、retry_on を後）が壊れると UploadError も
+    # StandardError 側に吸われて 1 回目で failed になるため、その順序をここで固定する。
+    it "UploadError の 1 回目は failed にせずリトライする" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Uploader).to receive(:call).and_raise(Images::Uploader::UploadError)
+
+      expect { described_class.perform_now(attempt.id) }
+        .to have_enqueued_job(described_class)
+      expect(attempt.reload.status).to eq("generating")
+    end
+
+    it "UploadError を使い切ると failed になる" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Uploader).to receive(:call).and_raise(Images::Uploader::UploadError)
+
+      perform_enqueued_jobs { described_class.perform_later(attempt.id) }
+
+      expect(attempt.reload.status).to eq("failed")
+    end
+
+    # コードのバグは failed にしたうえで再送出する。ユーザーは失敗を見られ、
+    # 開発者は solid_queue_failed_executions にエラーが残る。
+    it "想定外の例外は failed にしてから再送出する" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Uploader).to receive(:call).and_raise(ArgumentError, "boom")
+
+      expect { described_class.perform_now(attempt.id) }.to raise_error(ArgumentError)
+      expect(attempt.reload.status).to eq("failed")
+    end
+
+    it "生成枠は failed でも戻さない" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Uploader).to receive(:call).and_raise(ArgumentError, "boom")
+
+      expect { described_class.perform_now(attempt.id) }.to raise_error(ArgumentError)
+      expect(attempt.reload.generated_at).to be_present
+    end
+  end
+
   describe "キュー" do
     it "default キューに積まれる" do
       expect { described_class.perform_later(1) }

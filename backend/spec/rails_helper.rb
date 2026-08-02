@@ -24,6 +24,11 @@ RSpec.configure do |config|
   # FactoryBot を `FactoryBot.create` ではなく `create` で呼べるようにする。
   config.include FactoryBot::Syntax::Methods
 
+  # perform_enqueued_jobs を job spec で使う。retry_on のリトライは
+  # 「ブロック内で enqueue されたジョブ」として再実行されるため、
+  # リトライを使い切る挙動はこれでしか書けない。
+  config.include ActiveJob::TestHelper, type: :job
+
   # 各 example をトランザクションで囲み、終了時にロールバックする。
   config.use_transactional_fixtures = true
 
