@@ -11,6 +11,21 @@ RSpec.describe Attempt, type: :model do
   it { is_expected.to have_many(:reports).dependent(:restrict_with_exception) }
 
   it { is_expected.to validate_presence_of(:description) }
+  it { is_expected.to validate_length_of(:description).is_at_most(1000) }
+
+  # description はそのまま画像生成APIのプロンプトになる。無制限だとコストとエラーの
+  # 両方に効くため上限を持つ（設計ドキュメント参照）。
+  it "1,000 文字ちょうどは通り、1,001 文字は too_long で落ちる" do
+    expect(build(:attempt, description: "あ" * 1000)).to be_valid
+
+    attempt = build(:attempt, description: "あ" * 1001)
+    expect(attempt).not_to be_valid
+    expect(attempt.errors.details[:description].pluck(:error)).to include(:too_long)
+  end
+
+  it "generated_at は既定で nil" do
+    expect(create(:attempt).generated_at).to be_nil
+  end
 
   it "status は既定で draft" do
     expect(Attempt.new.status).to eq("draft")

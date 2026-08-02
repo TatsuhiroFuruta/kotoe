@@ -8,7 +8,12 @@ class Attempt < ApplicationRecord
 
   enum :status, { draft: "draft", generating: "generating", published: "published", failed: "failed" }
 
-  validates :description, presence: true
+  # description はそのまま画像生成APIのプロンプトになるため上限を持つ。
+  # 丁寧な描写でも 300〜500 文字、書き込むタイプで 800 文字前後という実測に対する余裕。
+  # 後から緩めるのは安全（既存データが違反にならない）が、きつくするのは危険。
+  MAX_DESCRIPTION_LENGTH = 1_000
+
+  validates :description, presence: true, length: { maximum: MAX_DESCRIPTION_LENGTH }
   validates :status, presence: true
 
   # いいね数。Post と同じ理由（discard を counter cache が検知できない）で

@@ -10,5 +10,16 @@ FactoryBot.define do
       status { "published" }
       generated_image_public_id { "kotoe/test/generated/sample" }
     end
+
+    # 生成中。GenerateImageJob と Attempts::Generation の spec が使う。
+    trait :generating do
+      status { "generating" }
+      generated_at { Time.current }
+    end
+
+    trait :failed do
+      status { "failed" }
+      generated_at { Time.current }
+    end
   end
 end
