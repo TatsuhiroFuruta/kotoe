@@ -77,6 +77,16 @@ RSpec.describe "挑戦 API", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
+    # Array も dig に応答するため、respond_to?(:dig) では素通りしてしまう。
+    # 素通りすると ["foo"][:description] で TypeError になり 500 になる。
+    it "attempt が配列でも 500 にならない" do
+      post "/api/posts/#{post_record.id}/attempts",
+        params: { attempt: [ "foo" ] },
+        headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+
     # 重複を禁じない（コストの守り手は回数制限であって重複禁止ではない）。
     # 禁じるならバリデーションが要るので、その判断をここで固定しておく。
     it "同じお題に何度でも挑戦できる" do

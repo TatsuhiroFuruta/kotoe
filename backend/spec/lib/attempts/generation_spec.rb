@@ -21,6 +21,22 @@ RSpec.describe Attempts::Generation do
       expect(result.error_code).to be_nil
     end
 
+    # 二重送信（ボタン連打・2タブ）。どちらのリクエストも「まだ draft」の状態を読んでから
+    # ロックに入るため、draft の判定をロックの外に置いたままだと 2 本目も通ってしまい、
+    # 同じ attempt に対してジョブが 2 本積まれる（枠は 1 回しか減っていないのに、
+    # 4-3 以降は実費の生成が 2 回走り、先に上がった画像は参照されないまま残る）。
+    it "同じ下書きへの二重の generate は 2 本目を弾く" do
+      first = Attempt.find(attempt.id)
+      second = Attempt.find(attempt.id)
+
+      described_class.call(first)
+
+      result = nil
+      expect { result = described_class.call(second) }
+        .not_to have_enqueued_job(GenerateImageJob)
+      expect(result.error_code).to eq("attempt_not_draft")
+    end
+
     it "draft でなければ何もせず attempt_not_draft を返す" do
       published = create(:attempt, :published, user: user)
 
@@ -83,11 +99,29 @@ RSpec.describe Attempts::Generation do
     end
 
     it "KOTOE_DAILY_GENERATION_LIMIT で上書きできる" do
-      allow(ENV).to receive(:fetch).and_call_original
-      allow(ENV).to receive(:fetch).with("KOTOE_DAILY_GENERATION_LIMIT", 3).and_return("1")
+      stub_limit_env("1")
       consume(1)
 
       expect(described_class.call(attempt).error_code).to eq("generation_limit_reached")
+    end
+
+    # Render のダッシュボードで環境変数を「空にして無効化する」のはよくある操作だが、
+    # "".to_i は 0 なので、そのまま使うと全ユーザーの生成が黙って止まる。しかも
+    # 応答は枠を使い切ったときと同じ 422 なので、原因の切り分けができない。
+    it "空文字や数値でない値は既定値に落とす" do
+      stub_limit_env("")
+      expect(described_class.daily_limit).to eq(3)
+
+      stub_limit_env("abc")
+      expect(described_class.daily_limit).to eq(3)
+
+      stub_limit_env("0")
+      expect(described_class.daily_limit).to eq(3)
+    end
+
+    def stub_limit_env(value)
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with("KOTOE_DAILY_GENERATION_LIMIT", 3).and_return(value)
     end
   end
 

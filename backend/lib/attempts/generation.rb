@@ -15,8 +15,14 @@ module Attempts
 
     # ENV はクラス本体ではなくここで読む。定数に畳むと起動時の値で固まり、
     # spec から差し替えられない。
+    #
+    # 正の整数でなければ既定値に落とす。"".to_i も "abc".to_i も 0 なので、
+    # 素直に to_i すると「ダッシュボードで環境変数を空にした」だけで全ユーザーの生成が
+    # 止まる。しかも応答は枠を使い切ったときと同じ 422 で、原因の切り分けができない。
     def self.daily_limit
-      ENV.fetch("KOTOE_DAILY_GENERATION_LIMIT", DEFAULT_DAILY_LIMIT).to_i
+      configured = ENV.fetch("KOTOE_DAILY_GENERATION_LIMIT", DEFAULT_DAILY_LIMIT).to_i
+
+      configured.positive? ? configured : DEFAULT_DAILY_LIMIT
     end
 
     def initialize(attempt)
@@ -44,6 +50,12 @@ module Attempts
     private
 
     def start_generation
+      # ロックを取ってから draft を確かめ直す。ロックの外の判定だけだと、二重送信
+      # （ボタン連打・2タブ）で両方が「まだ draft」を読んでから順にロックへ入り、
+      # 2 本目も通ってしまう。枠は 1 回しか減っていないのに同じ attempt に対して
+      # ジョブが 2 本積まれ、4-3 以降は実費の生成が 2 回走ることになる。
+      return Result.new(error_code: "attempt_not_draft", limit: nil) unless @attempt.reload.draft?
+
       limit = self.class.daily_limit
       return Result.new(error_code: "generation_limit_reached", limit: limit) if used_today >= limit
 

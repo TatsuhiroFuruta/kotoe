@@ -66,10 +66,13 @@ module Api
       attempt
     end
 
-    # params[:attempt] の型はクライアントが決められる。attempt=foo のようなスカラーを
-    # 送られても dig で TypeError にせず、通常の検証エラー（422）として扱う。
+    # params[:attempt] の型はクライアントが決められる。スカラー（attempt=foo）や
+    # 配列（attempt[]=foo）を送られても 500 にせず、通常の検証エラー（422）として扱う。
+    #
+    # respond_to?(:dig) では足りない。Array も dig に応答するため素通りし、
+    # ["foo"][:description] が TypeError になる。受け取ってよい型だけを名指しする。
     def attempt_attributes
-      params[:attempt].respond_to?(:dig) ? params[:attempt] : {}
+      params[:attempt].is_a?(ActionController::Parameters) ? params[:attempt] : {}
     end
 
     # AttemptSerializer は with_likes_count が SELECT 句で付ける別名属性に依存している。

@@ -20,8 +20,16 @@ class GenerateImageJob < ApplicationJob
 
   # Cloudinary の一時障害：3 回まで待って試す。使い切ったら failed にするが、
   # ジョブ自体は失敗扱いにしない（外部サービスの障害はコードのバグではない）。
-  retry_on Images::Uploader::UploadError, wait: :polynomially_longer, attempts: 3 do |job, _error|
-    Rails.logger.warn("[GenerateImageJob] Cloudinary へのアップロードに失敗しました attempt_id=#{job.arguments.first}")
+  # 原因まで残す。Images::Uploader は StandardError をすべて UploadError に包むため、
+  # ここには一時障害だけでなく本番の CLOUDINARY_URL の設定漏れのような「直さない限り
+  # 永久に失敗し続ける」障害も来る。ジョブ自体は成功扱いで
+  # solid_queue_failed_executions に残らないので、このログが唯一の手がかりになる。
+  # message には元例外のクラス名しか入らない（Uploader が秘密情報を落としている）。
+  retry_on Images::Uploader::UploadError, wait: :polynomially_longer, attempts: 3 do |job, error|
+    Rails.logger.warn(
+      "[GenerateImageJob] Cloudinary へのアップロードに失敗しました " \
+      "attempt_id=#{job.arguments.first} error=#{error.message}"
+    )
     mark_failed(job.arguments.first)
   end
 

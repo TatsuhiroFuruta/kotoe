@@ -73,6 +73,22 @@ RSpec.describe GenerateImageJob do
       expect(attempt.reload.status).to eq("failed")
     end
 
+    # Images::Uploader は StandardError をすべて UploadError に包む（秘密情報を漏らさない
+    # ため、元例外のクラス名だけを message に残す）。したがって本番の CLOUDINARY_URL の
+    # 設定漏れのような「直さないと永久に失敗し続ける」障害もここに来る。attempt_id しか
+    # 記録しないと、全ユーザーが枠を溶かしているのにログから原因が分からない。
+    it "UploadError を使い切ったとき、原因をログに残す" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Uploader).to receive(:call)
+        .and_raise(Images::Uploader::UploadError, "Cloudinary upload failed: Cloudinary::Api::AuthorizationRequired")
+      allow(Rails.logger).to receive(:warn)
+
+      perform_enqueued_jobs { described_class.perform_later(attempt.id) }
+
+      expect(Rails.logger).to have_received(:warn)
+        .with(/attempt_id=#{attempt.id}.*Cloudinary::Api::AuthorizationRequired/)
+    end
+
     # コードのバグは failed にしたうえで再送出する。ユーザーは失敗を見られ、
     # 開発者は solid_queue_failed_executions にエラーが残る。
     it "想定外の例外は failed にしてから再送出する" do
