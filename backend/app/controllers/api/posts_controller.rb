@@ -67,10 +67,13 @@ module Api
       params[:page].to_s.to_i.clamp(1, MAX_PAGE)
     end
 
-    # params[:post] の型はクライアントが決められる。post=foo のようなスカラーを
-    # 送られても dig で TypeError にせず、通常の検証エラー（422）として扱う。
+    # params[:post] の型はクライアントが決められる。スカラー（post=foo）や
+    # 配列（post[]=foo）を送られても 500 にせず、通常の検証エラー（422）として扱う。
+    #
+    # respond_to?(:dig) では足りない。Array も dig に応答するため素通りし、
+    # ["foo"][:title] が TypeError になる。受け取ってよい型だけを名指しする。
     def post_attributes
-      params[:post].respond_to?(:dig) ? params[:post] : {}
+      params[:post].is_a?(ActionController::Parameters) ? params[:post] : {}
     end
 
     # 画像とタイトルのエラーをまとめて返す。片方ずつ返すと往復が増えるうえ、

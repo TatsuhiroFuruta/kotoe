@@ -194,6 +194,17 @@ RSpec.describe "POST /api/posts", type: :request do
     )
   end
 
+  # 配列も dig に応答するため、respond_to?(:dig) では素通りしてしまう。
+  # 素通りすると ["foo"][:title] が TypeError になり 500 になる。
+  it "post が配列でも 500 にせず 422 を返す" do
+    post "/api/posts", params: { post: [ "foo" ] }, headers: auth_headers(token)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq(
+      "title" => [ "blank" ], "image" => [ "image_missing" ]
+    )
+  end
+
   it "検証で落ちたときは Cloudinary へ上げない" do
     post "/api/posts",
       params: { post: { title: "夕暮れ" } },
