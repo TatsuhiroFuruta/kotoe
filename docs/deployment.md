@@ -149,7 +149,18 @@ Media Library から削除する。
   - メモリ 512 MB は **Puma・supervisor・dispatcher・worker・scheduler の 5 プロセス**で
     分け合う。scheduler は `config/recurring.yml` に `production:` のタスク（完了ジョブの
     毎時掃除）があるため fork される。ローカルには `development:` キーが無いので起動せず、
-    3 プロセスしか見えない点に注意。実測は 4-2 で画像生成が乗ってから行う。
+    3 プロセスしか見えない点に注意。
+  - **測り方**：`GET /api/health` が `memory` を返す（`Diagnostics::Memory`）。無料プランは
+    Application Metrics が表示されず、シェルも有料インスタンス限定なので、これが唯一の手段。
+    `source` は取得元（`cgroup_v2` / `cgroup_v1` / `proc_rss`）で、**`proc_rss` のときの
+    `used_mb` は fork したプロセスの共有ページを二重に数えるため過大**に出る。上限との比較には
+    使えない。Render は `cgroup_v2` で読める。
+    - なお `proc_rss` へのフォールバックは、**本番で値が出なかった原因を cgroup v2 が読めない
+      せいだと誤って断定して**追加したもの（PR #75）。実際の原因はデプロイの反映待ちで、
+      再測定せずに結論を出したのが誤り。コード自体は保険として残してある。
+  - **実測結果（4-2）**：起動直後 362 MB → 生成 2 回で 475 MB（93%）。**余裕は 37 MB**。
+    数値と削減の候補は `docs/README.md` の「Render 無料枠のメモリ実測」を参照。
+    **4-3 で本物の画像生成 API を載せる前に必ず読むこと。**
   - 収まらない場合は `plugin :solid_queue` を外し、`render.yaml` に `type: worker` の
     サービス（$7/月〜）を足して切り出す（アプリのコードは変わらない）。ただし常駐ワーカーは
     Neon のサスペンドも妨げるため、`docs/README.md` の試算を読んでから判断すること。
