@@ -157,6 +157,21 @@ Media Library から削除する。
     実在することを目視確認する。** このサービスが Blueprint ではなく手動で作られていた
     場合、`render.yaml` の変更は反映されない。未設定でもデプロイもヘルスチェックも成功し、
     ジョブは `solid_queue_jobs` に積まれるだけで永久に処理されず、ログにも何も出ない。
+    - **実際に起きた（issue 4-2）。** サービスは 8-2a で作られており、`SOLID_QUEUE_IN_PUMA` を
+      `render.yaml` に足したのは 4-1。その差分が本番に届いていなかった。**サービス作成後に
+      `render.yaml` へ足した環境変数は、すべて同じ理由で落ちる**と考えること。
+  - **Puma は single mode で動かす（`workers 0`）。** cluster mode ではマスタープロセスが
+    アプリを読み込まない（リクエストを捌かないため）。`plugin :solid_queue` は**そのマスターから
+    fork** するので、子プロセスに Rails が無く `uninitialized constant SolidQueue` で落ちる。
+    - **これも実際に起きた（issue 4-2）。** `workers` を書かないと Puma は環境変数
+      `WEB_CONCURRENCY` を既定値として読むため、ダッシュボード側の設定だけで cluster mode に
+      切り替わる。`config/puma.rb` で `workers 0` を明示して影響を受けないようにした。
+    - **この経路はローカルでは踏めない。** ローカルのワーカーは docker-compose の `worker`
+      サービス（`bin/jobs`）で、Puma プラグインは本番でしか有効にならない。再現したいときは
+      `docker compose exec -e SOLID_QUEUE_IN_PUMA=true -e WEB_CONCURRENCY=2 backend \
+      bundle exec puma -C config/puma.rb` のように環境変数を渡して起動する。
+    - 有料プランで並列度を上げるときは `workers` を増やすだけでは駄目で、`preload_app!` を
+      併せて設定する（マスターにアプリを読ませないと同じ落ち方をする）。
 - **ジョブテーブルはアプリと同じ DB にある**：マイグレーションは通常どおり
   `backend/bin/render-build.sh` の `db:migrate` で適用される。追加の DB や環境変数は要らない。
 - **範囲外**：カスタムドメイン/DNS（8-2b）、Cloudinary（3-1）、画像生成キー（4-3）。
