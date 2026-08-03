@@ -8,6 +8,11 @@ module Diagnostics
   # 512 MB の上限は**コンテナ全体**（Puma・supervisor・dispatcher・worker・scheduler）に
   # かかるため、プロセス単体の RSS では答えにならない。
   #
+  # used_mb は**測ったその瞬間**の値なので、生成ジョブのピークは取りこぼす。カーネルが
+  # 記録している最大値（peak_mb）も一緒に返す。**コンテナ起動時からの最大値**で、
+  # リクエストのたびにリセットされたりはしない。「512 MB にどこまで近づいたか」を
+  # 後から知りたいときはこちらを見る（issue 4-3 で画像生成を載せるときの判断材料）。
+  #
   # 取得元は環境によって違う。cgroup のバージョンもパスもプラットフォーム次第で、
   # 実際 Render では v2 のパスが読めなかった（ローカルの docker compose は読める）。
   # 3 通りを順に試し、**どれで取れたかを source として返す**。取得元によって数値の
@@ -15,11 +20,13 @@ module Diagnostics
   class Memory
     # cgroup v2。ローカルの docker compose はこちら。
     V2_CURRENT = "/sys/fs/cgroup/memory.current"
+    V2_PEAK = "/sys/fs/cgroup/memory.peak"
     V2_MAX = "/sys/fs/cgroup/memory.max"
     V2_STAT = "/sys/fs/cgroup/memory.stat"
 
     # cgroup v1。
     V1_CURRENT = "/sys/fs/cgroup/memory/memory.usage_in_bytes"
+    V1_PEAK = "/sys/fs/cgroup/memory/memory.max_usage_in_bytes"
     V1_MAX = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
     V1_STAT = "/sys/fs/cgroup/memory/memory.stat"
 
@@ -57,6 +64,7 @@ module Diagnostics
       {
         source: "cgroup_v2",
         used_mb: to_mb(used),
+        peak_mb: to_mb(read_bytes(V2_PEAK)),
         # anon はプロセスが実際に掴んでいる分。file（ページキャッシュ）は逼迫すれば
         # OS が捨てられるので、上限への近さを見るならこちらを読む。
         anon_mb: to_mb(stat["anon"]),
@@ -74,6 +82,7 @@ module Diagnostics
       {
         source: "cgroup_v1",
         used_mb: to_mb(used),
+        peak_mb: to_mb(read_bytes(V1_PEAK)),
         # v1 は名前が違うだけで、意味は v2 の anon / file と同じ。
         anon_mb: to_mb(stat["rss"]),
         file_mb: to_mb(stat["cache"]),
