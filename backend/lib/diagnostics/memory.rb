@@ -37,14 +37,22 @@ module Diagnostics
     # 内訳に出す下限。1 MB 未満に丸まるプロセス（sh など）は読みづらくなるだけなので落とす。
     MIN_PROCESS_MB = 1
 
+    # どこからも読めなかったときに返す。**キーごと省かない**のが要点。
+    #
+    # 以前は nil を返して呼び出し側が memory キーを落としていたが、そうすると
+    # 「この機能が無い古いビルドが動いている」ときと応答が同じになり、外から
+    # 見分けがつかない。issue 4-2 の本番確認で実際にこれを取り違え、原因を
+    # 誤って断定した（経緯は docs/deployment.md）。source が返っていれば
+    # 「機能はある。ただし測れない」と即座に分かる。
+    UNAVAILABLE = { source: "unavailable" }.freeze
+
     def self.call = new.call
 
-    # @return [Hash, nil] cgroup も /proc も読めない環境では nil。
-    #   呼び出し側はキーごと省いてよい。
+    # @return [Hash] 読めなかった場合も UNAVAILABLE を返す（nil にはしない）。
     def call
       processes = collect_processes
       summary = cgroup_summary || proc_summary(processes)
-      return nil if summary.nil?
+      return UNAVAILABLE if summary.nil?
 
       summary.merge(processes: processes)
     end

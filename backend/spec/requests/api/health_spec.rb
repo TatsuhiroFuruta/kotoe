@@ -3,12 +3,12 @@ require "rails_helper"
 RSpec.describe "Api::Health" do
   describe "GET /api/health" do
     it "DB に接続できるとき ok を返す" do
-      allow(Diagnostics::Memory).to receive(:call).and_return(nil)
+      allow(Diagnostics::Memory).to receive(:call).and_return(Diagnostics::Memory::UNAVAILABLE)
 
       get "/api/health"
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq("status" => "ok", "database" => "ok")
+      expect(response.parsed_body).to include("status" => "ok", "database" => "ok")
     end
 
     # Render の無料プランは Metrics が見られないため、ここから読む（issue 4-2）。
@@ -21,13 +21,15 @@ RSpec.describe "Api::Health" do
       expect(response.parsed_body["memory"]).to include("used_mb" => 300, "limit_mb" => 512)
     end
 
-    # cgroup を読めない環境ではキーごと出さない。無いキーを読んで落ちる利用者を作らない。
-    it "メモリを測れない環境では memory キーを出さない" do
-      allow(Diagnostics::Memory).to receive(:call).and_return(nil)
+    # 測れない環境でもキーは必ず出す。キーごと省くと「この機能が無い古いビルドが
+    # 動いている」ときと応答が同じになり、外から見分けがつかない（issue 4-2 で実際に
+    # 取り違えた）。
+    it "メモリを測れない環境でも source: unavailable を返す" do
+      allow(Diagnostics::Memory).to receive(:call).and_return(Diagnostics::Memory::UNAVAILABLE)
 
       get "/api/health"
 
-      expect(response.parsed_body).not_to have_key("memory")
+      expect(response.parsed_body["memory"]).to eq("source" => "unavailable")
     end
 
     it "DB に接続できないとき 503 を返す" do
