@@ -28,6 +28,23 @@
 threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
 threads threads_count, threads_count
 
+# 単一プロセス（single mode）に固定する。理由は2つある。
+#
+# 1. 無料インスタンスは 512 MB で、Rails プロセスを複数持つ余裕が無い。cluster mode の
+#    ワーカーはそれぞれがアプリを丸ごと持つため、ワーカー数だけメモリが増える。
+#    `docs/README.md` の無料枠の設計も「Web サービス 1 つにキューを同居させる」前提。
+# 2. cluster mode では Puma マスターがアプリを読み込まない（リクエストを捌かないため）。
+#    下の solid_queue プラグインは**そのマスターから fork** して Solid Queue を起動するので、
+#    子プロセスに Rails が無く `uninitialized constant SolidQueue` で落ちる。本番で発生した。
+#
+# `workers` を書かない場合、Puma は環境変数 WEB_CONCURRENCY を既定値として読む。
+# つまり Render のダッシュボードで誰かが設定すると、コードを変えていないのに
+# cluster mode に切り替わる。ここで明示しておくことで、その影響を受けない。
+#
+# 有料プランへ移って並列度を上げるときは、この行を消すのではなく
+# `preload_app!` と併せて設定すること（マスターにアプリを読ませないと 2 の問題が再発する）。
+workers 0
+
 # Specifies the `port` that Puma will listen on to receive requests; default is 3000.
 port ENV.fetch("PORT", 3000)
 
