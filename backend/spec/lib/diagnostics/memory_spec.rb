@@ -66,8 +66,10 @@ RSpec.describe Diagnostics::Memory do
       expect(described_class.call).to include(source: "proc_rss", used_mb: 150, limit_mb: nil)
     end
 
-    it "どれも読めなければ nil を返す" do
-      expect(described_class.call).to be_nil
+    # nil を返してキーごと省くと「この機能が無い古いビルド」と区別が付かない。
+    # source が返っていれば「機能はある。ただし測れない」と分かる。
+    it "どれも読めなければ source: unavailable を返す" do
+      expect(described_class.call).to eq(source: "unavailable")
     end
   end
 
