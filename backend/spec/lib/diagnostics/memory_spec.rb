@@ -15,14 +15,18 @@ RSpec.describe Diagnostics::Memory do
     allow(File).to receive(:read).with(path).and_return(content)
   end
 
-  def stub_v2(current: 314_572_800, max: "536870912", anon: 209_715_200, file: 104_857_600)
+  def stub_v2(current: 314_572_800, peak: 367_001_600, max: "536870912",
+              anon: 209_715_200, file: 104_857_600)
     stub_file(described_class::V2_CURRENT, "#{current}\n")
+    stub_file(described_class::V2_PEAK, "#{peak}\n")
     stub_file(described_class::V2_MAX, "#{max}\n")
     stub_file(described_class::V2_STAT, "anon #{anon}\nfile #{file}\nslab 1234\n")
   end
 
-  def stub_v1(current: 209_715_200, max: "536870912", rss: 157_286_400, cache: 52_428_800)
+  def stub_v1(current: 209_715_200, peak: 262_144_000, max: "536870912",
+              rss: 157_286_400, cache: 52_428_800)
     stub_file(described_class::V1_CURRENT, "#{current}\n")
+    stub_file(described_class::V1_PEAK, "#{peak}\n")
     stub_file(described_class::V1_MAX, "#{max}\n")
     stub_file(described_class::V1_STAT, "cache #{cache}\nrss #{rss}\n")
   end
@@ -42,7 +46,7 @@ RSpec.describe Diagnostics::Memory do
       stub_v1
 
       expect(described_class.call).to include(
-        source: "cgroup_v2", used_mb: 300, limit_mb: 512, anon_mb: 200, file_mb: 100
+        source: "cgroup_v2", used_mb: 300, peak_mb: 350, limit_mb: 512, anon_mb: 200, file_mb: 100
       )
     end
 
@@ -51,7 +55,7 @@ RSpec.describe Diagnostics::Memory do
       stub_v1
 
       expect(described_class.call).to include(
-        source: "cgroup_v1", used_mb: 200, limit_mb: 512, anon_mb: 150, file_mb: 50
+        source: "cgroup_v1", used_mb: 200, peak_mb: 250, limit_mb: 512, anon_mb: 150, file_mb: 50
       )
     end
 
@@ -64,6 +68,26 @@ RSpec.describe Diagnostics::Memory do
 
     it "どれも読めなければ nil を返す" do
       expect(described_class.call).to be_nil
+    end
+  end
+
+  # used_mb は測った瞬間の値なので、生成ジョブのピークを取りこぼす。
+  # カーネルが記録している最大値を一緒に返す。
+  describe "ピーク" do
+    it "起動時からの最大値を返す" do
+      stub_v2(current: 314_572_800, peak: 503_316_480)
+
+      expect(described_class.call).to include(used_mb: 300, peak_mb: 480)
+    end
+
+    # memory.peak はカーネル 5.19 以降。古い環境では存在しない。
+    it "peak を読めない環境では nil にする（他の値は返す）" do
+      stub_v2
+      allow(File).to receive(:read).with(described_class::V2_PEAK).and_raise(Errno::ENOENT)
+
+      result = described_class.call
+      expect(result[:peak_mb]).to be_nil
+      expect(result[:used_mb]).to eq(300)
     end
   end
 

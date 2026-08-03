@@ -152,6 +152,9 @@ Media Library から削除する。
     3 プロセスしか見えない点に注意。
   - **測り方**：`GET /api/health` が `memory` を返す（`Diagnostics::Memory`）。無料プランは
     Application Metrics が表示されず、シェルも有料インスタンス限定なので、これが唯一の手段。
+    - `used_mb` は**測ったその瞬間**の値で、生成ジョブのピークは取りこぼす。
+      `peak_mb`（カーネルが記録している**コンテナ起動時からの最大値**）と併せて見ること。
+      ジョブを流した後に落ち着いた値だけを見て「余裕がある」と判断しない。
     `source` は取得元（`cgroup_v2` / `cgroup_v1` / `proc_rss`）で、**`proc_rss` のときの
     `used_mb` は fork したプロセスの共有ページを二重に数えるため過大**に出る。上限との比較には
     使えない。Render は `cgroup_v2` で読める。
