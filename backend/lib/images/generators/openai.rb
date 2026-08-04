@@ -21,8 +21,10 @@ module Images
       OUTPUT_COMPRESSION = 90   # 将来のダウンロード導線を見据えて画質側に寄せた値
       MODERATION = "auto"       # 公開UGCなので緩めない
 
-      # 実際に返る文字列は本番スモークで採取して確定させる。認識できない値は
-      # api_error に倒れるので、取りこぼしてもジョブは壊れない。
+      # 実 API で確認済み（2026-08-04）。ポリシー違反は
+      # `400 / error.code: "moderation_blocked" / error.type: "image_generation_user_error"`。
+      # content_policy_violation は別系統で返る可能性に備えた保険で、実測はしていない。
+      # 認識できない値は api_error に倒れるので、取りこぼしてもジョブは壊れない。
       CONTENT_POLICY_CODES = %w[content_policy_violation moderation_blocked].freeze
       INSUFFICIENT_QUOTA = "insufficient_quota"
 
