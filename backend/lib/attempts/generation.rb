@@ -6,6 +6,7 @@ module Attempts
   # 翻訳するだけにする。文言ではなくエラーコードを返す（i18n はフロント）。
   class Generation
     DEFAULT_DAILY_LIMIT = 3
+    SERVICE_DEFAULT_DAILY_LIMIT = 50
 
     Result = Data.define(:error_code, :limit) do
       def ok? = error_code.nil?
@@ -25,11 +26,31 @@ module Attempts
       configured.positive? ? configured : DEFAULT_DAILY_LIMIT
     end
 
+    # サービス全体のキルスイッチ。暴走や不正利用に気づいたとき、コードを触らず
+    # Render の環境変数だけで即止められるようにする。
+    #
+    # 「明示的に false のときだけ止める」形にする。ダッシュボードで値を空にした
+    # だけで全ユーザーの生成が止まると、原因の切り分けができない（daily_limit と同じ考え方）。
+    def self.enabled?
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch("KOTOE_GENERATION_ENABLED", "true")) != false
+    end
+
+    # サービス全体の1日上限。Kotoe は誰でも登録できるため、個人の上限（3回）だけでは
+    # 利用者が増えると総額が青天井になる。50 枚/日 で月額の最悪値が約 $16.5 に収まる
+    # （前払いクレジット $20 より下なので、常にこちらの穏やかなガードが先に効く）。
+    def self.service_daily_limit
+      configured = ENV.fetch("KOTOE_SERVICE_DAILY_GENERATION_LIMIT", SERVICE_DEFAULT_DAILY_LIMIT).to_i
+
+      configured.positive? ? configured : SERVICE_DEFAULT_DAILY_LIMIT
+    end
+
     def initialize(attempt)
       @attempt = attempt
     end
 
     def call
+      return Result.new(error_code: "generation_disabled", limit: nil) unless self.class.enabled?
+
       # DB を書かない判定なのでロックの外で済ませる。
       return Result.new(error_code: "attempt_not_draft", limit: nil) unless @attempt.draft?
 
@@ -56,6 +77,11 @@ module Attempts
       # ジョブが 2 本積まれ、4-3 以降は実費の生成が 2 回走ることになる。
       return Result.new(error_code: "attempt_not_draft", limit: nil) unless @attempt.reload.draft?
 
+      service_limit = self.class.service_daily_limit
+      if service_used_today >= service_limit
+        return Result.new(error_code: "service_generation_limit_reached", limit: nil)
+      end
+
       limit = self.class.daily_limit
       return Result.new(error_code: "generation_limit_reached", limit: limit) if used_today >= limit
 
@@ -70,6 +96,16 @@ module Attempts
     # 「1日」は JST の暦日（config.time_zone = "Asia/Tokyo"）。
     def used_today
       @attempt.user.attempts.where(generated_at: Time.zone.now.all_day).count
+    end
+
+    # サービス全体の1日の生成枚数。ユーザー行のロックはユーザー間を直列化しないので
+    # 同時実行で数枚オーバーしうるが、桁が守れれば目的（コストの上限）は果たせる。
+    #
+    # 既存インデックス（user_id, generated_at）には乗らないが、1日に数十回しか走らず
+    # テーブルは月450行しか増えないので専用インデックスは張らない
+    # （必要になれば issue 3-4 で計測して判断する）。
+    def service_used_today
+      Attempt.where(generated_at: Time.zone.now.all_day).count
     end
   end
 end

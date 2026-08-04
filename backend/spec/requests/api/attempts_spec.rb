@@ -229,6 +229,35 @@ RSpec.describe "挑戦 API", type: :request do
       end
       expect(attempt.reload.status).to eq("draft")
     end
+
+    # 「誰の問題か」でステータスを分ける。422 はユーザーが訂正できるもの、
+    # 503 はこちら側の都合。フロントは前者を訂正可能なエラー、後者を
+    # 時間を置いて再訪する案内として出し分ける。
+    it "キルスイッチが off なら 503" do
+      allow(Attempts::Generation).to receive(:enabled?).and_return(false)
+
+      post "/api/attempts/#{attempt.id}/generate", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:service_unavailable)
+      expect(response.parsed_body).to eq("error" => "generation_disabled")
+      expect(attempt.reload.status).to eq("draft")
+    end
+
+    it "サービス全体の上限に達すると 503 と回復時刻を返す" do
+      allow(Attempts::Generation).to receive(:service_daily_limit).and_return(1)
+
+      travel_to(Time.zone.local(2026, 8, 2, 12, 0, 0)) do
+        create(:attempt, user: create(:user), status: "published", generated_at: Time.current)
+
+        post "/api/attempts/#{attempt.id}/generate", headers: auth_headers(token), as: :json
+
+        expect(response).to have_http_status(:service_unavailable)
+        expect(response.parsed_body).to eq(
+          "error" => "service_generation_limit_reached",
+          "resets_at" => "2026-08-02T15:00:00Z"
+        )
+      end
+    end
   end
 
   describe "GET /api/attempts/:id" do
