@@ -46,6 +46,9 @@ module Images
         # 組み立てる前に Ruby のヒープから解放するため。ブロック形式なので消し忘れない。
         Tempfile.create([ "kotoe-generated", ".webp" ], binmode: true) do |file|
           file.write(image)
+          # 参照を切らないと image がブロックの間ずっと生き、アップロード（と最大3回の
+          # 再試行）のあいだ multipart 本文と同時にヒープに載る。上の意図が果たされない。
+          image = nil
           file.rewind
           block.call(file)
         end
@@ -58,13 +61,30 @@ module Images
 
         raise_for_status(response) unless response.is_a?(Net::HTTPSuccess)
 
-        # 応答の形が変わるのは向こう側の問題。KeyError で 500 にせず api_error に寄せる。
-        JSON.parse(response.body).dig("data", 0, "b64_json") ||
+        extract_b64(response) ||
           raise(Generator::PermanentError.new("api_error", detail: "no b64_json"))
       end
 
-      # 例外クラスは失敗の種類（接続・読み取り・SSL）で変わるので、呼び出し側が
-      # 1 つ rescue すれば済むようここで一本化する。いずれも時間を置けば直りうる。
+      # 応答の形が変わるのは向こう側の問題。200 でもプロキシの HTML ページが返ったり
+      # 想定外の構造だったりしうるので、500 にせず api_error に寄せる
+      # （エラー側の extract_error と同じ扱いを成功側にも置く）。
+      def extract_b64(response)
+        parsed = JSON.parse(response.body)
+        data = parsed.is_a?(Hash) ? parsed["data"] : nil
+        first = data.is_a?(Array) ? data.first : nil
+
+        first.is_a?(Hash) ? first["b64_json"] : nil
+      rescue JSON::ParserError
+        nil
+      end
+
+      # 例外クラスは失敗の種類（DNS・接続・読み取り・SSL）で変わるので、呼び出し側が
+      # 1 つ rescue すれば済むようここで一本化する。
+      #
+      # 分ける基準は「課金されたかどうか」。接続が確立する前に落ちたものは実費が
+      # 発生していないので再試行してよい。SocketError（DNS 障害）と
+      # Net::HTTPBadResponse は IOError でも SystemCallError でもなく StandardError の
+      # 直下なので、名指ししないと取りこぼしてジョブが internal_error で終わる。
       def post_request
         http = Net::HTTP.new(ENDPOINT.host, ENDPOINT.port)
         http.use_ssl = true
@@ -72,7 +92,14 @@ module Images
         http.read_timeout = READ_TIMEOUT
 
         http.request(build_request)
-      rescue Timeout::Error, IOError, SystemCallError, OpenSSL::SSL::SSLError => e
+      rescue Net::ReadTimeout => e
+        # 読み取りタイムアウトは「リクエストが受理され、生成が完了して課金された」場合を
+        # 含む。再試行すると同じ 1 枠に二重課金になり、「1 枠 ＝ 1 生成」を前提にした
+        # 3層のコストガードが崩れる（月額最悪 $16.5 が $33 になり前払い $20 を超える）。
+        # Timeout::Error より先に書く必要がある（Net::ReadTimeout はその子）。
+        raise Generator::PermanentError.new("api_error", detail: e.class.name)
+      rescue Timeout::Error, IOError, SystemCallError, SocketError,
+             OpenSSL::SSL::SSLError, Net::HTTPBadResponse => e
         raise Generator::TransientError.new("api_error", detail: e.class.name)
       end
 

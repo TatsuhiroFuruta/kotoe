@@ -9,7 +9,7 @@ class GenerateImageJob < ApplicationJob
   #
   # 「1 枠 ＝ 1 生成」はコストガードの前提でもある（アプリ 50 枚/日 ＝ 月額最悪 $16.5 が
   # 前払いクレジット $20 を下回る、という3層の設計。docs/deployment.md 参照）。
-  # ここが 3 倍に増幅すると最悪値が $49.5/日 になり、穏やかなガードより先に残高が尽きる。
+  # ここが 3 倍に増幅すると最悪値が $49.5/月 になり、穏やかなガードより先に残高が尽きる。
   UPLOAD_ATTEMPTS = 3
   UPLOAD_RETRY_WAIT = 3 # 秒。spec は stub_const で 0 にする
 
@@ -69,7 +69,14 @@ class GenerateImageJob < ApplicationJob
   # 生成枠は戻さない（生成はジョブ enqueue 時に消費する。ドメイン規則）ので
   # generated_at には触れない。kept で絞らないのは、生成中に削除された attempt も
   # 終端状態にしておくため（generating のまま残すと状態機械が壊れる）。
+  #
+  # 知らない理由コードは internal_error に倒す。Attempt 側が許可値を検証しているので、
+  # 素通しすると rescue ハンドラの中で RecordInvalid が出て、attempt が generating の
+  # まま取り残される（フロントが延々ポーリングする、この設計で最も避けたい状態）。
+  # 例外の code は Images::Generator::Error が自由文字列を許すため、ここで受け止める。
   def self.mark_failed(attempt_id, reason)
+    reason = "internal_error" unless Attempt::FAILURE_REASONS.include?(reason)
+
     Attempt.generating.find_by(id: attempt_id)&.update!(status: :failed, failure_reason: reason)
   end
 
@@ -78,6 +85,11 @@ class GenerateImageJob < ApplicationJob
     # 生成中に削除された場合も、ジョブが二重に走った場合も、黙って何もせず終わる。
     attempt = Attempt.kept.generating.find_by(id: attempt_id)
     return if attempt.nil?
+
+    # キルスイッチはここでも見る。Attempts::Generation の判定は enqueue 時のものなので、
+    # それだけだと「止めたのにキューに残っていたぶんが走り切って課金される」。
+    # 実費を今すぐ止めるのがこの switch の目的なので、実行の直前に確かめ直す。
+    return self.class.mark_failed(attempt_id, "generation_disabled") unless Attempts::Generation.enabled?
 
     public_id = Images::Generator.call(Images::Prompt.call(attempt.description)) do |file|
       upload_with_retry(file)

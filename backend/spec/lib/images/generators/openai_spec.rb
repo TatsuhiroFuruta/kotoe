@@ -141,12 +141,69 @@ RSpec.describe Images::Generators::Openai do
       expect(call_and_capture).to be_a(Images::Generator::TransientError)
     end
 
-    it "タイムアウトは TransientError の api_error" do
+    # 接続が確立する前の失敗は課金されていないので、再試行してよい。
+    it "接続タイムアウトは TransientError の api_error" do
       stub_request(:post, "https://api.openai.com/v1/images/generations").to_timeout
 
       error = call_and_capture
 
       expect(error).to be_a(Images::Generator::TransientError)
+      expect(error.code).to eq("api_error")
+    end
+
+    # DNS 障害は SocketError で、IOError でも SystemCallError でもない（どちらも
+    # StandardError の直下）。取りこぼすとジョブが internal_error 扱いで終わり、
+    # 再試行されないまま生成枠だけが消える。
+    it "DNS 障害（SocketError）は TransientError の api_error" do
+      stub_request(:post, "https://api.openai.com/v1/images/generations")
+        .to_raise(SocketError.new("getaddrinfo: Name or service not known"))
+
+      error = call_and_capture
+
+      expect(error).to be_a(Images::Generator::TransientError)
+      expect(error.code).to eq("api_error")
+    end
+
+    it "壊れた応答（Net::HTTPBadResponse）は TransientError の api_error" do
+      stub_request(:post, "https://api.openai.com/v1/images/generations")
+        .to_raise(Net::HTTPBadResponse)
+
+      error = call_and_capture
+
+      expect(error).to be_a(Images::Generator::TransientError)
+      expect(error.code).to eq("api_error")
+    end
+
+    # 読み取りタイムアウトは「リクエストが受理され、生成が完了して課金された」場合を
+    # 含む。ここを再試行すると同じ 1 枠に二重課金になり、「1 枠 ＝ 1 生成」を前提に
+    # した3層のコストガード（アプリ 50枚/日 ＝ 月額最悪 $16.5 < 前払い $20）が崩れる。
+    it "読み取りタイムアウトは再試行しない（PermanentError）" do
+      stub_request(:post, "https://api.openai.com/v1/images/generations")
+        .to_raise(Net::ReadTimeout)
+
+      error = call_and_capture
+
+      expect(error).to be_a(Images::Generator::PermanentError)
+      expect(error.code).to eq("api_error")
+    end
+
+    # 成功側にも JSON のガードが要る。エラー側（extract_error）だけ守っても、
+    # 200 でプロキシの HTML が返れば JSON::ParserError が素通りして internal_error になる。
+    it "200 でも本文が JSON でなければ PermanentError の api_error" do
+      stub_generation(body: "<html>OK</html>")
+
+      error = call_and_capture
+
+      expect(error).to be_a(Images::Generator::PermanentError)
+      expect(error.code).to eq("api_error")
+    end
+
+    it "200 でも本文が配列なら PermanentError の api_error" do
+      stub_generation(body: "[]")
+
+      error = call_and_capture
+
+      expect(error).to be_a(Images::Generator::PermanentError)
       expect(error.code).to eq("api_error")
     end
 

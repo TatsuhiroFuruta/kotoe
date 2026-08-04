@@ -18,7 +18,11 @@ class Attempt < ApplicationRecord
   # status と違って enum にしない。status は状態機械でスコープに意味があるが、
   # failure_reason は分岐にも一覧にも使わない付随情報で、enum にすると
   # Attempt.api_error のようなスコープが生えて紛らわしくなる。
-  FAILURE_REASONS = %w[content_policy rate_limited api_error upload_failed internal_error].freeze
+  # generation_disabled は、ジョブが積まれたあとにキルスイッチが入った場合。
+  # API の 503 と同じコードを使う（フロントの辞書を分けずに済む）。
+  FAILURE_REASONS = %w[
+    content_policy rate_limited api_error upload_failed internal_error generation_disabled
+  ].freeze
 
   validates :description, presence: true, length: { maximum: MAX_DESCRIPTION_LENGTH }
   validates :status, presence: true

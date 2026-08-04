@@ -81,7 +81,9 @@
 `config/initializers/openai.rb` が起動時に例外を出して落ちる（Cloudinary と同じ方針）。
 
 **生成を緊急停止したいとき**は `KOTOE_GENERATION_ENABLED=false` を設定する。
-デプロイは不要で、環境変数の変更による再起動だけで効く。
+デプロイは不要で、環境変数の変更による再起動だけで効く。新規の起動を断る（503）だけでなく、
+**すでにキューに積まれたジョブも実行の直前に見て止める**（`failure_reason: generation_disabled`）。
+enqueue 時しか見ないと、止めたのに残っていたぶんが走り切って課金されるため。
 
 ### Vercel（Next.js）
 

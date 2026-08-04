@@ -41,10 +41,20 @@ RSpec.describe Images::Generator do
 
     # 設定ミスで黙ってダミーが本番に出ると、全ユーザーに同じ画像が配られて
     # しかも枠は消費される。気づけるように落とす。
-    it "知らないプロバイダ名は起動時ではなく呼び出しで落とす" do
+    it "知らないプロバイダ名は ArgumentError" do
       stub_provider_env("midjourney")
 
       expect { described_class.call("空の絵") { nil } }.to raise_error(ArgumentError, /midjourney/)
+    end
+
+    # ダッシュボードでの打ち間違い（大文字・末尾の空白）を起動時に弾くため、
+    # config/initializers/openai.rb が .provider を呼んで検証する。
+    it "大文字や余分な空白も弾く（正規化しない）" do
+      stub_provider_env("OpenAI")
+      expect { described_class.provider }.to raise_error(ArgumentError, /OpenAI/)
+
+      stub_provider_env("openai ")
+      expect { described_class.provider }.to raise_error(ArgumentError)
     end
   end
 end

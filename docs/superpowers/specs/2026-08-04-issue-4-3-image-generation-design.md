@@ -290,9 +290,21 @@ Images::Generator::Error           # code を持つ基底クラス
 | 429（レート制限） | Transient | `rate_limited` |
 | 429（`insufficient_quota` ＝ 残高切れ） | Permanent | `api_error` |
 | 5xx | Transient | `api_error` |
-| タイムアウト・接続断 | Transient | `api_error` |
+| 接続タイムアウト・DNS 障害（`SocketError`）・接続断・`Net::HTTPBadResponse` | Transient | `api_error` |
+| **読み取りタイムアウト（`Net::ReadTimeout`）** | **Permanent** | `api_error` |
 | Cloudinary の障害（4-2 で実装済み） | — | `upload_failed` |
+| 積まれた後にキルスイッチが入った | — | `generation_disabled` |
 | 想定外の例外（コードのバグ） | — | `internal_error` |
+
+**分類の基準は「課金されたかどうか」**（実装レビューで精密化）。接続が確立する前に落ちたものは
+実費が発生していないので再試行してよい。**読み取りタイムアウトだけは Permanent** にする。
+リクエストは受理されており、生成が完了して課金されている可能性があるため、再試行すると
+同じ 1 枠に二重課金になり、月額最悪値が $16.5 → $33 になって前払い $20 を超える
+（＝穏やかなガードが先に効くという3層の設計が反転する）。
+
+`SocketError` と `Net::HTTPBadResponse` は `IOError` でも `SystemCallError` でもなく
+`StandardError` の直下なので、rescue 節で**名指ししないと取りこぼす**。取りこぼすと
+DNS の瞬断で `internal_error` 扱いになり、再試行されないまま生成枠だけが消える。
 
 判定に使うエラー文字列（`error.code` / `error.type`）は**実物のレスポンスを見るまで確定
 できない**。**認識できない値は `api_error` に倒す**フォールバックを必ず置き、本番スモークで
@@ -340,7 +352,7 @@ discard_on   Uploader::UploadError  { mark_failed(id, "upload_failed") }       #
 
 これは単なる無駄ではなく、**コストガードの前提を壊す**。「アプリ 50 枚/日 ＝ 月額最悪 $16.5 <
 前払いクレジット $20」という3層の設計は **1 枠 ＝ 1 生成**を前提にしており、3 倍に増幅すると
-最悪値が $49.5/日 になって、穏やかなガードより先に残高が尽きる。
+最悪値が $49.5/月 になって、穏やかなガードより先に残高が尽きる。
 
 したがって**アップロードだけをジョブの中で再試行する**（`GenerateImageJob#upload_with_retry`、
 `UPLOAD_ATTEMPTS = 3` / `UPLOAD_RETRY_WAIT = 3` 秒）。画像はもう手元にあるので上げ直すのは無料で、
@@ -369,9 +381,15 @@ add_column :attempts, :failure_reason, :string
 インデックスは張らない（検索条件にならない）。
 
 ```ruby
-FAILURE_REASONS = %w[content_policy rate_limited api_error upload_failed internal_error].freeze
+FAILURE_REASONS = %w[
+  content_policy rate_limited api_error upload_failed internal_error generation_disabled
+].freeze
 validates :failure_reason, inclusion: { in: FAILURE_REASONS }, allow_nil: true
 ```
+
+`GenerateImageJob.mark_failed` は、この一覧に無いコードを渡されたら `internal_error` に倒す。
+例外の `code` は自由文字列なので、素通しすると rescue ハンドラの中で `RecordInvalid` が出て、
+attempt が `generating` のまま取り残される（フロントが延々ポーリングする、最も避けたい状態）。
 
 **enum にしない。** `status` を enum にしたのは状態機械でスコープに意味があるからだが、
 `failure_reason` は分岐にも一覧にも使わない付随情報である。enum にすると `Attempt.api_error`

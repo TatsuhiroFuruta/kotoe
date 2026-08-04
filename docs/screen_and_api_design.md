@@ -91,8 +91,10 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
   `KOTOE_GENERATION_ENABLED=false`（キルスイッチ）のときも **503** で
   `{ "error": "generation_disabled" }` を返す。どちらもジョブを積まず、**生成枠も消費しない**。
 - 失敗した挑戦は `failure_reason` を持つ（issue 4-3）。値は `content_policy` /
-  `rate_limited` / `api_error` / `upload_failed` / `internal_error` のいずれかで、
-  `failed` 以外は `null`。文言は返さず、フロントの辞書で翻訳する。
+  `rate_limited` / `api_error` / `upload_failed` / `internal_error` / `generation_disabled`
+  のいずれかで、`failed` 以外は `null`。文言は返さず、フロントの辞書で翻訳する。
+  `generation_disabled` は 503 のエラーコードと同じ値で、「ジョブが積まれたあとに
+  キルスイッチが入った」場合に入る（辞書を分けずに済ませるため同じコードにしてある）。
 - 生成画像は **WebP** で Cloudinary に保存する（issue 4-3）。**ダウンロードURLには必ず
   `f_png` / `f_jpg` と `fl_attachment` を付ける**こと。付け忘れると `.webp` が落ち、
   macOS の Preview で開けない環境がある。

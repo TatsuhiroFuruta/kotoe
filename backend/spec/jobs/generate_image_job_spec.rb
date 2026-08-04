@@ -50,6 +50,21 @@ RSpec.describe GenerateImageJob do
       expect { described_class.perform_now(0) }.not_to raise_error
     end
 
+    # enqueue 時の判定だけだと、すでにキューにあるぶんは走り切ってしまう。
+    # 実費を止めるのがキルスイッチの目的なので、実行の直前にも見る。
+    it "キルスイッチが off なら生成せず failed にする" do
+      attempt = create(:attempt, :generating)
+      allow(Attempts::Generation).to receive(:enabled?).and_return(false)
+      allow(Images::Generator).to receive(:call)
+
+      described_class.perform_now(attempt.id)
+
+      expect(Images::Generator).not_to have_received(:call)
+      attempt.reload
+      expect(attempt.status).to eq("failed")
+      expect(attempt.failure_reason).to eq("generation_disabled")
+    end
+
     it "描写文から組み立てたプロンプトで生成する" do
       attempt = create(:attempt, :generating, description: "夕暮れの交差点")
       allow(Images::Generator).to receive(:call).and_return("kotoe/test/generated/x")
@@ -195,6 +210,21 @@ RSpec.describe GenerateImageJob do
       described_class.perform_now(attempt.id)
 
       expect(attempt.reload.failure_reason).to eq("upload_failed")
+    end
+
+    # failure_reason は Attempt 側で許可値を検証している。ジョブが知らないコードを
+    # 渡すと rescue ハンドラの中で RecordInvalid が出て、attempt が generating の
+    # まま取り残される（フロントが延々ポーリングする、最も避けたい状態）。
+    it "許可されていない理由コードは internal_error に倒して必ず終端にする" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Generator).to receive(:call)
+        .and_raise(Images::Generator::PermanentError.new("未知のコード"))
+
+      expect { described_class.perform_now(attempt.id) }.not_to raise_error
+
+      attempt.reload
+      expect(attempt.status).to eq("failed")
+      expect(attempt.failure_reason).to eq("internal_error")
     end
 
     it "想定外の例外の failure_reason は internal_error" do
