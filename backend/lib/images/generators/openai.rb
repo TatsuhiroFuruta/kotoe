@@ -21,6 +21,11 @@ module Images
       OUTPUT_COMPRESSION = 90   # 将来のダウンロード導線を見据えて画質側に寄せた値
       MODERATION = "auto"       # 公開UGCなので緩めない
 
+      # 実際に返る文字列は本番スモークで採取して確定させる。認識できない値は
+      # api_error に倒れるので、取りこぼしてもジョブは壊れない。
+      CONTENT_POLICY_CODES = %w[content_policy_violation moderation_blocked].freeze
+      INSUFFICIENT_QUOTA = "insufficient_quota"
+
       OPEN_TIMEOUT = 10
       # 「複雑なプロンプトで最大2分」（公式ドキュメント）。短くすると、生成は済んで
       # 課金もされたのに待ちきれず、リトライで同じ1枠に二重課金することになる。
@@ -58,6 +63,8 @@ module Images
           raise(Generator::PermanentError.new("api_error", detail: "no b64_json"))
       end
 
+      # 例外クラスは失敗の種類（接続・読み取り・SSL）で変わるので、呼び出し側が
+      # 1 つ rescue すれば済むようここで一本化する。いずれも時間を置けば直りうる。
       def post_request
         http = Net::HTTP.new(ENDPOINT.host, ENDPOINT.port)
         http.use_ssl = true
@@ -65,6 +72,8 @@ module Images
         http.read_timeout = READ_TIMEOUT
 
         http.request(build_request)
+      rescue Timeout::Error, IOError, SystemCallError, OpenSSL::SSL::SSLError => e
+        raise Generator::TransientError.new("api_error", detail: e.class.name)
       end
 
       def build_request
@@ -88,9 +97,41 @@ module Images
         request
       end
 
-      # 失敗の分類は Task 4 で実装する。
+      # 分類の根拠は設計ドキュメントの「エラーの分類」表。
       def raise_for_status(response)
-        raise Generator::PermanentError.new("api_error", detail: "status=#{response.code}")
+        status = response.code.to_i
+
+        raise build_error(status, extract_error(response))
+      end
+
+      def build_error(status, error)
+        detail = "status=#{status}"
+
+        return Generator::PermanentError.new("content_policy", detail: detail) if content_policy?(status, error)
+        return Generator::PermanentError.new("api_error", detail: detail) if quota_exhausted?(status, error)
+        return Generator::TransientError.new("rate_limited", detail: detail) if status == 429
+        return Generator::TransientError.new("api_error", detail: detail) if status >= 500
+
+        Generator::PermanentError.new("api_error", detail: detail)
+      end
+
+      def content_policy?(status, error)
+        status == 400 && CONTENT_POLICY_CODES.include?(error["code"])
+      end
+
+      def quota_exhausted?(status, error)
+        status == 429 && error["type"] == INSUFFICIENT_QUOTA
+      end
+
+      # 本文が JSON でない（プロキシの HTML エラーページ等）ことも、error が
+      # ハッシュでないこともある。分類できないだけなので落とさず空として扱う。
+      def extract_error(response)
+        parsed = JSON.parse(response.body)
+        error = parsed.is_a?(Hash) ? parsed["error"] : nil
+
+        error.is_a?(Hash) ? error : {}
+      rescue JSON::ParserError, TypeError
+        {}
       end
     end
   end
