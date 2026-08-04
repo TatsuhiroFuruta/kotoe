@@ -49,6 +49,15 @@ RSpec.describe GenerateImageJob do
     it "存在しない id でも落ちない" do
       expect { described_class.perform_now(0) }.not_to raise_error
     end
+
+    it "描写文から組み立てたプロンプトで生成する" do
+      attempt = create(:attempt, :generating, description: "夕暮れの交差点")
+      allow(Images::Generator).to receive(:call).and_return("kotoe/test/generated/x")
+
+      described_class.perform_now(attempt.id)
+
+      expect(Images::Generator).to have_received(:call).with(Images::Prompt.call("夕暮れの交差点"))
+    end
   end
 
   describe "失敗の扱い" do
@@ -97,6 +106,72 @@ RSpec.describe GenerateImageJob do
 
       expect { described_class.perform_now(attempt.id) }.to raise_error(ArgumentError)
       expect(attempt.reload.status).to eq("failed")
+    end
+
+    # 同じ描写文なら必ずまた弾かれるので、リトライせずその場で終端にする。
+    it "PermanentError はリトライせず failed にして理由を残す" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Generator).to receive(:call)
+        .and_raise(Images::Generator::PermanentError.new("content_policy"))
+
+      expect { described_class.perform_now(attempt.id) }
+        .not_to have_enqueued_job(described_class)
+
+      attempt.reload
+      expect(attempt.status).to eq("failed")
+      expect(attempt.failure_reason).to eq("content_policy")
+    end
+
+    it "PermanentError の原因をログに残す" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Generator).to receive(:call)
+        .and_raise(Images::Generator::PermanentError.new("api_error", detail: "status=401"))
+      allow(Rails.logger).to receive(:warn)
+
+      described_class.perform_now(attempt.id)
+
+      expect(Rails.logger).to have_received(:warn).with(/attempt_id=#{attempt.id}.*status=401/)
+    end
+
+    it "TransientError の 1 回目は failed にせずリトライする" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Generator).to receive(:call)
+        .and_raise(Images::Generator::TransientError.new("rate_limited"))
+
+      expect { described_class.perform_now(attempt.id) }
+        .to have_enqueued_job(described_class)
+      expect(attempt.reload.status).to eq("generating")
+    end
+
+    # 回数を 2 にとどめるのはコストの理由。タイムアウトは「API が課金対象の生成を
+    # 終えたのに待ちきれなかった」場合を含み、リトライすると同じ1枠に二重課金になる。
+    it "TransientError を使い切ると failed になり理由が残る" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Generator).to receive(:call)
+        .and_raise(Images::Generator::TransientError.new("rate_limited"))
+
+      perform_enqueued_jobs { described_class.perform_later(attempt.id) }
+
+      attempt.reload
+      expect(attempt.status).to eq("failed")
+      expect(attempt.failure_reason).to eq("rate_limited")
+    end
+
+    it "UploadError を使い切ると failure_reason は upload_failed" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Uploader).to receive(:call).and_raise(Images::Uploader::UploadError)
+
+      perform_enqueued_jobs { described_class.perform_later(attempt.id) }
+
+      expect(attempt.reload.failure_reason).to eq("upload_failed")
+    end
+
+    it "想定外の例外の failure_reason は internal_error" do
+      attempt = create(:attempt, :generating)
+      allow(Images::Uploader).to receive(:call).and_raise(ArgumentError, "boom")
+
+      expect { described_class.perform_now(attempt.id) }.to raise_error(ArgumentError)
+      expect(attempt.reload.failure_reason).to eq("internal_error")
     end
 
     it "生成枠は failed でも戻さない" do
