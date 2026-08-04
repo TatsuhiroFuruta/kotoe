@@ -26,7 +26,12 @@ module Images
       # content_policy_violation は別系統で返る可能性に備えた保険で、実測はしていない。
       # 認識できない値は api_error に倒れるので、取りこぼしてもジョブは壊れない。
       CONTENT_POLICY_CODES = %w[content_policy_violation moderation_blocked].freeze
+
+      # 「429 だが待っても直らない」もの。上限を上げるか残高を足すまで必ずまた 429 になるので、
+      # レート制限と分けて Permanent にする。insufficient_quota は error.type で、
+      # spend limit は error.code で返る（OpenAI の spend limits ガイド）。
       INSUFFICIENT_QUOTA = "insufficient_quota"
+      SPEND_LIMIT_CODES = %w[organization_spend_limit_exceeded project_spend_limit_exceeded].freeze
 
       OPEN_TIMEOUT = 10
       # 「複雑なプロンプトで最大2分」（公式ドキュメント）。短くすると、生成は済んで
@@ -148,8 +153,13 @@ module Images
         status == 400 && CONTENT_POLICY_CODES.include?(error["code"])
       end
 
+      # 429 のうち「時間では直らない」もの。残高切れ（前払いを使い切った）と、
+      # OpenAI 側の hard spend limit に当たった場合。どちらも人が設定を変えるまで
+      # 必ずまた 429 になるので、リトライせず終端にする。
       def quota_exhausted?(status, error)
-        status == 429 && error["type"] == INSUFFICIENT_QUOTA
+        return false unless status == 429
+
+        error["type"] == INSUFFICIENT_QUOTA || SPEND_LIMIT_CODES.include?(error["code"])
       end
 
       # 本文が JSON でない（プロキシの HTML エラーページ等）ことも、error が

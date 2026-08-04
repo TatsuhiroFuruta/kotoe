@@ -1645,6 +1645,12 @@ git commit -m "feat: 生成のキルスイッチとサービス全体の1日上�
 
 - [ ] **Step 5: `docs/deployment.md` に OpenAI の節を足す**
 
+> **⚠️ 実行後に訂正済み。** 下の文面にある「OpenAI の monthly budget は遮断ではなく通知」は
+> **不正確**だった。実際には **Spend alert（通知のみ）と Hard spend limit（`Enforce a hard
+> limit` を ON にすると 429 で遮断）の2種類**がある。実物の設定画面を見て判明した。
+> 最終的に書かれた内容は `docs/deployment.md` と設計ドキュメントを参照すること。
+> 以下は当時の計画の記録としてそのまま残す。
+
 「Cloudinary（画像の保存先）」の節の後ろに足す。
 
 ```markdown
@@ -1769,11 +1775,14 @@ git push -u origin feature/issue-4-3
 
 PR の本文には次を書く。
 
-- 何を実装したか（ダミー → gpt-image-2、コストガード3層、`failure_reason`）
+- 何を実装したか（ダミー → gpt-image-2、コストガード、`failure_reason`）
 - **依存追加**：`webmock`（`group :test` のみ・本番のメモリに影響しない）と、その理由
-- **既存ドキュメントの訂正2件**（README の URL 取り込み案が成立しないこと、OpenAI の
-  monthly budget が遮断ではなく通知であること）
+- **既存ドキュメントの訂正**（README の URL 取り込み案が成立しないこと、ほか）
 - **マージ後に本番スモークが必要**であること（下記）
+
+> **⚠️ 実行後の訂正。** ここに「OpenAI の monthly budget が遮断ではなく通知」と書いていたが
+> **不正確**だった（Step 5 の注記を参照）。コストガードも 3 層ではなく **4 層**
+> （アプリ 50枚/日 → Spend alert $5 → Hard spend limit $20 → 前払い $20）になった。
 
 ## マージ後の本番スモーク（手作業）
 

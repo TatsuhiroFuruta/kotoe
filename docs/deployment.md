@@ -57,25 +57,48 @@
 
 ### OpenAI（画像生成）
 
-1. platform.openai.com の Project で API キーを発行し、Render の kotoe-api →
-   Environment に `OPENAI_API_KEY` として貼る
+1. platform.openai.com で `kotoe` プロジェクトを作り、その中で API キーを発行して、
+   Render の kotoe-api → Environment に `OPENAI_API_KEY` として貼る
 2. **前払いクレジットを $20 購入し、オートリチャージを off にする**
-3. 予算アラートを **$5**（80% / 95% 通知）に設定する
+3. **Spend alerts を $5** に設定する（通知のみ）
+4. **Monthly spend limit を $20 にし、`Enforce a hard limit` を ON** にする
 
-**⚠️ OpenAI の monthly budget は遮断ではなく通知である**（2026年時点）。上限に達しても
-メールとダッシュボードのバナーが出るだけで、キーは動き続け課金も積み上がる。
-**唯一の本当のハードストップは「前払いクレジット＋オートリチャージ off」**。
+**⚠️ OpenAI の spend limit には性質の違う2つがある**（[公式ガイド](https://developers.openai.com/api/docs/guides/spend-limits)）。
 
-コストガードは3層で、**穏やかなガードが先に効くように値を決めてある**。
+| | 挙動 |
+|---|---|
+| **Spend alert** | 通知のみ。「API traffic continues」＝トラフィックは流れ続ける |
+| **Hard spend limit** | **止まる。** `429` ＋ `organization_spend_limit_exceeded` / `project_spend_limit_exceeded` |
+
+`Enforce a hard limit` を ON にしなければ**通知どまり**で、キーは動き続け課金も積み上がる。
+ON にしても **遮断は即時ではない**（"Enforcement is not instantaneous, so recorded spend can
+slightly exceed the configured amount"）。
+
+コストガードは4層で、**穏やかなガードが先に効くように値を決めてある**。
 
 | 層 | 値 | 効いたときに起きること |
 |---|---|---|
 | アプリ側の1日上限 | 50 枚/日 | `generate` が **503 で即座に断られる**。ジョブは積まれず、**生成枠も消費されない** |
-| 予算アラート | $5 | メール通知のみ。遮断しない |
-| 前払いクレジット | $20・オートリチャージ off | ジョブは走り、API が 429 を返し、attempt が **failed** になる。枠は戻らない |
+| Spend alert | $5 | メール通知のみ。遮断しない |
+| Hard spend limit | $20（`Enforce` ON） | 429 → attempt が **failed**。枠は戻らない。遅延で少し超えうる |
+| 前払いクレジット | $20・オートリチャージ off | 残高切れ → 429 → **failed**。枠は戻らない |
 
-前払いを 50枚/日 の月額最悪値（$16.5）**より上**に置くのが要点。下に置くと、アプリ側の
-穏やかなガードに達する前に残高が尽き、乱暴なほうの失敗が先に起きる。
+**上の2つ（アプリの上限とアラート）が先に効くように値を並べるのが要点。** アプリの月額最悪値は
+50枚/日 × 30日 × 約$0.011 ＝ **$16.5** なので、hard limit と前払いをそれより**上**の $20 に置く。
+下に置くと、アプリ側の穏やかなガード（枠を消費しない 503）に達する前に 429 が返り、
+**生成枠だけ失う乱暴なほうの失敗が先に起きる**。
+
+**請求を止めているのは hard limit ではなく「前払い＋オートリチャージ off」**である。
+カードから自動補充される経路が無いので、残高を使い切れば止まるしかない。hard limit は
+その手前に置く安全装置で、遅延ぶんの取りこぼしを残高が受け止める関係になっている。
+
+**月をまたぐと効く順序が変わる。** hard limit は毎月リセットされるが、**前払いクレジットは
+リセットされず減っていくだけ**。数ヶ月経つと残高のほうが先に尽きるので、止まったときは
+「上限に当たった」より先に「残高切れ」を疑う。どちらも `failure_reason: api_error` になる。
+
+前払いクレジットは組織単位の 1 つの財布で、**プロジェクトを分けても残高は共有される**。
+プロジェクトを分ける意味は財布を分けることではなく、「そのプロジェクトがいくらまで使ってよいか」を
+hard limit で仕切ることにある。
 
 `OPENAI_API_KEY` が未設定のまま `KOTOE_IMAGE_PROVIDER=openai` で起動すると、
 `config/initializers/openai.rb` が起動時に例外を出して落ちる（Cloudinary と同じ方針）。

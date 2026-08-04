@@ -116,6 +116,23 @@ RSpec.describe Images::Generators::Openai do
       expect(error.code).to eq("rate_limited")
     end
 
+    # OpenAI 側の hard spend limit に当たった状態。上限を上げるまで必ずまた 429 なので
+    # リトライしても意味がない。レート制限と同じ 429 だが、error.code で見分けられる。
+    it "429 の organization_spend_limit_exceeded は PermanentError の api_error" do
+      stub_generation(status: 429, body: { error: { code: "organization_spend_limit_exceeded" } }.to_json)
+
+      error = call_and_capture
+
+      expect(error).to be_a(Images::Generator::PermanentError)
+      expect(error.code).to eq("api_error")
+    end
+
+    it "429 の project_spend_limit_exceeded は PermanentError の api_error" do
+      stub_generation(status: 429, body: { error: { code: "project_spend_limit_exceeded" } }.to_json)
+
+      expect(call_and_capture).to be_a(Images::Generator::PermanentError)
+    end
+
     # 前払いクレジットが尽きた状態。待っても直らないのでリトライしない。
     it "429 の insufficient_quota は PermanentError の api_error" do
       stub_generation(status: 429, body: { error: { type: "insufficient_quota" } }.to_json)
