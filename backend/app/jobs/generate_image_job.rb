@@ -2,6 +2,17 @@
 # （本番は OpenAI、ローカル・CI・E2E はダミー）。ここは配線と、失敗を終端状態に
 # 落とすことだけを担当する。
 class GenerateImageJob < ApplicationJob
+  # Cloudinary の一時障害は、ジョブごと再実行せず**アップロードだけ**を再試行する。
+  # 生成とアップロードは同じジョブの中にあるので、ジョブを再実行すると OpenAI の生成まで
+  # やり直され、同じ 1 枠に対して実費が 3 倍かかる。画像はもう手元にあるので、
+  # 上げ直すだけならタダである。
+  #
+  # 「1 枠 ＝ 1 生成」はコストガードの前提でもある（アプリ 50 枚/日 ＝ 月額最悪 $16.5 が
+  # 前払いクレジット $20 を下回る、という3層の設計。docs/deployment.md 参照）。
+  # ここが 3 倍に増幅すると最悪値が $49.5/日 になり、穏やかなガードより先に残高が尽きる。
+  UPLOAD_ATTEMPTS = 3
+  UPLOAD_RETRY_WAIT = 3 # 秒。spec は stub_const で 0 にする
+
   queue_as :default
 
   # 宣言順に意味がある。ActiveJob はハンドラを後勝ちで探す（rescue_handlers を
@@ -38,15 +49,16 @@ class GenerateImageJob < ApplicationJob
     mark_failed(job.arguments.first, error.code)
   end
 
-  # Cloudinary の一時障害：3 回まで待って試す（失敗しても実費が出ないため生成側より多い）。
-  # 使い切ったら failed にするが、ジョブ自体は失敗扱いにしない（外部サービスの障害は
-  # コードのバグではない）。
+  # ここに来るのは upload_with_retry が UPLOAD_ATTEMPTS 回とも失敗したとき。
+  # ジョブは再実行しない（再実行すると生成からやり直しになり二重課金になる）。
+  # ジョブ自体は失敗扱いにもしない（外部サービスの障害はコードのバグではない）。
+  #
   # 原因まで残す。Images::Uploader は StandardError をすべて UploadError に包むため、
   # ここには一時障害だけでなく本番の CLOUDINARY_URL の設定漏れのような「直さない限り
-  # 永久に失敗し続ける」障害も来る。ジョブ自体は成功扱いで
-  # solid_queue_failed_executions に残らないので、このログが唯一の手がかりになる。
+  # 永久に失敗し続ける」障害も来る。solid_queue_failed_executions に残らないので、
+  # このログが唯一の手がかりになる。
   # message には元例外のクラス名しか入らない（Uploader が秘密情報を落としている）。
-  retry_on Images::Uploader::UploadError, wait: :polynomially_longer, attempts: 3 do |job, error|
+  discard_on Images::Uploader::UploadError do |job, error|
     Rails.logger.warn(
       "[GenerateImageJob] Cloudinary へのアップロードに失敗しました " \
       "attempt_id=#{job.arguments.first} error=#{error.message}"
@@ -68,10 +80,35 @@ class GenerateImageJob < ApplicationJob
     return if attempt.nil?
 
     public_id = Images::Generator.call(Images::Prompt.call(attempt.description)) do |file|
-      Images::Uploader.call(file, kind: :generated)
+      upload_with_retry(file)
     end
 
     # 生成が成功したら即公開（結果を見てから公開を選ぶ導線は作らない）。
     attempt.update!(generated_image_public_id: public_id, status: :published)
+  end
+
+  private
+
+  # 生成済みの画像を上げ直すだけなので、ジョブを再実行するのと違って実費がかからない。
+  # 同じ File を渡し直せるのは Images::Uploader が毎回 rewind するため。
+  #
+  # 待ちは同期なのでワーカースレッドを塞ぐが、最大でも UPLOAD_RETRY_WAIT × 2 秒。
+  # 生成そのものが最大 150 秒かかることを思えば誤差である。
+  def upload_with_retry(file)
+    tries = 0
+
+    begin
+      tries += 1
+      Images::Uploader.call(file, kind: :generated)
+    rescue Images::Uploader::UploadError => e
+      raise if tries >= UPLOAD_ATTEMPTS
+
+      Rails.logger.warn(
+        "[GenerateImageJob] Cloudinary へのアップロードを再試行します " \
+        "attempt_id=#{arguments.first} try=#{tries} error=#{e.message}"
+      )
+      sleep(UPLOAD_RETRY_WAIT)
+      retry
+    end
   end
 end

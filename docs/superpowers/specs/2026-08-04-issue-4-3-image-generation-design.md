@@ -323,14 +323,30 @@ end
 rescue_from(StandardError)      { mark_failed(id, "internal_error"); raise }   # 先に宣言
 discard_on   PermanentError     { mark_failed(id, error.code) }                # 再試行しない
 retry_on     TransientError,        attempts: 2 { mark_failed(id, error.code) }
-retry_on     Uploader::UploadError, attempts: 3 { mark_failed(id, "upload_failed") }
+discard_on   Uploader::UploadError  { mark_failed(id, "upload_failed") }       # 下記のとおり
 ```
 
-**生成側だけリトライ回数を 2 にするのはコストの理由。** タイムアウトは「API が課金対象の
+**生成側のリトライ回数を 2 にとどめるのはコストの理由。** タイムアウトは「API が課金対象の
 生成を終えたのに、こちらが待ちきれなかった」場合を含む。この状態でリトライすると
 **同じ1枠に対して2回課金**される。3回なら最大3倍。あわせて `read_timeout` は 150 秒と
 長めに取り（ドキュメントは「複雑なプロンプトで最大2分」）、そもそもタイムアウトさせない方に寄せる。
-`open_timeout` は 10 秒。Cloudinary 側は失敗しても実費ゼロなので 3 回のまま。
+`open_timeout` は 10 秒。
+
+**Cloudinary の失敗はジョブごと再実行してはいけない**（実装レビューで発見。当初は 4-2 の
+`retry_on UploadError, attempts: 3` をそのまま残す設計だった）。4-2 ではアップロードするのが
+ディスク上のダミー PNG だったため再実行は無料だったが、4-3 では**生成とアップロードが同じ
+ジョブの中にある**ので、ジョブを再実行すると OpenAI の生成もやり直され、**1枠に対して実費が
+3倍**かかる（実測で確認）。
+
+これは単なる無駄ではなく、**コストガードの前提を壊す**。「アプリ 50 枚/日 ＝ 月額最悪 $16.5 <
+前払いクレジット $20」という3層の設計は **1 枠 ＝ 1 生成**を前提にしており、3 倍に増幅すると
+最悪値が $49.5/日 になって、穏やかなガードより先に残高が尽きる。
+
+したがって**アップロードだけをジョブの中で再試行する**（`GenerateImageJob#upload_with_retry`、
+`UPLOAD_ATTEMPTS = 3` / `UPLOAD_RETRY_WAIT = 3` 秒）。画像はもう手元にあるので上げ直すのは無料で、
+同じ File を渡し直せるのは `Images::Uploader` が毎回 `rewind` するため。使い切った `UploadError`
+はジョブレベルで `discard_on` し、終端にする。「Cloudinary が何度失敗しても生成は 1 回」を
+job spec で固定する。
 
 **`discard_on` を使うのは、ポリシー違反がコードのバグではないため。** 4-2 が Cloudinary の
 恒久障害を「ジョブ自体は成功扱いにしてログに残す」と決めたのと同じ考え方で、
@@ -446,7 +462,7 @@ ENV はクラス本体ではなくメソッド内で読む（`Attempts::Generati
 | `spec/lib/images/generator_spec.rb` | プロバイダの選択（env と Rails.env）／Tempfile が yield され、ブロックを抜けたら消えている |
 | `spec/lib/images/generators/openai_spec.rb` | リクエストの組み立て（model・size・quality・output_format・output_compression・moderation）／b64 のデコード／**ステータス→例外クラス＋code の対応表**／未知のエラーが `api_error` に倒れること／タイムアウトが `TransientError` になること |
 | `spec/lib/attempts/generation_spec.rb` | キルスイッチ／全体上限／既存のケースが壊れていないこと |
-| `spec/jobs/generate_image_job_spec.rb` | 成功→published／`PermanentError` は**リトライせず** failed＋code／`TransientError` は2回で failed／`UploadError` は3回で failed／想定外は `internal_error` かつ再送出／**ハンドラの宣言順** |
+| `spec/jobs/generate_image_job_spec.rb` | 成功→published／`PermanentError` は**リトライせず** failed＋code／`TransientError` は2回で failed／`UploadError` はジョブを再実行せずアップロードのみ3回試して failed／**Cloudinary が何度失敗しても生成は1回**／想定外は `internal_error` かつ再送出／**ハンドラの宣言順** |
 | `spec/requests/api/attempts_spec.rb` | 503 の2種（`generation_disabled` / `service_generation_limit_reached`）と `resets_at`／`failure_reason` が応答に載ること |
 
 E2E（Playwright）は 8-1 の担当でこの issue では書かない。E2E は `KOTOE_IMAGE_PROVIDER=dummy`
