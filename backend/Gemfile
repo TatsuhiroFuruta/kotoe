@@ -80,4 +80,9 @@ end
 group :test do
   # 関連・バリデーションを1行で書くためのマッチャ集。
   gem "shoulda-matchers", "~> 6.0"
+
+  # 外部APIの HTTP を spec で塞ぐ。画像生成API（issue 4-3）は SDK を使わず
+  # Net::HTTP を直接叩くため、リクエストの組み立て（URL・ヘッダ・ボディ）そのものが
+  # 検証対象になる。require するだけで全 spec が外部へ出なくなる安全網も同時に得る。
+  gem "webmock"
 end

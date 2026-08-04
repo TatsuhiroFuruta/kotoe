@@ -252,6 +252,7 @@ RSpec.describe "GET /api/posts/:id", type: :request do
       "description" => "夕日に染まる横断歩道",
       "generated_image_public_id" => "kotoe/test/generated/sample",
       "status" => "published",
+      "failure_reason" => nil,
       "similarity_score" => nil,
       "user" => { "id" => challenger.id, "name" => "挑戦者" },
       "likes_count" => 3,
