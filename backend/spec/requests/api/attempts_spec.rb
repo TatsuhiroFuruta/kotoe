@@ -269,6 +269,28 @@ RSpec.describe "挑戦 API", type: :request do
       expect(response.parsed_body["attempt"]["status"]).to eq("generating")
     end
 
+    # 失敗の理由はコードで返し、翻訳はフロントの辞書が持つ。理由を返さないと、
+    # ポリシー違反のユーザーが同じ文章で再挑戦して生成枠をもう1つ失う。
+    it "失敗した挑戦は理由コードを返す" do
+      attempt = create(:attempt, :failed, user: user, failure_reason: "content_policy")
+
+      get "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["attempt"]).to include(
+        "status" => "failed",
+        "failure_reason" => "content_policy"
+      )
+    end
+
+    it "失敗していない挑戦の failure_reason は null" do
+      attempt = create(:attempt, :published, user: user)
+
+      get "/api/attempts/#{attempt.id}"
+
+      expect(response.parsed_body["attempt"]).to include("failure_reason" => nil)
+    end
+
     # 403 にせず存在ごと隠す。未認証も 401 ではなく 404 にする。published が
     # 認証不要である以上、401 は「認証すれば見える何かがある」と漏らすため。
     it "他人の下書きは 404" do

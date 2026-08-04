@@ -12,6 +12,7 @@ RSpec.describe Attempt, type: :model do
 
   it { is_expected.to validate_presence_of(:description) }
   it { is_expected.to validate_length_of(:description).is_at_most(1000) }
+  it { is_expected.to validate_inclusion_of(:failure_reason).in_array(described_class::FAILURE_REASONS).allow_nil }
 
   # description はそのまま画像生成APIのプロンプトになる。無制限だとコストとエラーの
   # 両方に効くため上限を持つ（設計ドキュメント参照）。

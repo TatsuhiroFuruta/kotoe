@@ -13,8 +13,16 @@ class Attempt < ApplicationRecord
   # 後から緩めるのは安全（既存データが違反にならない）が、きつくするのは危険。
   MAX_DESCRIPTION_LENGTH = 1_000
 
+  # 生成が失敗した理由。文言ではなくコードを持ち、翻訳はフロントの辞書が担当する。
+  #
+  # status と違って enum にしない。status は状態機械でスコープに意味があるが、
+  # failure_reason は分岐にも一覧にも使わない付随情報で、enum にすると
+  # Attempt.api_error のようなスコープが生えて紛らわしくなる。
+  FAILURE_REASONS = %w[content_policy rate_limited api_error upload_failed internal_error].freeze
+
   validates :description, presence: true, length: { maximum: MAX_DESCRIPTION_LENGTH }
   validates :status, presence: true
+  validates :failure_reason, inclusion: { in: FAILURE_REASONS }, allow_nil: true
 
   # いいね数。Post と同じ理由（discard を counter cache が検知できない）で
   # SELECT 句の相関サブクエリにする。
