@@ -24,6 +24,10 @@
 | `CORS_ALLOWED_ORIGIN_REGEX` | **手入力** | Vercel プレビュー用。**チーム slug を必ず含める**（`\A \z` は実装側が付けるので書かない） |
 | `CLOUDINARY_URL` | **手入力** | Cloudinary の API Environment variable。api_secret を含むためサーバー専用。未設定だと boot で raise する |
 | `SOLID_QUEUE_IN_PUMA` | `render.yaml` | `true`。Solid Queue のワーカーを Puma プロセス内で起動する。未設定だとジョブが enqueue されるだけで処理されない |
+| `OPENAI_API_KEY` | **手入力** | 画像生成 API のキー。**サーバー専用**。`KOTOE_IMAGE_PROVIDER=openai` のとき未設定だと boot で raise する |
+| `KOTOE_IMAGE_PROVIDER` | **手入力** | `openai`。未設定でも production の既定は `openai` だが、明示しておく |
+| `KOTOE_GENERATION_ENABLED` | 任意 | 既定 `true`。`false` / `0` / `off` で生成を全停止（キルスイッチ） |
+| `KOTOE_SERVICE_DAILY_GENERATION_LIMIT` | 任意 | 既定 `50`。サービス全体の1日の生成枚数 |
 
 - `sync: false` の項目は秘密/環境依存のためリポジトリに置かず、ダッシュボードで手入力する。
 - 許可オリジン（`CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_ORIGIN_REGEX`）が両方未設定のまま
@@ -50,6 +54,59 @@
 `CLOUDINARY_URL` が未設定のまま本番を起動すると、`config/initializers/cloudinary.rb`
 が起動時に例外を出して落ちる。設定漏れに気づかないままデプロイが green に見える
 状態を防ぐため、意図的にそうしてある。
+
+### OpenAI（画像生成）
+
+1. platform.openai.com で `kotoe` プロジェクトを作り、その中で API キーを発行して、
+   Render の kotoe-api → Environment に `OPENAI_API_KEY` として貼る
+2. **前払いクレジットを $20 購入し、オートリチャージを off にする**
+3. **Spend alerts を $5** に設定する（通知のみ）
+4. **Monthly spend limit を $20 にし、`Enforce a hard limit` を ON** にする
+
+**⚠️ OpenAI の spend limit には性質の違う2つがある**（[公式ガイド](https://developers.openai.com/api/docs/guides/spend-limits)）。
+
+| | 挙動 |
+|---|---|
+| **Spend alert** | 通知のみ。「API traffic continues」＝トラフィックは流れ続ける |
+| **Hard spend limit** | **止まる。** `429` ＋ `organization_spend_limit_exceeded` / `project_spend_limit_exceeded` |
+
+`Enforce a hard limit` を ON にしなければ**通知どまり**で、キーは動き続け課金も積み上がる。
+ON にしても **遮断は即時ではない**（"Enforcement is not instantaneous, so recorded spend can
+slightly exceed the configured amount"）。
+
+コストガードは4層で、**穏やかなガードが先に効くように値を決めてある**。
+
+| 層 | 値 | 効いたときに起きること |
+|---|---|---|
+| アプリ側の1日上限 | 50 枚/日 | `generate` が **503 で即座に断られる**。ジョブは積まれず、**生成枠も消費されない** |
+| Spend alert | $5 | メール通知のみ。遮断しない |
+| Hard spend limit | $20（`Enforce` ON） | 429 → attempt が **failed**。枠は戻らない。遅延で少し超えうる |
+| 前払いクレジット | $20・オートリチャージ off | 残高切れ → 429 → **failed**。枠は戻らない |
+
+**上の2つ（アプリの上限とアラート）が先に効くように値を並べるのが要点。** アプリの月額最悪値は
+50枚/日 × 30日 × 約$0.011 ＝ **$16.5** なので、hard limit と前払いをそれより**上**の $20 に置く。
+下に置くと、アプリ側の穏やかなガード（枠を消費しない 503）に達する前に 429 が返り、
+**生成枠だけ失う乱暴なほうの失敗が先に起きる**。
+
+**請求を止めているのは hard limit ではなく「前払い＋オートリチャージ off」**である。
+カードから自動補充される経路が無いので、残高を使い切れば止まるしかない。hard limit は
+その手前に置く安全装置で、遅延ぶんの取りこぼしを残高が受け止める関係になっている。
+
+**月をまたぐと効く順序が変わる。** hard limit は毎月リセットされるが、**前払いクレジットは
+リセットされず減っていくだけ**。数ヶ月経つと残高のほうが先に尽きるので、止まったときは
+「上限に当たった」より先に「残高切れ」を疑う。どちらも `failure_reason: api_error` になる。
+
+前払いクレジットは組織単位の 1 つの財布で、**プロジェクトを分けても残高は共有される**。
+プロジェクトを分ける意味は財布を分けることではなく、「そのプロジェクトがいくらまで使ってよいか」を
+hard limit で仕切ることにある。
+
+`OPENAI_API_KEY` が未設定のまま `KOTOE_IMAGE_PROVIDER=openai` で起動すると、
+`config/initializers/openai.rb` が起動時に例外を出して落ちる（Cloudinary と同じ方針）。
+
+**生成を緊急停止したいとき**は `KOTOE_GENERATION_ENABLED=false` を設定する。
+デプロイは不要で、環境変数の変更による再起動だけで効く。新規の起動を断る（503）だけでなく、
+**すでにキューに積まれたジョブも実行の直前に見て止める**（`failure_reason: generation_disabled`）。
+enqueue 時しか見ないと、止めたのに残っていたぶんが走り切って課金されるため。
 
 ### Vercel（Next.js）
 

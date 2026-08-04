@@ -91,12 +91,26 @@ module Api
       render json: { error: code }.merge(extra), status: :unprocessable_content
     end
 
-    # 上限到達のときだけ、フロントが「あと◯時間で回復します」を組み立てられるよう
-    # 補助情報を足す。文言そのものは返さない（i18n はフロント）。
+    # エラーコードを HTTP に翻訳する。判定は Attempts::Generation が済ませている。
+    #
+    # 422 は「あなたの操作の問題」（訂正できる）、503 は「こちら側の都合」
+    # （キルスイッチ・サービス全体の上限）。上限到達のときは、フロントが
+    # 「あと◯時間で回復します」を組み立てられるよう補助情報を足す。
+    # 文言そのものは返さない（i18n はフロント）。
+    #
+    # 全体の上限では limit を返さない。サービスの容量は内部の事情で、ユーザーが
+    # 行動を変えられる情報ではないため。
     def render_generation_error(result)
-      return render_error(result.error_code) if result.limit.nil?
-
-      render_error(result.error_code, limit: result.limit, resets_at: next_reset_at)
+      case result.error_code
+      when "generation_disabled"
+        render json: { error: result.error_code }, status: :service_unavailable
+      when "service_generation_limit_reached"
+        render json: { error: result.error_code, resets_at: next_reset_at }, status: :service_unavailable
+      when "generation_limit_reached"
+        render_error(result.error_code, limit: result.limit, resets_at: next_reset_at)
+      else
+        render_error(result.error_code)
+      end
     end
 
     # 「1日」は JST の暦日なので回復は JST の翌 0 時。返す形は他のフィールドと同じく

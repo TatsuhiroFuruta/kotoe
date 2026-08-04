@@ -24,3 +24,12 @@ services:
       # Solid Queue のワーカーを Puma プロセス内で起動する（config/puma.rb）。
       # 無料プランではバックグラウンドワーカーが別サービス扱いで有料になるため。
       - { key: SOLID_QUEUE_IN_PUMA, value: "true" }
+      # 画像生成（issue 4-3）。キーは api_secret と同じくサーバー専用。
+      # 未設定のまま provider が openai だと boot で raise する（設定漏れに
+      # 気づかないままデプロイが green に見えるのを防ぐため）。
+      - { key: OPENAI_API_KEY, sync: false }
+      - { key: KOTOE_IMAGE_PROVIDER, value: openai }
+      # 生成の緊急停止。コードを触らずダッシュボードだけで止められる。
+      # 既定は有効なので、平常時は設定しなくてよい（止めるときだけ false を入れる）。
+      # 全体の1日上限（既定 50 枚）も KOTOE_SERVICE_DAILY_GENERATION_LIMIT で
+      # 上書きできる。値の根拠は docs/deployment.md の「OpenAI（画像生成）」。

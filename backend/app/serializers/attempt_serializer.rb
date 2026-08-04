@@ -9,6 +9,7 @@ class AttemptSerializer
       description: attempt.description,
       generated_image_public_id: attempt.generated_image_public_id,
       status: attempt.status,
+      failure_reason: attempt.failure_reason,
       similarity_score: attempt.similarity_score,
       user: UserSerializer.public_profile(attempt.user),
       likes_count: attempt.likes_count,

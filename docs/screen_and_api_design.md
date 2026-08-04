@@ -80,6 +80,24 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
   { "error": "generation_limit_reached", "limit": 3, "resets_at": "2026-08-02T15:00:00Z" }
   ```
 
+- サービス全体でも **1日 50 枚**の上限を持つ（`KOTOE_SERVICE_DAILY_GENERATION_LIMIT` で
+  上書き可、issue 4-3）。到達すると **503**。個人の上限（422）と分けているのは、
+  422 が「あなたの操作の問題」、503 が「こちら側の都合」だから。
+
+  ```json
+  { "error": "service_generation_limit_reached", "resets_at": "2026-08-02T15:00:00Z" }
+  ```
+
+  `KOTOE_GENERATION_ENABLED=false`（キルスイッチ）のときも **503** で
+  `{ "error": "generation_disabled" }` を返す。どちらもジョブを積まず、**生成枠も消費しない**。
+- 失敗した挑戦は `failure_reason` を持つ（issue 4-3）。値は `content_policy` /
+  `rate_limited` / `api_error` / `upload_failed` / `internal_error` / `generation_disabled`
+  のいずれかで、`failed` 以外は `null`。文言は返さず、フロントの辞書で翻訳する。
+  `generation_disabled` は 503 のエラーコードと同じ値で、「ジョブが積まれたあとに
+  キルスイッチが入った」場合に入る（辞書を分けずに済ませるため同じコードにしてある）。
+- 生成画像は **WebP** で Cloudinary に保存する（issue 4-3）。**ダウンロードURLには必ず
+  `f_png` / `f_jpg` と `fl_attachment` を付ける**こと。付け忘れると `.webp` が落ち、
+  macOS の Preview で開けない環境がある。
 - `GET /api/attempts/:id` は `{ "attempt": {...}, "post": {...} }` を返す（比較ビューが
   元画像を必要とするため）。`published` は誰でも、それ以外は**本人のみ**で、他人・未認証からは
   404（403 や 401 にせず存在ごと隠す）。**生成中はまだ公開されていないので、

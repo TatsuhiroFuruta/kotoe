@@ -125,6 +125,96 @@ RSpec.describe Attempts::Generation do
     end
   end
 
+  # 4-2 が 4-3 に送った宿題。実費が発生するのはここからなので、コストの上限をここで持つ。
+  describe "キルスイッチ" do
+    def stub_enabled_env(value)
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with("KOTOE_GENERATION_ENABLED", "true").and_return(value)
+    end
+
+    it "既定では有効" do
+      expect(described_class).to be_enabled
+    end
+
+    it "false で止まり、ジョブも積まれず枠も減らない" do
+      stub_enabled_env("false")
+
+      result = nil
+      expect { result = described_class.call(attempt) }
+        .not_to have_enqueued_job(GenerateImageJob)
+
+      expect(result.error_code).to eq("generation_disabled")
+      attempt.reload
+      expect(attempt.status).to eq("draft")
+      expect(attempt.generated_at).to be_nil
+    end
+
+    it "0 と off でも止まる" do
+      stub_enabled_env("0")
+      expect(described_class).not_to be_enabled
+
+      stub_enabled_env("off")
+      expect(described_class).not_to be_enabled
+    end
+
+    # ダッシュボードで値を空にしただけで全ユーザーの生成が止まると、原因が分からない。
+    it "空文字は既定（有効）に落とす" do
+      stub_enabled_env("")
+
+      expect(described_class).to be_enabled
+    end
+  end
+
+  describe "サービス全体の1日上限" do
+    def stub_service_limit_env(value)
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with("KOTOE_SERVICE_DAILY_GENERATION_LIMIT", 50).and_return(value)
+    end
+
+    it "既定は 50 枚" do
+      expect(described_class.service_daily_limit).to eq(50)
+    end
+
+    # 個人上限（3回）だけでは、利用者が増えると総額が青天井になる。
+    it "全体で上限に達すると service_generation_limit_reached を返す" do
+      stub_service_limit_env("2")
+      create_list(:attempt, 2, status: "published", generated_at: Time.current)
+
+      result = nil
+      expect { result = described_class.call(attempt) }
+        .not_to have_enqueued_job(GenerateImageJob)
+
+      expect(result.error_code).to eq("service_generation_limit_reached")
+      expect(attempt.reload.generated_at).to be_nil
+    end
+
+    # 個人上限と違って、他人の生成も数に入るのがこのガードの目的。
+    it "他人の生成も数に入る" do
+      stub_service_limit_env("1")
+      create(:attempt, user: create(:user), status: "published", generated_at: Time.current)
+
+      expect(described_class.call(attempt).error_code).to eq("service_generation_limit_reached")
+    end
+
+    it "上限の 1 つ手前なら通る" do
+      stub_service_limit_env("2")
+      create(:attempt, status: "published", generated_at: Time.current)
+
+      expect(described_class.call(attempt)).to be_ok
+    end
+
+    it "空文字や数値でない値は既定値に落とす" do
+      stub_service_limit_env("")
+      expect(described_class.service_daily_limit).to eq(50)
+
+      stub_service_limit_env("abc")
+      expect(described_class.service_daily_limit).to eq(50)
+
+      stub_service_limit_env("0")
+      expect(described_class.service_daily_limit).to eq(50)
+    end
+  end
+
   describe "日付の境界" do
     # 「1日」は JST の暦日（config.time_zone = "Asia/Tokyo"）。
     # 2026-08-02 12:00 JST を「今」として、前日 23:59 と当日 0:00 の扱いを固定する。
