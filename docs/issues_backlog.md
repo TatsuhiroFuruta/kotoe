@@ -236,10 +236,30 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 目的：ダミーを本物の画像生成に差し替える。
 - 依存：4-2
 - タスク：
-  - [ ] 画像生成API（OpenAI GPT Image など）クライアント実装（**APIキーはサーバー側のみ**）
-  - [ ] `GenerateImageJob` をダミー→本APIに差し替え、失敗時 status: failed
-  - [ ] エラー/リトライ、コスト観点の最小ガード
+  - [x] 画像生成API（**gpt-image-2 / low / 1024×1024 / WebP・圧縮90**）クライアント実装
+        （**APIキーはサーバー側のみ**）→ 公式 gem を使わず Net::HTTP。SDK が全エンドポイント
+        ぶんを読み込み、余裕 37 MB の本番に載せる価値がないため。判断の根拠は
+        `docs/superpowers/specs/2026-08-04-issue-4-3-image-generation-design.md`
+  - [x] `GenerateImageJob` をダミー→本APIに差し替え、失敗時 status: failed
+        → プロバイダは `KOTOE_IMAGE_PROVIDER` で切替。ローカル・CI・E2E はダミーで回る
+        （実APIだと E2E のたびに課金され、生成に最大2分かかって不安定になるため）
+  - [x] エラー/リトライ、コスト観点の最小ガード
+        → リトライの可否を**例外の型**で表す（`TransientError` は 2 回、Cloudinary の
+        `UploadError` は 3 回、`PermanentError` は `discard_on`）。生成側を 2 回にとどめたのは、
+        タイムアウトのリトライが同じ1枠に二重課金するため。
+        失敗の理由は `attempts.failure_reason` で返す。
+        コストガードは「アプリ 50枚/日（503）→ 予算アラート $5 → 前払い $20」の3層
+  - [ ] **本番スモーク**：実キーでの疎通、`memory.peak` の実測、実エラー文字列の採取、
+        キルスイッチの動作確認（手順は設計ドキュメントと `docs/deployment.md`）
 - 完了条件：実際の描写文から画像が生成され published になる。失敗時は failed になり再試行できる。
+- **設計中に判明した既存ドキュメントの誤り（訂正済み）**：
+  - README の「生成 API が URL を返すならそれを Cloudinary に取り込ませる」というメモリ削減案は
+    **成立しない**。gpt-image 系は base64 でしか返さない
+  - OpenAI の monthly budget は**遮断ではなく通知**。本当のハードストップは前払いクレジット
+    ＋オートリチャージ off だけ
+- **7-3 への申し送り**：生成画像は WebP で保存しているため、**ダウンロードURLには必ず
+  `f_png` / `f_jpg` と `fl_attachment` を付ける**。保存URLをそのまま `download` 属性に
+  渡すと `.webp` が落ち、macOS の Preview で開けない環境がある。
 
 ---
 

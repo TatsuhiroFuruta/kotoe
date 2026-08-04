@@ -24,6 +24,10 @@
 | `CORS_ALLOWED_ORIGIN_REGEX` | **手入力** | Vercel プレビュー用。**チーム slug を必ず含める**（`\A \z` は実装側が付けるので書かない） |
 | `CLOUDINARY_URL` | **手入力** | Cloudinary の API Environment variable。api_secret を含むためサーバー専用。未設定だと boot で raise する |
 | `SOLID_QUEUE_IN_PUMA` | `render.yaml` | `true`。Solid Queue のワーカーを Puma プロセス内で起動する。未設定だとジョブが enqueue されるだけで処理されない |
+| `OPENAI_API_KEY` | **手入力** | 画像生成 API のキー。**サーバー専用**。`KOTOE_IMAGE_PROVIDER=openai` のとき未設定だと boot で raise する |
+| `KOTOE_IMAGE_PROVIDER` | **手入力** | `openai`。未設定でも production の既定は `openai` だが、明示しておく |
+| `KOTOE_GENERATION_ENABLED` | 任意 | 既定 `true`。`false` / `0` / `off` で生成を全停止（キルスイッチ） |
+| `KOTOE_SERVICE_DAILY_GENERATION_LIMIT` | 任意 | 既定 `50`。サービス全体の1日の生成枚数 |
 
 - `sync: false` の項目は秘密/環境依存のためリポジトリに置かず、ダッシュボードで手入力する。
 - 許可オリジン（`CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_ORIGIN_REGEX`）が両方未設定のまま
@@ -50,6 +54,34 @@
 `CLOUDINARY_URL` が未設定のまま本番を起動すると、`config/initializers/cloudinary.rb`
 が起動時に例外を出して落ちる。設定漏れに気づかないままデプロイが green に見える
 状態を防ぐため、意図的にそうしてある。
+
+### OpenAI（画像生成）
+
+1. platform.openai.com の Project で API キーを発行し、Render の kotoe-api →
+   Environment に `OPENAI_API_KEY` として貼る
+2. **前払いクレジットを $20 購入し、オートリチャージを off にする**
+3. 予算アラートを **$5**（80% / 95% 通知）に設定する
+
+**⚠️ OpenAI の monthly budget は遮断ではなく通知である**（2026年時点）。上限に達しても
+メールとダッシュボードのバナーが出るだけで、キーは動き続け課金も積み上がる。
+**唯一の本当のハードストップは「前払いクレジット＋オートリチャージ off」**。
+
+コストガードは3層で、**穏やかなガードが先に効くように値を決めてある**。
+
+| 層 | 値 | 効いたときに起きること |
+|---|---|---|
+| アプリ側の1日上限 | 50 枚/日 | `generate` が **503 で即座に断られる**。ジョブは積まれず、**生成枠も消費されない** |
+| 予算アラート | $5 | メール通知のみ。遮断しない |
+| 前払いクレジット | $20・オートリチャージ off | ジョブは走り、API が 429 を返し、attempt が **failed** になる。枠は戻らない |
+
+前払いを 50枚/日 の月額最悪値（$16.5）**より上**に置くのが要点。下に置くと、アプリ側の
+穏やかなガードに達する前に残高が尽き、乱暴なほうの失敗が先に起きる。
+
+`OPENAI_API_KEY` が未設定のまま `KOTOE_IMAGE_PROVIDER=openai` で起動すると、
+`config/initializers/openai.rb` が起動時に例外を出して落ちる（Cloudinary と同じ方針）。
+
+**生成を緊急停止したいとき**は `KOTOE_GENERATION_ENABLED=false` を設定する。
+デプロイは不要で、環境変数の変更による再起動だけで効く。
 
 ### Vercel（Next.js）
 
