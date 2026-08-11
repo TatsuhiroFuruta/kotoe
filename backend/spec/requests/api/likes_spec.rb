@@ -75,6 +75,17 @@ RSpec.describe "再現いいね API", type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
+    # Post#discard は挑戦にカスケードしないので、挑戦だけを見ると kept かつ published の
+    # ままになる。お題が消えた挑戦は読み取り API から辿れないのに、いいねだけ書き込めて
+    # ランキング（6-1 / 6-2）に効いてしまうため、ここでも塞ぐ。
+    it "お題が削除済みなら 404" do
+      attempt.post.discard!
+
+      post "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "存在しない ID は 404" do
       post "/api/attempts/0/like", headers: auth_headers(token), as: :json
 
@@ -154,6 +165,14 @@ RSpec.describe "再現いいね API", type: :request do
 
     it "削除済みの挑戦には 404" do
       attempt.discard!
+
+      delete "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "お題が削除済みなら 404" do
+      attempt.post.discard!
 
       delete "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
 
