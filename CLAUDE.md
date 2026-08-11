@@ -65,6 +65,7 @@ CI の bundler-audit は**脆弱性DBが更新された時点で落ちる**。�
 - 自動生成ファイル（`db/schema.rb` など）は rubocop の対象外にする。
 - Fat Model / Skinny Controller。複雑なロジックはモデルまたは PORO のサービスオブジェクトに寄せる。
 - 論理削除は必ず `discard` を使う（`discarded_at`）。**物理削除しない**（他テーブルからの参照が壊れるため）。通常のクエリは `kept` スコープで未削除を対象にする。
+  - **例外：トグル用の中間テーブル（`likes` / `favorites`）は物理削除する。** 理由は3つ。(1) `(user_id, attempt_id)` の複合ユニーク制約と両立せず、行を残すと同じ対象にいいね／お気に入りをし直せなくなる。(2) これらのテーブルには `discarded_at` が無く、`has_many ..., dependent: :destroy` も物理削除前提で書かれている。(3) 何からも参照されておらず、「取り消し」に記録を残す意味が無いため、上のルールの趣旨（参照が壊れる）が当てはまらない。
 - N+1 に注意（`includes` を使う）。
 - テストは RSpec：
   - model spec（関連・バリデーション・スコープ）、request spec（APIの入出力）、job spec（非同期）を用途に応じて。
