@@ -256,11 +256,26 @@ RSpec.describe "GET /api/posts/:id", type: :request do
       "similarity_score" => nil,
       "user" => { "id" => challenger.id, "name" => "挑戦者" },
       "likes_count" => 3,
+      "liked" => false,
       "created_at" => attempt.created_at.utc.iso8601
     )
     expect(response.parsed_body["meta"]).to eq(
       "current_page" => 1, "total_pages" => 1, "total_count" => 1
     )
+  end
+
+  it "ログインしていれば自分がいいねした挑戦だけ liked が true になる" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    post_record = create(:post)
+    liked = create(:attempt, :published, post: post_record)
+    not_liked = create(:attempt, :published, post: post_record)
+    create(:like, user: user, attempt: liked)
+
+    get "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    liked_flags = response.parsed_body["attempts"].to_h { |a| [ a["id"], a["liked"] ] }
+    expect(liked_flags).to eq(liked.id => true, not_liked.id => false)
   end
 
   it "他人の下書きは出ない" do

@@ -18,6 +18,7 @@ RSpec.describe "挑戦 API", type: :request do
         "generated_image_public_id" => nil,
         "similarity_score" => nil,
         "likes_count" => 0,
+        "liked" => false,
         "user" => { "id" => user.id, "name" => user.name }
       )
       expect(Attempt.last.post_id).to eq(post_record.id)
@@ -272,13 +273,23 @@ RSpec.describe "挑戦 API", type: :request do
         "id" => attempt.id,
         "status" => "published",
         "generated_image_public_id" => "kotoe/test/generated/sample",
-        "likes_count" => 2
+        "likes_count" => 2,
+        "liked" => false
       )
       # 比較ビューが「元画像 vs 再現画像」を並べるため、元画像がこの1本で揃う。
       expect(response.parsed_body["post"]).to include(
         "id" => post_record.id,
         "image_public_id" => post_record.image_public_id
       )
+    end
+
+    it "自分がいいねしている挑戦は liked が true になる" do
+      attempt = create(:attempt, :published, post: post_record)
+      create(:like, user: user, attempt: attempt)
+
+      get "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response.parsed_body["attempt"]["liked"]).to be(true)
     end
 
     it "自分の下書きは取得できる" do
