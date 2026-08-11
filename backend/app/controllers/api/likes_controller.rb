@@ -14,11 +14,20 @@ module Api
 
       current_user.likes.find_or_create_by!(attempt: attempt)
       render json: { attempt: attempt_json(attempt) }
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique
-      # 並行リクエストが先に作っていた場合。競合相手の INSERT がコミット済みなら
-      # uniqueness バリデーションが（RecordInvalid）、まだ進行中なら複合ユニーク
-      # インデックスが（RecordNotUnique）検知する。どちらも最終状態は要求どおり
-      # 「いいね済み」なので成功として扱う。rescue しないと同時クリックで 500 になる。
+    rescue ActiveRecord::RecordNotUnique
+      # 並行リクエストの INSERT がまだ進行中で、複合ユニークインデックスが検知した場合。
+      # 最終状態は要求どおり「いいね済み」なので成功として扱う。
+      # rescue しないと同時クリックで 500 になる。
+      render json: { attempt: attempt_json(attempt) }
+    rescue ActiveRecord::RecordInvalid => e
+      # 並行リクエストの INSERT がコミット済みで、uniqueness バリデーションが
+      # 検知した場合。重複だけを成功に読み替える。
+      #
+      # RecordInvalid をまとめて握り潰さないのは、将来 Like にバリデーションが
+      # 増えたときに、弾かれたいいねが 200 と liked: false で返り、エラーコードも
+      # 出ないままフロントが失敗に気づけなくなるため。
+      raise unless e.record.errors.of_kind?(:user_id, :taken)
+
       render json: { attempt: attempt_json(attempt) }
     end
 

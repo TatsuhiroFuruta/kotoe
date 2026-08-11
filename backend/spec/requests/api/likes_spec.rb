@@ -111,12 +111,28 @@ RSpec.describe "再現いいね API", type: :request do
     end
 
     it "バリデーションの競合（RecordInvalid）でも 200 を返す" do
+      duplicate = Like.new
+      duplicate.errors.add(:user_id, :taken)
       allow_any_instance_of(ActiveRecord::Associations::CollectionProxy)
-        .to receive(:find_or_create_by!).and_raise(ActiveRecord::RecordInvalid.new(Like.new))
+        .to receive(:find_or_create_by!).and_raise(ActiveRecord::RecordInvalid.new(duplicate))
 
       post "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
 
       expect(response).to have_http_status(:ok)
+    end
+
+    # 「重複していた」以外の検証失敗まで成功にすると、将来 Like にバリデーションが
+    # 増えたとき 200 と liked: false を返し、フロントが失敗に気づけなくなる。
+    it "重複以外の検証失敗は成功にしない" do
+      other = Like.new
+      other.errors.add(:base, :invalid)
+      allow_any_instance_of(ActiveRecord::Associations::CollectionProxy)
+        .to receive(:find_or_create_by!).and_raise(ActiveRecord::RecordInvalid.new(other))
+
+      post "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body).not_to have_key("attempt")
     end
   end
 
