@@ -108,4 +108,68 @@ RSpec.describe "再現いいね API", type: :request do
       expect(response).to have_http_status(:ok)
     end
   end
+
+  describe "DELETE /api/attempts/:attempt_id/like" do
+    it "いいねを解除すると 200 と更新後の挑戦を返す" do
+      create(:like, user: user, attempt: attempt)
+
+      expect {
+        delete "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+      }.to change(Like, :count).by(-1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["attempt"]).to include(
+        "id" => attempt.id,
+        "likes_count" => 0,
+        "liked" => false
+      )
+    end
+
+    it "いいねしていなくても 200 を返し、何も消えない" do
+      expect {
+        delete "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+      }.not_to change(Like, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["attempt"]).to include("likes_count" => 0, "liked" => false)
+    end
+
+    it "他人のいいねは消えない" do
+      create(:like, user: user, attempt: attempt)
+      create(:like, attempt: attempt)
+
+      delete "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response.parsed_body["attempt"]).to include("likes_count" => 1, "liked" => false)
+      expect(Like.where(attempt: attempt).count).to eq(1)
+    end
+
+    it "下書きには 404" do
+      draft = create(:attempt)
+
+      delete "/api/attempts/#{draft.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "削除済みの挑戦には 404" do
+      attempt.discard!
+
+      delete "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "存在しない ID は 404" do
+      delete "/api/attempts/0/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "未認証は 401" do
+      delete "/api/attempts/#{attempt.id}/like", as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
 end

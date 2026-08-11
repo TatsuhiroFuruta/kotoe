@@ -22,6 +22,20 @@ module Api
       render json: { attempt: attempt_json(attempt) }
     end
 
+    def destroy
+      attempt = likeable_attempt
+      # 解除は物理削除。likes には discarded_at が無く、行を残すと複合ユニークに
+      # 引っかかって二度といいねし直せなくなる（CLAUDE.md の論理削除ルールの例外。
+      # likes は何からも参照されておらず、取り消しに記録を残す意味も無い）。
+      #
+      # いいねしていなければ何もしない（冪等）。自分の挑戦でも 422 にしない。
+      # セルフいいねを禁じている以上「いいねしていない状態」で確定しており、
+      # 冪等な DELETE の定義どおり現状を返せばよい。
+      current_user.likes.find_by(attempt: attempt)&.destroy
+
+      render json: { attempt: attempt_json(attempt) }
+    end
+
     private
 
     # いいねできるのは公開済みの挑戦だけ。下書き・生成中・失敗・削除済み・存在しない ID は
