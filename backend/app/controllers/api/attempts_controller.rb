@@ -2,6 +2,8 @@ module Api
   # 挑戦（Attempt）。生成の可否や回数の判定は Attempts::Generation に、JSON の形は
   # シリアライザに寄せ、ここは HTTP の入出力だけを扱う。
   class AttemptsController < ApplicationController
+    include AttemptRendering
+
     # show だけ認証不要。公開済みの挑戦は誰でも見られる（共有用パーマリンク）。
     before_action :authenticate_user!, except: :show
 
@@ -38,7 +40,10 @@ module Api
       attempt = visible_attempt
       post = Post.kept.includes(:user).with_counts.find(attempt.post_id)
 
-      render json: { attempt: AttemptSerializer.call(attempt), post: PostSerializer.call(post) }
+      render json: {
+        attempt: AttemptSerializer.call(attempt, liked: liked?(attempt)),
+        post: PostSerializer.call(post)
+      }
     end
 
     def destroy
@@ -73,18 +78,6 @@ module Api
     # ["foo"][:description] が TypeError になる。受け取ってよい型だけを名指しする。
     def attempt_attributes
       params[:attempt].is_a?(ActionController::Parameters) ? params[:attempt] : {}
-    end
-
-    # AttemptSerializer は with_likes_count が SELECT 句で付ける別名属性に依存している。
-    # 新規・更新直後のレコードには乗っていないので、そのスコープ経由で取り直す。
-    # 0 を直接埋めないのは、シリアライザの前提を1か所でも崩すと後で気づけなくなるため。
-    def attempt_json(attempt)
-      AttemptSerializer.call(Attempt.includes(:user).with_likes_count.find(attempt.id))
-    end
-
-    def render_validation_errors(attempt)
-      errors = attempt.errors.details.transform_values { |details| details.pluck(:error) }
-      render json: { errors: errors }, status: :unprocessable_content
     end
 
     def render_error(code, extra = {})

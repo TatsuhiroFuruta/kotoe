@@ -40,12 +40,15 @@ module Api
     def show
       post = Post.kept.includes(:user).with_counts.find(params[:id])
       attempts = Attempt.listing_for(post).page(page_param)
+      # 一覧ぶんのいいね済み判定を 1 クエリでまとめて引く（1 件ずつ引くと N+1 になる）。
+      # 未ログインなら空集合が返り、すべて false になる。
+      liked_ids = Like.liked_attempt_ids(current_user, attempts.map(&:id))
 
       render json: {
         post: PostSerializer.call(post),
         # 挑戦の並びは新着順で固定。いいね順（ベスト再現）は 6-1 で
         # ここに sort の分岐を足す。
-        attempts: attempts.map { |attempt| AttemptSerializer.call(attempt) },
+        attempts: attempts.map { |attempt| AttemptSerializer.call(attempt, liked: liked_ids.include?(attempt.id)) },
         meta: PaginationSerializer.call(attempts)
       }
     end

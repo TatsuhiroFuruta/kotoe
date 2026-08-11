@@ -2,8 +2,12 @@
 #
 # likes_count は Attempt.with_likes_count が SELECT 句で付ける別名属性なので、
 # そのスコープを通っていない Attempt を渡すと ActiveModel::MissingAttributeError になる。
+#
+# liked（そのリクエストの本人がいいね済みか）はキーワードを必須にしてある。
+# デフォルト値を置くと、渡し忘れたときに黙って false が入り
+# 「いいねしたのにハートが白いまま」になって気づけない。
 class AttemptSerializer
-  def self.call(attempt)
+  def self.call(attempt, liked:)
     {
       id: attempt.id,
       description: attempt.description,
@@ -13,6 +17,7 @@ class AttemptSerializer
       similarity_score: attempt.similarity_score,
       user: UserSerializer.public_profile(attempt.user),
       likes_count: attempt.likes_count,
+      liked: liked,
       created_at: attempt.created_at.utc.iso8601
     }
   end

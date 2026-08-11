@@ -26,6 +26,10 @@ Rails.application.routes.draw do
     # 挑戦（issue 4-2）。閲覧（show）だけ認証不要で、公開済み以外は本人にしか見えない。
     resources :attempts, only: %i[show update destroy] do
       post :generate, on: :member
+
+      # 再現いいね（issue 5-1）。単数リソースなので /api/attempts/:attempt_id/like の
+      # 1 パスに POST（いいね）と DELETE（解除）が生える。
+      resource :like, only: %i[create destroy]
     end
   end
 
