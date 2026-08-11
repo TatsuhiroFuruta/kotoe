@@ -25,8 +25,8 @@ module Api
       #
       # RecordInvalid をまとめて握り潰さないのは、将来 Like にバリデーションが
       # 増えたときに、弾かれたいいねが 200 と liked: false で返り、エラーコードも
-      # 出ないままフロントが失敗に気づけなくなるため。
-      raise unless e.record.errors.of_kind?(:user_id, :taken)
+      # 出ないままフロントが失敗に気づけなくなるため。重複以外は通常の検証エラーとして返す。
+      return render_validation_errors(e.record) unless duplicate_only?(e.record)
 
       render json: { attempt: attempt_json(attempt) }
     end
@@ -57,6 +57,14 @@ module Api
     # ベスト再現（6-1）と全体ランキング（6-2）で削除済みのお題の挑戦が順位を持つ。
     def likeable_attempt
       Attempt.kept.published.joins(:post).merge(Post.kept).find(params[:attempt_id])
+    end
+
+    # 「重複していた」だけが原因か。of_kind? では足りない。あれは重複が**含まれていれば**
+    # true なので、重複と別の原因が同時に立ったときに別の原因ごと成功に読み替えてしまう。
+    # errors が空の RecordInvalid を重複と誤認しないよう any? も見る（all? は空で true）。
+    def duplicate_only?(record)
+      record.errors.any? &&
+        record.errors.all? { |error| error.attribute == :user_id && error.type == :taken }
     end
 
     def render_error(code)

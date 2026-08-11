@@ -80,11 +80,6 @@ module Api
       params[:attempt].is_a?(ActionController::Parameters) ? params[:attempt] : {}
     end
 
-    def render_validation_errors(attempt)
-      errors = attempt.errors.details.transform_values { |details| details.pluck(:error) }
-      render json: { errors: errors }, status: :unprocessable_content
-    end
-
     def render_error(code, extra = {})
       render json: { error: code }.merge(extra), status: :unprocessable_content
     end

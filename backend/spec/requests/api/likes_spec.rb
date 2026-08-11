@@ -101,6 +101,10 @@ RSpec.describe "再現いいね API", type: :request do
     # 並行リクエストの再現は request spec では作れないため、ここだけ例外をスタブして
     # rescue 節が生きていることを確かめる。DB 制約とアプリ側の uniqueness バリデーションの
     # どちらが先に当たるかは競合相手がコミット済みかどうかで変わるので、両方を見る。
+    #
+    # any_instance_of が広いのは承知のうえ。request spec からは current_user.likes だけを
+    # 名指しできない。このリクエストで find_or_create_by! を呼ぶのが 1 か所しかないことに
+    # 依存しているので、コントローラに別の呼び出しを足すときはここを見直すこと。
     it "DB 制約の競合（RecordNotUnique）でも 200 を返す" do
       allow_any_instance_of(ActiveRecord::Associations::CollectionProxy)
         .to receive(:find_or_create_by!).and_raise(ActiveRecord::RecordNotUnique)
@@ -123,7 +127,8 @@ RSpec.describe "再現いいね API", type: :request do
 
     # 「重複していた」以外の検証失敗まで成功にすると、将来 Like にバリデーションが
     # 増えたとき 200 と liked: false を返し、フロントが失敗に気づけなくなる。
-    it "重複以外の検証失敗は成功にしない" do
+    # 文言ではなくエラーコードを返すこと（i18n はフロント）もここで固定する。
+    it "重複以外の検証失敗はエラーコードで返す" do
       other = Like.new
       other.errors.add(:base, :invalid)
       allow_any_instance_of(ActiveRecord::Associations::CollectionProxy)
@@ -132,7 +137,22 @@ RSpec.describe "再現いいね API", type: :request do
       post "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body).not_to have_key("attempt")
+      expect(response.parsed_body).to eq("errors" => { "base" => [ "invalid" ] })
+    end
+
+    # of_kind? は「重複が含まれていれば true」なので、重複と別の原因が同時に立つと
+    # 別の原因ごと握り潰してしまう。重複「だけ」が原因のときに限る。
+    it "重複と別の検証失敗が同時なら成功にしない" do
+      both = Like.new
+      both.errors.add(:user_id, :taken)
+      both.errors.add(:base, :invalid)
+      allow_any_instance_of(ActiveRecord::Associations::CollectionProxy)
+        .to receive(:find_or_create_by!).and_raise(ActiveRecord::RecordInvalid.new(both))
+
+      post "/api/attempts/#{attempt.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["errors"]).to include("base" => [ "invalid" ])
     end
   end
 
@@ -171,10 +191,38 @@ RSpec.describe "再現いいね API", type: :request do
       expect(Like.where(attempt: attempt).count).to eq(1)
     end
 
+    # POST は所有者を 422 で弾くが、DELETE は弾かない。セルフいいねを禁じている以上
+    # 「いいねしていない状態」で確定しており、冪等な DELETE の定義どおり現状を返せばよい。
+    # POST と DELETE でチェックが非対称なのは意図した設計なので、対称化されないよう固定する。
+    it "自分の挑戦でも 422 にせず 200 を返す" do
+      own = create(:attempt, :published, user: user)
+
+      delete "/api/attempts/#{own.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["attempt"]).to include("likes_count" => 0, "liked" => false)
+    end
+
     it "下書きには 404" do
       draft = create(:attempt)
 
       delete "/api/attempts/#{draft.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "生成中には 404" do
+      generating = create(:attempt, :generating)
+
+      delete "/api/attempts/#{generating.id}/like", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "失敗した挑戦には 404" do
+      failed = create(:attempt, :failed)
+
+      delete "/api/attempts/#{failed.id}/like", headers: auth_headers(token), as: :json
 
       expect(response).to have_http_status(:not_found)
     end

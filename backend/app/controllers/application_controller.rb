@@ -9,6 +9,13 @@ class ApplicationController < ActionController::API
 
   protected
 
+  # 検証エラーは属性ごとの**エラーコード**の配列で返す（`{ errors: { title: ["blank"] } }`）。
+  # 文言は返さない。翻訳・表示はフロントの辞書が担当する。
+  def render_validation_errors(record)
+    errors = record.errors.details.transform_values { |details| details.pluck(:error) }
+    render json: { errors: errors }, status: :unprocessable_content
+  end
+
   # devise の既定は email / password だけなので、sign_up で name も受け取れるようにする。
   def configure_permitted_parameters
     devise_parameter_sanitizer.permit(:sign_up, keys: [ :name ])
