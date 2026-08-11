@@ -274,6 +274,43 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   `f_png` / `f_jpg` と `fl_attachment` を付ける**。保存URLをそのまま `download` 属性に
   渡すと `.webp` が落ち、macOS の Preview で開けない環境がある。
 
+### 🔵 4-4. 削除済みのお題にぶら下がる挑戦への操作を塞ぐ
+- 背景：**`Post#discard` は挑戦にカスケードしない**（`has_many :attempts,
+  dependent: :restrict_with_exception` で discard のコールバックは無い）。そのため、お題を
+  論理削除しても、その下の挑戦は `attempts.discarded_at` が nil のまま残る。挑戦だけを見て
+  絞っている経路では、**読み取り API から辿れないのに書き込みだけ通る**状態になる。
+  5-1 のレビューで `LikesController` に同じ穴が見つかり、そちらは
+  `joins(:post).merge(Post.kept)` で塞いだ（PR #82）。**同じ穴が `AttemptsController` に残っている。**
+- 依存：4-2
+- 塞げている経路（比較用）：
+  - `POST /api/posts/:post_id/attempts` … `Post.kept.find` なので 404
+  - `GET /api/attempts/:id` … 別途 `Post.kept...find(attempt.post_id)` を引くので 404
+  - `POST/DELETE /api/attempts/:id/like` … 5-1 で対応済み
+  - お題一覧・詳細の挑戦一覧 … `Post.kept` 起点なので出ない
+- 残っている経路：`AttemptsController#owned_attempt`（`current_user.attempts.kept.find(params[:id])`）
+  を使う **`PATCH` / `POST :generate` / `DELETE`**。お題の状態を見ていない。
+- **いちばん困るのは `generate`**。削除済みのお題の下書きから画像生成ジョブを積める。
+  - 生成枠は **enqueue 時に消費し、削除しても戻らない**（ドメインの重要ルール）。ユーザーは
+    自分の1日の枠を、誰にも見えない結果のために失う。
+  - 実費もかかる（gpt-image-2 low）。ただし被害額はコストガードの4層（アプリ 50枚/日 →
+    Spend alert → Hard limit → 前払い）で頭打ちになるので、🟢 ではなく 🔵 に置いている。
+  - 生成が成功しても、その挑戦は `GET /api/attempts/:id` が 404 になるため**誰も見られない**。
+- 先に決めること：
+  1. **`DELETE` も塞ぐか**。
+     - 案A（推奨）：`PATCH` と `generate` だけ塞ぎ、`DELETE` は許可する。お題が消えたあとに
+       自分の下書きを片付ける手段を残せる。いいねの `DELETE` を 422 にしなかったのと同じ考え方。
+     - 案B：3つとも塞ぐ。一貫はするが、ユーザーが自分のデータを整理できなくなる。
+  2. **ジョブ側でも見るか**。`GenerateImageJob` は `Attempt.kept.generating.find_by(id:)` で
+     取り直しており、ここもお題を見ていない。コントローラだけ塞ぐと「enqueue 後・実行前に
+     お題が削除された」場合に生成が走る。ジョブ側にも `Post.kept` の条件を足すか、
+     その競合は許容するか。
+- タスク：
+  - [ ] `owned_attempt` に `joins(:post).merge(Post.kept)` を足す（対象アクションは上の判断次第）
+  - [ ] （案A なら）`DELETE` 用に、お題の状態を見ないスコープを別に用意する
+  - [ ] `GenerateImageJob` の取り直しにも `Post.kept` を足す（判断次第）
+  - [ ] request spec / job spec
+- 完了条件：削除済みのお題にぶら下がる挑戦から画像生成を起動できない。生成枠も実費も消費しない。
+
 ---
 
 ## マイルストーン 5：いいね・お気に入り・通報
