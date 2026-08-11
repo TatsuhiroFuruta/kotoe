@@ -47,9 +47,11 @@
 
 `likes_count` は SELECT 句の別名属性なので、いいねの増減後は `with_likes_count` 経由で取り直してからシリアライズする。
 
-### 対象は `kept` かつ `published` の挑戦のみ
+### 対象は `kept` かつ `published`、お題も `kept` の挑戦のみ
 
-`Attempt.kept.published.find(params[:attempt_id])` の一撃で絞る。下書き・生成中・失敗・削除済みはすべて `RecordNotFound` → 404。
+`Attempt.kept.published.joins(:post).merge(Post.kept).find(params[:attempt_id])` の一撃で絞る。下書き・生成中・失敗・削除済み・お題が削除済みは、すべて `RecordNotFound` → 404。
+
+お題側も見るのは、`Post#discard` が挑戦にカスケードしないため（`has_many :attempts, dependent: :restrict_with_exception` で、discard のコールバックは無い）。挑戦だけを見ると `kept` かつ `published` のままで、読み取り API からは辿れない（`AttemptsController#show` が別途 `Post.kept` を引いて 404 になる）のに、いいねだけ書き込めてしまう。その票は post スコープを持たない `Attempt.likes_count_sql` に効くため、削除済みのお題の挑戦がベスト再現（6-1）と全体ランキング（6-2）で順位を持つ。`POST /api/posts/:post_id/attempts` が `Post.kept.find` で挑戦の作成を塞いでいるのとも揃う。
 
 403 ではなく 404 にして存在ごと隠すのは、`AttemptsController#visible_attempt` と同じ理由（他人の下書きの存在を漏らさない）。スコープに条件を畳み込むのも `owned_attempt` が `current_user.attempts.kept.find` でやっているのと同じ発想で、チェックの書き忘れが構造的に起こらないようにするため。
 
@@ -79,6 +81,8 @@ issue の完了条件「二重いいねが防止される」は、`likes` に2�
 - 競合相手の INSERT が**まだ進行中** → バリデーションは通過し、DB 制約が検知 → `ActiveRecord::RecordNotUnique`
 
 `RecordNotUnique` だけを rescue すると前者で 500 になるので、両方を rescue する。
+
+ただし `RecordInvalid` はまとめて握り潰さず、**重複（`errors.of_kind?(:user_id, :taken)`）のときだけ**成功に読み替える。将来 `Like` にバリデーションが増えたとき、弾かれたいいねが 200 と `liked: false` で返り、エラーコードも出ないままフロントが失敗に気づけなくなるため。
 
 ### いいね解除は物理削除（CLAUDE.md の例外）
 
