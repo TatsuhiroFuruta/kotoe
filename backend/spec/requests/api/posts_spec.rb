@@ -1,17 +1,6 @@
 require "rails_helper"
 
 RSpec.describe "GET /api/posts", type: :request do
-  # 実行された SELECT の本数を数える。N+1 を作り込んでいないことの検査に使う。
-  def count_select_queries
-    count = 0
-    counter = lambda do |_name, _start, _finish, _id, payload|
-      count += 1 if payload[:sql].start_with?("SELECT") && !%w[SCHEMA CACHE].include?(payload[:name])
-    end
-
-    ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { yield }
-    count
-  end
-
   it "認証なしで一覧を取得できる" do
     author = create(:user, name: "投稿者")
     post_record = create(:post, user: author, title: "夕暮れの交差点", image_public_id: "kotoe/test/posts/a")
@@ -276,6 +265,21 @@ RSpec.describe "GET /api/posts/:id", type: :request do
 
     liked_flags = response.parsed_body["attempts"].to_h { |a| [ a["id"], a["liked"] ] }
     expect(liked_flags).to eq(liked.id => true, not_liked.id => false)
+  end
+
+  # ログイン状態で測るのが要点。未認証だと Like.liked_attempt_ids が early return して
+  # DB を触らないため、liked の判定を 1 件ずつの exists? に書き換えても検知できない。
+  it "挑戦が増えてもクエリ数が増えない（liked の判定で N+1 を作り込まない）" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    post_record = create(:post)
+    create(:attempt, :published, post: post_record)
+    with_one = count_select_queries { get "/api/posts/#{post_record.id}", headers: auth_headers(token) }
+
+    create_list(:attempt, 2, :published, post: post_record)
+    with_three = count_select_queries { get "/api/posts/#{post_record.id}", headers: auth_headers(token) }
+
+    expect(with_three).to eq(with_one)
   end
 
   it "他人の下書きは出ない" do
