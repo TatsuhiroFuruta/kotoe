@@ -146,12 +146,15 @@ module IdempotentToggle
   private
 
   def toggle_on(association, target)
-    association.find_or_create_by!(target)
+    begin
+      association.find_or_create_by!(target)
+    rescue ActiveRecord::RecordNotUnique
+      nil
+    rescue ActiveRecord::RecordInvalid => e
+      return render_validation_errors(e.record) unless duplicate_only?(e.record)
+    end
+
     yield
-  rescue ActiveRecord::RecordNotUnique
-    yield
-  rescue ActiveRecord::RecordInvalid => e
-    duplicate_only?(e.record) ? yield : render_validation_errors(e.record)
   end
 
   def duplicate_only?(record)
@@ -169,7 +172,7 @@ toggle_on(current_user.favorites, post: post) do
 end
 ```
 
-`yield` が3か所に現れるのは冗長に見えるが、`rescue` から `else` 相当に合流させる書き方が Ruby には無く、真偽値を返して呼び出し側で分岐する形にすると「時々レンダリングして時々しないメソッド」になって読みにくい。3回書くほうが素直。
+`rescue` の範囲は `find_or_create_by!` だけに閉じ、`yield` はメソッドの末尾に 1 回だけ置く。メソッド全体を `rescue` して各節で `yield` する書き方（5-1 の `LikesController` がそうだった）は、ブロック自身がこの 2 つの例外を投げたときに二重に描画され、`AbstractController::DoubleRenderError` が元の原因を覆い隠す。現在のブロックは読み取りしかしないので到達しないが、3 つ目のトグル（5-4）が来る共有部品でこの形を残す理由が無い。
 
 マージ済みの `LikesController` に手を入れることになるが、`likes_spec.rb` の並行競合テストは `CollectionProxy#find_or_create_by!` をスタブしており、呼び出し場所が concern に移っても効き続ける（あの spec のコメントが「このリクエストで `find_or_create_by!` を呼ぶのが1か所しかないことに依存している」と断っている条件は維持される）。
 
@@ -237,7 +240,7 @@ module PostRendering
   # 新規作成直後やお気に入りの増減後のレコードには乗っていないので、
   # そのスコープ経由で取り直す。
   def post_json(post)
-    fresh = Post.includes(:user).with_counts.find(post.id)
+    fresh = Post.kept.includes(:user).with_counts.find(post.id)
     PostSerializer.call(fresh, favorited: favorited?(fresh))
   end
 

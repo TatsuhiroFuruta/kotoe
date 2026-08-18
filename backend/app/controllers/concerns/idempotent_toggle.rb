@@ -13,22 +13,29 @@ module IdempotentToggle
   # 捕まえる例外が 2 つあるのは、複合ユニークインデックスとアプリ側の uniqueness
   # バリデーションのどちらが先に当たるかが、競合相手の状態で変わるため。
   # RecordNotUnique だけを rescue すると、競合相手がコミット済みのケースで 500 になる。
+  #
+  # rescue の範囲を書き込みだけに閉じ、yield は必ず 1 回にしてある。メソッド全体を
+  # rescue して各節で yield すると、ブロック自身がこの 2 つの例外を投げたときに
+  # 二重に描画され、DoubleRenderError が元の原因を覆い隠す。
   def toggle_on(association, target)
-    association.find_or_create_by!(target)
+    begin
+      association.find_or_create_by!(target)
+    rescue ActiveRecord::RecordNotUnique
+      # 並行リクエストの INSERT がまだ進行中で、複合ユニークインデックスが検知した場合。
+      # 最終状態は要求どおり「ON」なので成功として扱う。
+      # rescue しないと同時クリックで 500 になる。
+      nil
+    rescue ActiveRecord::RecordInvalid => e
+      # 並行リクエストの INSERT がコミット済みで、uniqueness バリデーションが
+      # 検知した場合。重複だけを成功に読み替える。
+      #
+      # RecordInvalid をまとめて握り潰さないのは、将来バリデーションが増えたときに、
+      # 弾かれたトグルが 200 と false で返り、エラーコードも出ないまま
+      # フロントが失敗に気づけなくなるため。重複以外は通常の検証エラーとして返す。
+      return render_validation_errors(e.record) unless duplicate_only?(e.record)
+    end
+
     yield
-  rescue ActiveRecord::RecordNotUnique
-    # 並行リクエストの INSERT がまだ進行中で、複合ユニークインデックスが検知した場合。
-    # 最終状態は要求どおり「ON」なので成功として扱う。
-    # rescue しないと同時クリックで 500 になる。
-    yield
-  rescue ActiveRecord::RecordInvalid => e
-    # 並行リクエストの INSERT がコミット済みで、uniqueness バリデーションが
-    # 検知した場合。重複だけを成功に読み替える。
-    #
-    # RecordInvalid をまとめて握り潰さないのは、将来バリデーションが増えたときに、
-    # 弾かれたトグルが 200 と false で返り、エラーコードも出ないまま
-    # フロントが失敗に気づけなくなるため。重複以外は通常の検証エラーとして返す。
-    duplicate_only?(e.record) ? yield : render_validation_errors(e.record)
   end
 
   # 「重複していた」だけが原因か。of_kind? では足りない。あれは重複が**含まれていれば**
