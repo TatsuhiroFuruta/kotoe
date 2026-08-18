@@ -255,6 +255,10 @@ end
 
 `PostsController#show` は既に `with_counts` 経由で post を取っているので `post_json` は使わず、`favorited?` だけを使う（取り直すと無駄なクエリが1本増える）。
 
+取り直しは `Post.kept` で絞る。現在の呼び出し元（`PostsController#create` の作りたてのレコード、`FavoritesController` の `favoritable_post`）はすべて手前で絞っているので振る舞いは変わらないが、ここが「お題を1件返す」共通の入口になる以上、絞らない呼び出し元が増えたときに、他のすべての経路が 404 を返す削除済みのお題をここだけ 200 で返してしまう。
+
+**同じ理由で `AttemptRendering#attempt_json` にも `Attempt.kept` を足す。** 5-1 で作った時点では付いておらず、呼び出し元（`owned_attempt` / `likeable_attempt` / 作りたての新規レコード）が全て絞っているので実害は無い。それでもこの issue で直すのは、`post_json` にだけ `.kept` があると、同じ型で書かれた 2 つの concern が 1 語だけ違うことになり、その差に意味があるのかを読む側が毎回確かめる羽目になるため。非対称を作ったのがこの変更なので、ここで閉じる。
+
 ### `Favorite.favorited_post_ids`
 
 ```ruby
@@ -365,6 +369,7 @@ post: PostSerializer.call(post, favorited: favorited?(post))
 | `backend/app/controllers/api/favorites_controller.rb` | 新規。create / destroy |
 | `backend/app/controllers/concerns/idempotent_toggle.rb` | 新規。`toggle_on` / `duplicate_only?` |
 | `backend/app/controllers/concerns/post_rendering.rb` | 新規。`post_json` / `favorited?` |
+| `backend/app/controllers/concerns/attempt_rendering.rb` | `attempt_json` の取り直しを `Attempt.kept` で絞る（`post_json` と揃える。下記） |
 | `backend/app/controllers/api/likes_controller.rb` | `IdempotentToggle` を include、rescue と `duplicate_only?` を削除 |
 | `backend/app/controllers/api/posts_controller.rb` | `PostRendering` を include、`index` / `show` / `create` に `favorited` を通す |
 | `backend/app/controllers/api/attempts_controller.rb` | `PostRendering` を include、`show` の post に `favorited` を通す |
