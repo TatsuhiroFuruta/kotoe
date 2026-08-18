@@ -279,8 +279,18 @@ RSpec.describe "挑戦 API", type: :request do
       # 比較ビューが「元画像 vs 再現画像」を並べるため、元画像がこの1本で揃う。
       expect(response.parsed_body["post"]).to include(
         "id" => post_record.id,
-        "image_public_id" => post_record.image_public_id
+        "image_public_id" => post_record.image_public_id,
+        "favorited" => false
       )
+    end
+
+    it "自分がお気に入りしているお題は post の favorited が true になる" do
+      attempt = create(:attempt, :published, post: post_record)
+      create(:favorite, user: user, post: post_record)
+
+      get "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response.parsed_body["post"]["favorited"]).to be(true)
     end
 
     it "自分がいいねしている挑戦は liked が true になる" do
