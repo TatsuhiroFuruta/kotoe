@@ -21,6 +21,10 @@ Rails.application.routes.draw do
     # お題（issue 3-2）。一覧・詳細は認証不要、投稿・削除は要ログイン。
     resources :posts, only: %i[index create show destroy] do
       resources :attempts, only: %i[create]
+
+      # お気に入り（issue 5-2）。単数リソースなので /api/posts/:post_id/favorite の
+      # 1 パスに POST（登録）と DELETE（解除）が生える。attempts の like と対称。
+      resource :favorite, only: %i[create destroy]
     end
 
     # 挑戦（issue 4-2）。閲覧（show）だけ認証不要で、公開済み以外は本人にしか見えない。
