@@ -17,6 +17,11 @@ module PostRendering
   end
 
   # 単体のお題に対する判定。一覧は Favorite.favorited_post_ids を直接呼んで 1 クエリにまとめる。
+  #
+  # AttemptsController はこの concern と AttemptRendering の両方を include している。
+  # 5-4（挑戦のお気に入り）で AttemptRendering 側に favorited?(attempt) を足すと、
+  # Ruby は include 順で黙って片方を勝たせる。そのときは両方を
+  # post_favorited? / attempt_favorited? に改名すること。
   def favorited?(post)
     Favorite.favorited_post_ids(current_user, [ post.id ]).include?(post.id)
   end

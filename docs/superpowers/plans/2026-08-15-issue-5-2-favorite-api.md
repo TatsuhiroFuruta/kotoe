@@ -1141,10 +1141,10 @@ EOF
 
 すべてのタスクが終わったら、PR を出す前に次を確認する。
 
-- [ ] `docker compose exec backend bundle exec rspec` が green
-- [ ] `docker compose exec backend bundle exec rubocop` が `no offenses detected`
-- [ ] `docker compose exec backend bundle exec brakeman` に新規の警告が出ていない
-- [ ] `docker compose up` でアプリが起動し、ブラウザ／curl から手で叩ける（`app/controllers/concerns/` は既存ディレクトリなので restart は不要だが、新しいコントローラが autoload されることを実際に確認する）
+- [x] `docker compose exec backend bundle exec rspec` が green … 393 examples, 0 failures
+- [x] `docker compose exec backend bundle exec rubocop` が `no offenses detected` … 101 files
+- [x] `docker compose exec backend bundle exec brakeman` に新規の警告が出ていない … 0 warnings
+- [x] `docker compose up` でアプリが起動し、ブラウザ／curl から手で叩ける（`app/controllers/concerns/` は既存ディレクトリなので restart は不要だが、新しいコントローラが autoload されることを実際に確認する）
 
 手での確認コマンド（`$TOKEN` はログインして得た `Authorization` ヘッダの値、`$POST_ID` は既存のお題の id）:
 
@@ -1156,5 +1156,13 @@ curl -i -X DELETE "http://localhost:3000/api/posts/$POST_ID/favorite" -H "Author
 
 期待値：POST が `200` で `"favorited": true`、一覧の `favorited` が `true`、DELETE が `200` で `"favorited": false`。
 
-- [ ] プッシュ前に `/code-review` を通す（自己レビューだけでは自分の前提を疑えない）
+実施結果：上記に加えて POST/DELETE の再送（どちらも `200`、状態は不変）、未認証 `POST`（`401`）、
+存在しないお題（`404`）、未認証の一覧（全件 `favorited: false`）、応答に `favorites_count` が
+無いことまで確認した。確認に使ったスモークユーザーは開発 DB から削除済み。
+
+- [x] プッシュ前に `/code-review` を通す（自己レビューだけでは自分の前提を疑えない）
+  … 2 周した。1 周目（`/code-review high`）で `post_json` の `.kept` 欠落と `toggle_on` の
+  二重 `yield` を指摘され修正、`create` の `favorited: false` 直書きは見送り。
+  2 周目（requesting-code-review のレビューア）は Critical なしで「マージ可」。
+  そこで指摘された 6-3 の制約明記と `favorited?` の名前衝突の注意書きを反映した。
 - [ ] PR を出す。本番反映はマイルストーン 5 の区切りで行う（この PR では本番に出さない）

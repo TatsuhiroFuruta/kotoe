@@ -393,6 +393,11 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 ### 🟢 6-3. マイページ API
 - 依存：4-2, 5-2
 - タスク：`GET /api/me/posts` / `me/attempts`(published) / `me/drafts`(draft) / `me/favorites`。
+- **制約：`me/favorites` は `Post.kept` で絞る**。5-2 が削除済みのお題への `DELETE` を 404 に
+  しているのは、「その行はどの画面にも出てこないので片付ける導線に意味がない」という前提に
+  立っているため。絞らないと、解除ボタンが必ず 404 を返す行が画面に出る。しかもお題は
+  discard（論理削除）なので `has_many :favorites, dependent: :destroy` も発火せず、
+  その行はユーザーが二度と消せない。
 - 完了条件：マイページ4タブぶんのデータを取得できる。
 
 ---
