@@ -3,6 +3,7 @@ module Api
   # POST は「この挑戦を、自分がいいねしている状態にせよ」という意味になる。
   class LikesController < ApplicationController
     include AttemptRendering
+    include IdempotentToggle
 
     before_action :authenticate_user!
 
@@ -12,23 +13,9 @@ module Api
       # 直接決める。自分で自分に投票できると同着が自票で覆る。
       return render_error("cannot_like_own_attempt") if attempt.user_id == current_user.id
 
-      current_user.likes.find_or_create_by!(attempt: attempt)
-      render json: { attempt: attempt_json(attempt) }
-    rescue ActiveRecord::RecordNotUnique
-      # 並行リクエストの INSERT がまだ進行中で、複合ユニークインデックスが検知した場合。
-      # 最終状態は要求どおり「いいね済み」なので成功として扱う。
-      # rescue しないと同時クリックで 500 になる。
-      render json: { attempt: attempt_json(attempt) }
-    rescue ActiveRecord::RecordInvalid => e
-      # 並行リクエストの INSERT がコミット済みで、uniqueness バリデーションが
-      # 検知した場合。重複だけを成功に読み替える。
-      #
-      # RecordInvalid をまとめて握り潰さないのは、将来 Like にバリデーションが
-      # 増えたときに、弾かれたいいねが 200 と liked: false で返り、エラーコードも
-      # 出ないままフロントが失敗に気づけなくなるため。重複以外は通常の検証エラーとして返す。
-      return render_validation_errors(e.record) unless duplicate_only?(e.record)
-
-      render json: { attempt: attempt_json(attempt) }
+      toggle_on(current_user.likes, attempt: attempt) do
+        render json: { attempt: attempt_json(attempt) }
+      end
     end
 
     def destroy
@@ -57,14 +44,6 @@ module Api
     # ベスト再現（6-1）と全体ランキング（6-2）で削除済みのお題の挑戦が順位を持つ。
     def likeable_attempt
       Attempt.kept.published.joins(:post).merge(Post.kept).find(params[:attempt_id])
-    end
-
-    # 「重複していた」だけが原因か。of_kind? では足りない。あれは重複が**含まれていれば**
-    # true なので、重複と別の原因が同時に立ったときに別の原因ごと成功に読み替えてしまう。
-    # errors が空の RecordInvalid を重複と誤認しないよう any? も見る（all? は空で true）。
-    def duplicate_only?(record)
-      record.errors.any? &&
-        record.errors.all? { |error| error.attribute == :user_id && error.type == :taken }
     end
 
     def render_error(code)
