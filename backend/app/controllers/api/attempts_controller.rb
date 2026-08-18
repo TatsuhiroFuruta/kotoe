@@ -3,6 +3,7 @@ module Api
   # シリアライザに寄せ、ここは HTTP の入出力だけを扱う。
   class AttemptsController < ApplicationController
     include AttemptRendering
+    include PostRendering
 
     # show だけ認証不要。公開済みの挑戦は誰でも見られる（共有用パーマリンク）。
     before_action :authenticate_user!, except: :show
@@ -42,7 +43,7 @@ module Api
 
       render json: {
         attempt: AttemptSerializer.call(attempt, liked: liked?(attempt)),
-        post: PostSerializer.call(post)
+        post: PostSerializer.call(post, favorited: favorited?(post))
       }
     end
 

@@ -16,6 +16,7 @@ RSpec.describe "GET /api/posts", type: :request do
       "user" => { "id" => author.id, "name" => "投稿者" },
       "attempts_count" => 1,
       "likes_count" => 2,
+      "favorited" => false,
       "created_at" => post_record.created_at.utc.iso8601
     )
   end
@@ -97,12 +98,51 @@ RSpec.describe "GET /api/posts", type: :request do
     expect(response.parsed_body["meta"]["current_page"]).to eq(1)
   end
 
+  it "ログインしていれば自分がお気に入りしたお題だけ favorited が true になる" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    favorited = create(:post)
+    not_favorited = create(:post)
+    create(:favorite, user: user, post: favorited)
+
+    get "/api/posts", headers: auth_headers(token)
+
+    flags = response.parsed_body["posts"].to_h { |p| [ p["id"], p["favorited"] ] }
+    expect(flags).to eq(favorited.id => true, not_favorited.id => false)
+  end
+
+  it "他人がお気に入りしていても自分の favorited は false" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    post_record = create(:post)
+    create(:favorite, post: post_record)
+
+    get "/api/posts", headers: auth_headers(token)
+
+    expect(response.parsed_body["posts"].first["favorited"]).to be(false)
+  end
+
   it "お題が増えてもクエリ数が増えない（N+1 を作り込まない）" do
     create(:post)
     with_one = count_select_queries { get "/api/posts" }
 
     create_list(:post, 2)
     with_three = count_select_queries { get "/api/posts" }
+
+    expect(with_three).to eq(with_one)
+  end
+
+  # ログイン状態で測るのが要点。未認証だと Favorite.favorited_post_ids が early return
+  # して DB を触らないため、favorited の判定を 1 件ずつの exists? に書き換えても
+  # 上の未認証の N+1 検査では検知できない。
+  it "ログイン状態でもお題が増えてクエリ数が増えない（favorited の判定で N+1 を作り込まない）" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    create(:post)
+    with_one = count_select_queries { get "/api/posts", headers: auth_headers(token) }
+
+    create_list(:post, 2)
+    with_three = count_select_queries { get "/api/posts", headers: auth_headers(token) }
 
     expect(with_three).to eq(with_one)
   end
@@ -132,7 +172,8 @@ RSpec.describe "POST /api/posts", type: :request do
       "id" => created.id,
       "title" => "夕暮れの交差点",
       "attempts_count" => 0,
-      "likes_count" => 0
+      "likes_count" => 0,
+      "favorited" => false
     )
   end
 
@@ -265,6 +306,26 @@ RSpec.describe "GET /api/posts/:id", type: :request do
 
     liked_flags = response.parsed_body["attempts"].to_h { |a| [ a["id"], a["liked"] ] }
     expect(liked_flags).to eq(liked.id => true, not_liked.id => false)
+  end
+
+  it "お題の favorited を返す" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    post_record = create(:post)
+    create(:favorite, user: user, post: post_record)
+
+    get "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    expect(response.parsed_body["post"]["favorited"]).to be(true)
+  end
+
+  it "未認証なら favorited は false" do
+    post_record = create(:post)
+    create(:favorite, post: post_record)
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["post"]["favorited"]).to be(false)
   end
 
   # ログイン状態で測るのが要点。未認証だと Like.liked_attempt_ids が early return して
