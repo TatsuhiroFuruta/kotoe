@@ -330,8 +330,18 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 
 ### 🟢 5-2. お気に入り API
 - 依存：3-2
-- タスク：`POST/DELETE /api/posts/:id/favorite`（トグル）、spec。
+- タスク：
+  - [x] `POST/DELETE /api/posts/:id/favorite`（トグル、複合ユニーク）
+  - [x] 冪等にする（二重登録・未登録の解除はエラーにせず 200 で現状を返す）
+  - [x] お題の応答に `favorited`（本人がお気に入り済みか）を追加。一覧は 1 クエリで引き N+1 を避ける
+  - [x] request spec / model spec
 - 完了条件：お気に入りのオン/オフができる。
+- 補足：**セルフお気に入りは禁止しない**（5-1 のいいねと非対称）。お気に入りは公開も集計も
+  されず順位にも効かない自分だけのブックマークのため。**`favorites_count` は返さない**
+  （数を出すといいねと役割が重なる。役割分担の判断は 5-4 の前提）。**解除は物理削除**
+  （CLAUDE.md の論理削除ルールの例外）。冪等化の rescue は `IdempotentToggle` concern に
+  切り出して 5-1 と共有した。
+  設計は `docs/superpowers/specs/2026-08-15-issue-5-2-favorite-api-design.md`
 
 ### 🔵 5-3. 通報 API とモデレーション基礎
 - 依存：4-2
