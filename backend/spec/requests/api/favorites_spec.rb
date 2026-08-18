@@ -129,4 +129,75 @@ RSpec.describe "お気に入り API", type: :request do
       expect(response.parsed_body["errors"]).to include("base" => [ "invalid" ])
     end
   end
+
+  describe "DELETE /api/posts/:post_id/favorite" do
+    it "お気に入りを解除すると 200 と更新後のお題を返す" do
+      create(:favorite, user: user, post: post_record)
+
+      expect {
+        delete "/api/posts/#{post_record.id}/favorite", headers: auth_headers(token), as: :json
+      }.to change(Favorite, :count).by(-1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["post"]).to include(
+        "id" => post_record.id,
+        "favorited" => false
+      )
+    end
+
+    it "お気に入りしていなくても 200 を返し、何も消えない" do
+      expect {
+        delete "/api/posts/#{post_record.id}/favorite", headers: auth_headers(token), as: :json
+      }.not_to change(Favorite, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["post"]).to include("favorited" => false)
+    end
+
+    it "他人のお気に入りは消えない" do
+      create(:favorite, user: user, post: post_record)
+      create(:favorite, post: post_record)
+
+      delete "/api/posts/#{post_record.id}/favorite", headers: auth_headers(token), as: :json
+
+      expect(response.parsed_body["post"]).to include("favorited" => false)
+      expect(Favorite.where(post: post_record).count).to eq(1)
+    end
+
+    # 解除は物理削除（CLAUDE.md の論理削除ルールの例外）。行を残すと
+    # (user_id, post_id) の複合ユニークに引っかかり、同じお題をお気に入りし直せなくなる。
+    it "解除したお題をもう一度お気に入りにできる" do
+      create(:favorite, user: user, post: post_record)
+
+      delete "/api/posts/#{post_record.id}/favorite", headers: auth_headers(token), as: :json
+      post "/api/posts/#{post_record.id}/favorite", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["post"]).to include("favorited" => true)
+    end
+
+    # 削除済みのお題は POST と同じく 404。6-3 の /api/me/favorites は Post.kept で
+    # 絞る想定なので、その行はどの画面にも出てこず、片付ける導線に意味がない。
+    it "削除済みのお題には 404" do
+      create(:favorite, user: user, post: post_record)
+      post_record.discard!
+
+      delete "/api/posts/#{post_record.id}/favorite", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq("error" => "not_found")
+    end
+
+    it "存在しない ID は 404" do
+      delete "/api/posts/0/favorite", headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "未認証は 401" do
+      delete "/api/posts/#{post_record.id}/favorite", as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
 end

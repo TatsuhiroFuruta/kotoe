@@ -18,6 +18,18 @@ module Api
       end
     end
 
+    def destroy
+      post = favoritable_post
+      # 解除は物理削除。favorites には discarded_at が無く、行を残すと複合ユニークに
+      # 引っかかって二度とお気に入りにし直せなくなる（CLAUDE.md の論理削除ルールの例外。
+      # favorites は何からも参照されておらず、取り消しに記録を残す意味も無い）。
+      #
+      # お気に入りしていなければ何もしない（冪等）。
+      current_user.favorites.find_by(post: post)&.destroy
+
+      render json: { post: post_json(post) }
+    end
+
     private
 
     # お気に入りできるのは生きているお題だけ。削除済み・存在しない ID は
