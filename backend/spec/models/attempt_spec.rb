@@ -127,11 +127,14 @@ RSpec.describe Attempt, type: :model do
   describe ".best_for" do
     let(:post) { create(:post) }
 
+    # いいねを作成順と逆向きに振る。同じ向きに振ると likes_count DESC と
+    # created_at DESC の並びが一致し、best_for がいいねを見ていなくても通ってしまう
+    # （listing_for 側で「古いほうに多く付ける」としているのと同じ理由）。
     it "いいねの多い順に BEST_LIMIT 件まで返す" do
       attempts = create_list(:attempt, 4, :published, post: post)
-      attempts.each_with_index { |attempt, index| create_list(:like, index + 1, attempt: attempt) }
+      attempts.each_with_index { |attempt, index| create_list(:like, 4 - index, attempt: attempt) }
 
-      expect(Attempt.best_for(post).map(&:id)).to eq(attempts.reverse.first(3).map(&:id))
+      expect(Attempt.best_for(post).map(&:id)).to eq(attempts.first(3).map(&:id))
     end
 
     it "挑戦が BEST_LIMIT 件未満ならその件数だけ返す" do
