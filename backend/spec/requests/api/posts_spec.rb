@@ -393,6 +393,81 @@ RSpec.describe "GET /api/posts/:id", type: :request do
     expect(response.parsed_body["attempts"].map { |a| a["id"] }).to eq([ newer.id, popular.id ])
   end
 
+  it "best_attempts がいいね上位3件を返す" do
+    post_record = create(:post)
+    attempts = create_list(:attempt, 4, :published, post: post_record)
+    attempts.each_with_index { |attempt, index| create_list(:like, index + 1, attempt: attempt) }
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["best_attempts"].map { |a| a["id"] })
+      .to eq(attempts.reverse.first(3).map(&:id))
+  end
+
+  # 表彰台を一覧の並び替え結果から切り出したことの固定（設計書の案B・案Cを採らなかった理由）。
+  it "best_attempts は sort の指定によらず同じ内容を返す" do
+    post_record = create(:post)
+    popular = create(:attempt, :published, post: post_record, created_at: 2.days.ago)
+    newer = create(:attempt, :published, post: post_record, created_at: 1.day.ago)
+    create_list(:like, 2, attempt: popular)
+
+    get "/api/posts/#{post_record.id}", params: { sort: "likes" }
+    with_likes = response.parsed_body["best_attempts"].map { |a| a["id"] }
+
+    get "/api/posts/#{post_record.id}"
+    with_default = response.parsed_body["best_attempts"].map { |a| a["id"] }
+
+    expect(with_likes).to eq([ popular.id, newer.id ])
+    expect(with_default).to eq(with_likes)
+  end
+
+  it "best_attempts は page=2 でも同じ内容で入る" do
+    post_record = create(:post)
+    create_list(:attempt, 13, :published, post: post_record)
+    best = create(:attempt, :published, post: post_record)
+    create_list(:like, 5, attempt: best)
+
+    get "/api/posts/#{post_record.id}", params: { page: 2 }
+
+    expect(response.parsed_body["best_attempts"].first["id"]).to eq(best.id)
+    expect(response.parsed_body["attempts"].size).to eq(2)
+  end
+
+  it "best_attempts の要素は attempts と同じ形で、liked も埋まる" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    post_record = create(:post)
+    attempt = create(:attempt, :published, post: post_record)
+    create(:like, user: user, attempt: attempt)
+
+    get "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    best = response.parsed_body["best_attempts"].first
+    expect(best).to eq(response.parsed_body["attempts"].first)
+    expect(best["liked"]).to be(true)
+    expect(best["likes_count"]).to eq(1)
+  end
+
+  it "best_attempts に下書き・削除済みは入らない" do
+    post_record = create(:post)
+    create(:attempt, post: post_record)
+    create(:attempt, :published, post: post_record).discard!
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["best_attempts"]).to eq([])
+  end
+
+  # 空配列とフィールドごと無いことを区別する。フロントは「まだ誰も挑戦していない」と
+  # 「挑戦はあるがいいねが0」を出し分ける。
+  it "挑戦が無ければ best_attempts は空配列" do
+    post_record = create(:post)
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["best_attempts"]).to eq([])
+  end
+
   it "削除済みのお題は 404 を返す" do
     post_record = create(:post)
     post_record.discard!
