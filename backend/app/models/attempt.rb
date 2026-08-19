@@ -13,6 +13,9 @@ class Attempt < ApplicationRecord
   # 後から緩めるのは安全（既存データが違反にならない）が、きつくするのは危険。
   MAX_DESCRIPTION_LENGTH = 1_000
 
+  # 表彰台（ベスト再現）の枠数。デザイン上の「1位を中央に大きく」は3枠が前提。
+  BEST_LIMIT = 3
+
   # 生成が失敗した理由。文言ではなくコードを持ち、翻訳はフロントの辞書が担当する。
   #
   # status と違って enum にしない。status は状態機械でスコープに意味があるが、
@@ -51,6 +54,10 @@ class Attempt < ApplicationRecord
 
     sort == "likes" ? relation.popular : relation.recent
   end
+
+  # ベスト再現＝いいね順の先頭 BEST_LIMIT 件。定義をここ1か所に閉じることで、
+  # best_attempts と attempts?sort=likes の並びが定義上ずれない。
+  def self.best_for(post) = listing_for(post, sort: "likes").limit(BEST_LIMIT)
 
   def self.likes_count_sql
     Like.where("likes.attempt_id = attempts.id").select("COUNT(*)").to_sql

@@ -118,4 +118,37 @@ RSpec.describe Attempt, type: :model do
       expect(Attempt.listing_for(post, sort: "nonsense").map(&:id)).to eq([ newer.id, old_and_popular.id ])
     end
   end
+
+  describe ".best_for" do
+    let(:post) { create(:post) }
+
+    it "いいねの多い順に BEST_LIMIT 件まで返す" do
+      attempts = create_list(:attempt, 4, :published, post: post)
+      attempts.each_with_index { |attempt, index| create_list(:like, index + 1, attempt: attempt) }
+
+      expect(Attempt.best_for(post).map(&:id)).to eq(attempts.reverse.first(3).map(&:id))
+    end
+
+    it "挑戦が BEST_LIMIT 件未満ならその件数だけ返す" do
+      older = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      newer = create(:attempt, :published, post: post, created_at: 1.day.ago)
+
+      expect(Attempt.best_for(post).map(&:id)).to eq([ newer.id, older.id ])
+    end
+
+    it "挑戦が無ければ空" do
+      expect(Attempt.best_for(post)).to be_empty
+    end
+
+    # listing_for 経由であることの固定。ここが直接 kept.where(post:) を書くように
+    # 変わると、下書きが表彰台に出る。
+    it "下書き・削除済み・他のお題の挑戦を含めない" do
+      create(:attempt, post: post)
+      create(:attempt, :published, post: post).discard!
+      create(:attempt, :published, post: create(:post))
+      published = create(:attempt, :published, post: post)
+
+      expect(Attempt.best_for(post).map(&:id)).to eq([ published.id ])
+    end
+  end
 end
