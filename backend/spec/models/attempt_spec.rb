@@ -89,5 +89,33 @@ RSpec.describe Attempt, type: :model do
 
       expect(Attempt.listing_for(post).first.likes_count).to eq(2)
     end
+
+    # いいねの多い挑戦をわざと「古い」ほうに置く。こうしないと新着順でも同じ並びになり、
+    # popular を実装しなくてもテストが通ってしまう。
+    it "sort: \"likes\" でいいねの多い順に並ぶ" do
+      many = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      few = create(:attempt, :published, post: post, created_at: 1.day.ago)
+      create_list(:like, 3, attempt: many)
+      create(:like, attempt: few)
+
+      expect(Attempt.listing_for(post, sort: "likes").map(&:id)).to eq([ many.id, few.id ])
+    end
+
+    # 同着で順序が不定になると、ページをまたいで重複や抜けが出る（Post.popular と同じ理由）。
+    it "sort: \"likes\" の同着は新着順、created_at も同着なら id の降順" do
+      old = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      same_a = create(:attempt, :published, post: post, created_at: 1.day.ago)
+      same_b = create(:attempt, :published, post: post, created_at: 1.day.ago)
+
+      expect(Attempt.listing_for(post, sort: "likes").map(&:id)).to eq([ same_b.id, same_a.id, old.id ])
+    end
+
+    it "未知の sort は新着順にフォールバックする" do
+      old_and_popular = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      newer = create(:attempt, :published, post: post, created_at: 1.day.ago)
+      create_list(:like, 3, attempt: old_and_popular)
+
+      expect(Attempt.listing_for(post, sort: "nonsense").map(&:id)).to eq([ newer.id, old_and_popular.id ])
+    end
   end
 end

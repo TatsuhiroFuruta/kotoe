@@ -37,9 +37,19 @@ class Attempt < ApplicationRecord
   # 同着の順序を一意に定める（Post.recent と同じ理由）。
   scope :recent, -> { order(created_at: :desc, id: :desc) }
 
+  # likes_count は with_likes_count が SELECT 句で付ける別名。単体では使えないので
+  # 必ず listing_for / best_for 経由で呼ぶこと（Post.popular と同じ理由・同じ形）。
+  scope :popular, -> { order(Arel.sql("likes_count DESC")).order(created_at: :desc, id: :desc) }
+
   # お題詳細に出す挑戦の組み立て口。他人の下書きを見せないのがここの要点。
-  def self.listing_for(post)
-    kept.published.where(post: post).includes(:user).with_likes_count.recent
+  #
+  # 公開クエリの値は "likes"（お題一覧の "popular" と不揃いだが
+  # docs/screen_and_api_design.md がそう定義している）。翻訳はここ1か所で行う。
+  # 未知の値は Post.listing と同じくエラーにせず新着順に落とす。
+  def self.listing_for(post, sort: nil)
+    relation = kept.published.where(post: post).includes(:user).with_likes_count
+
+    sort == "likes" ? relation.popular : relation.recent
   end
 
   def self.likes_count_sql
