@@ -56,7 +56,7 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
 |---|---|---|---|
 | GET | `/api/posts` | お題一覧（ransack 検索・kaminari ページング）。`?q=` タイトル部分一致／`?sort=new\|popular`（popular＝いいね合計の降順）／`?page=`（1ページ12件固定） | 一覧 |
 | POST | `/api/posts` | お題投稿 | 投稿 |
-| GET | `/api/posts/:id` | お題詳細＋挑戦一覧（`sort=likes` で再現度順＝ベスト再現の取得にも使用） | 詳細 |
+| GET | `/api/posts/:id` | お題詳細＋挑戦一覧。`?sort=likes` で挑戦を再現度（いいね）順、既定は新着順／`?page=`（1ページ12件）。あわせて `best_attempts`（いいね上位3件。`sort`・`page` によらず固定、ページングなし）を返す | 詳細 |
 | DELETE | `/api/posts/:id` | 自分のお題を削除（ソフトデリート） | マイページ |
 
 ### 挑戦（Attempt）

@@ -371,6 +371,146 @@ RSpec.describe "GET /api/posts/:id", type: :request do
     expect(response.parsed_body["meta"]["total_count"]).to eq(13)
   end
 
+  it "sort=likes で挑戦がいいねの多い順になる" do
+    post_record = create(:post)
+    popular = create(:attempt, :published, post: post_record, created_at: 2.days.ago)
+    newer = create(:attempt, :published, post: post_record, created_at: 1.day.ago)
+    create_list(:like, 2, attempt: popular)
+
+    get "/api/posts/#{post_record.id}", params: { sort: "likes" }
+
+    expect(response.parsed_body["attempts"].map { |a| a["id"] }).to eq([ popular.id, newer.id ])
+  end
+
+  it "未知の sort は新着順にフォールバックする" do
+    post_record = create(:post)
+    popular = create(:attempt, :published, post: post_record, created_at: 2.days.ago)
+    newer = create(:attempt, :published, post: post_record, created_at: 1.day.ago)
+    create_list(:like, 2, attempt: popular)
+
+    get "/api/posts/#{post_record.id}", params: { sort: "nonsense" }
+
+    expect(response.parsed_body["attempts"].map { |a| a["id"] }).to eq([ newer.id, popular.id ])
+  end
+
+  # いいねを作成順と逆向きに振る。同じ向きだと新着順と並びが一致してしまい、
+  # 表彰台がいいねを見ていなくても通る。
+  it "best_attempts がいいね上位3件を返す" do
+    post_record = create(:post)
+    attempts = create_list(:attempt, 4, :published, post: post_record)
+    attempts.each_with_index { |attempt, index| create_list(:like, 4 - index, attempt: attempt) }
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["best_attempts"].map { |a| a["id"] })
+      .to eq(attempts.first(3).map(&:id))
+  end
+
+  # 表彰台を一覧の並び替え結果から切り出したことの固定（設計書の案B・案Cを採らなかった理由）。
+  it "best_attempts は sort の指定によらず同じ内容を返す" do
+    post_record = create(:post)
+    popular = create(:attempt, :published, post: post_record, created_at: 2.days.ago)
+    newer = create(:attempt, :published, post: post_record, created_at: 1.day.ago)
+    create_list(:like, 2, attempt: popular)
+
+    get "/api/posts/#{post_record.id}", params: { sort: "likes" }
+    with_likes = response.parsed_body["best_attempts"].map { |a| a["id"] }
+
+    get "/api/posts/#{post_record.id}"
+    with_default = response.parsed_body["best_attempts"].map { |a| a["id"] }
+
+    expect(with_likes).to eq([ popular.id, newer.id ])
+    expect(with_default).to eq(with_likes)
+  end
+
+  # 配列を丸ごと突き合わせる。first だけを見ると、2 ページ目で 1 件に切り詰められても
+  # 並びが変わっても通ってしまい、案C（page=1 のときだけ返す）を排除できない。
+  it "best_attempts は page=2 でも 1 ページ目と同じ内容で入る" do
+    post_record = create(:post)
+    create_list(:attempt, 13, :published, post: post_record)
+    best = create(:attempt, :published, post: post_record)
+    create_list(:like, 5, attempt: best)
+
+    get "/api/posts/#{post_record.id}"
+    on_page_1 = response.parsed_body["best_attempts"]
+
+    get "/api/posts/#{post_record.id}", params: { page: 2 }
+
+    expect(on_page_1.size).to eq(3)
+    expect(on_page_1.first["id"]).to eq(best.id)
+    expect(response.parsed_body["best_attempts"]).to eq(on_page_1)
+    expect(response.parsed_body["attempts"].size).to eq(2)
+  end
+
+  it "best_attempts の要素は attempts と同じ形で、liked も埋まる" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    post_record = create(:post)
+    attempt = create(:attempt, :published, post: post_record)
+    create(:like, user: user, attempt: attempt)
+
+    get "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    best = response.parsed_body["best_attempts"].first
+    expect(best).to eq(response.parsed_body["attempts"].first)
+    expect(best["liked"]).to be(true)
+    expect(best["likes_count"]).to eq(1)
+  end
+
+  # liked の判定で表彰台の id を束ねていることの固定。best は最古なので、新着順の
+  # 1 ページ目（12 件）からは 13 件の新着に押し出されて消える。一方いいねは
+  # 最多なので表彰台には残る＝「表彰台にしかいない挑戦」になる。
+  # id を束ねずに一覧ぶんだけで引くと、ここのハートだけ白いまま返る。
+  it "表彰台にしかいない挑戦でも liked が埋まる" do
+    user = create(:user)
+    token = sign_in_and_get_token(user)
+    post_record = create(:post)
+    best = create(:attempt, :published, post: post_record, created_at: 3.days.ago)
+    create_list(:attempt, 13, :published, post: post_record)
+    create(:like, user: user, attempt: best)
+
+    get "/api/posts/#{post_record.id}", headers: auth_headers(token)
+
+    expect(response.parsed_body["attempts"].map { |a| a["id"] }).not_to include(best.id)
+    expect(response.parsed_body["best_attempts"].find { |a| a["id"] == best.id }["liked"]).to be(true)
+  end
+
+  # sort=likes は SELECT 句の別名で ORDER BY するため、ページングとの両立は
+  # kaminari の総件数カウントが order を落とす（except(:order)）ことに依存している。
+  # コード上に現れない依存なので、ここで固定しておく。
+  it "sort=likes をページングと併用しても総件数が正しく出る" do
+    post_record = create(:post)
+    create_list(:attempt, 13, :published, post: post_record)
+
+    get "/api/posts/#{post_record.id}", params: { sort: "likes", page: 2 }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["attempts"].size).to eq(1)
+    expect(response.parsed_body["meta"]).to eq(
+      "current_page" => 2, "total_pages" => 2, "total_count" => 13
+    )
+  end
+
+  it "best_attempts に下書き・削除済みは入らない" do
+    post_record = create(:post)
+    create(:attempt, post: post_record)
+    create(:attempt, :published, post: post_record).discard!
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["best_attempts"]).to eq([])
+  end
+
+  # 空配列とフィールドごと無いことを区別する。フロントは「まだ誰も挑戦していない」と
+  # 「挑戦はあるがいいねが0」を出し分ける。
+  it "挑戦が無ければ best_attempts は空配列" do
+    post_record = create(:post)
+
+    get "/api/posts/#{post_record.id}"
+
+    expect(response.parsed_body["best_attempts"]).to eq([])
+  end
+
   it "削除済みのお題は 404 を返す" do
     post_record = create(:post)
     post_record.discard!

@@ -89,5 +89,74 @@ RSpec.describe Attempt, type: :model do
 
       expect(Attempt.listing_for(post).first.likes_count).to eq(2)
     end
+
+    # いいねの多い挑戦をわざと「古い」ほうに置く。こうしないと新着順でも同じ並びになり、
+    # popular を実装しなくてもテストが通ってしまう。
+    it "sort: \"likes\" でいいねの多い順に並ぶ" do
+      many = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      few = create(:attempt, :published, post: post, created_at: 1.day.ago)
+      create_list(:like, 3, attempt: many)
+      create(:like, attempt: few)
+
+      expect(Attempt.listing_for(post, sort: "likes").map(&:id)).to eq([ many.id, few.id ])
+    end
+
+    # 同着で順序が不定になると、ページをまたいで重複や抜けが出る（Post.popular と同じ理由）。
+    #
+    # created_at は同じ Time オブジェクトを渡すこと。1.day.ago を2回書くと
+    # timestamp(6) にマイクロ秒差が残り、created_at だけで並びが決まってしまう。
+    # それだと popular から id の指定を消してもこのテストが通り、何も守れない。
+    it "sort: \"likes\" の同着は新着順、created_at も同着なら id の降順" do
+      same_time = 1.day.ago
+      old = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      same_a = create(:attempt, :published, post: post, created_at: same_time)
+      same_b = create(:attempt, :published, post: post, created_at: same_time)
+
+      expect(Attempt.listing_for(post, sort: "likes").map(&:id)).to eq([ same_b.id, same_a.id, old.id ])
+    end
+
+    it "未知の sort は新着順にフォールバックする" do
+      old_and_popular = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      newer = create(:attempt, :published, post: post, created_at: 1.day.ago)
+      create_list(:like, 3, attempt: old_and_popular)
+
+      expect(Attempt.listing_for(post, sort: "nonsense").map(&:id)).to eq([ newer.id, old_and_popular.id ])
+    end
+  end
+
+  describe ".best_for" do
+    let(:post) { create(:post) }
+
+    # いいねを作成順と逆向きに振る。同じ向きに振ると likes_count DESC と
+    # created_at DESC の並びが一致し、best_for がいいねを見ていなくても通ってしまう
+    # （listing_for 側で「古いほうに多く付ける」としているのと同じ理由）。
+    it "いいねの多い順に BEST_LIMIT 件まで返す" do
+      attempts = create_list(:attempt, 4, :published, post: post)
+      attempts.each_with_index { |attempt, index| create_list(:like, 4 - index, attempt: attempt) }
+
+      expect(Attempt.best_for(post).map(&:id)).to eq(attempts.first(3).map(&:id))
+    end
+
+    it "挑戦が BEST_LIMIT 件未満ならその件数だけ返す" do
+      older = create(:attempt, :published, post: post, created_at: 2.days.ago)
+      newer = create(:attempt, :published, post: post, created_at: 1.day.ago)
+
+      expect(Attempt.best_for(post).map(&:id)).to eq([ newer.id, older.id ])
+    end
+
+    it "挑戦が無ければ空" do
+      expect(Attempt.best_for(post)).to be_empty
+    end
+
+    # listing_for 経由であることの固定。ここが直接 kept.where(post:) を書くように
+    # 変わると、下書きが表彰台に出る。
+    it "下書き・削除済み・他のお題の挑戦を含めない" do
+      create(:attempt, post: post)
+      create(:attempt, :published, post: post).discard!
+      create(:attempt, :published, post: create(:post))
+      published = create(:attempt, :published, post: post)
+
+      expect(Attempt.best_for(post).map(&:id)).to eq([ published.id ])
+    end
   end
 end

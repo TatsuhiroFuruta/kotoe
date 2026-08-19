@@ -43,16 +43,20 @@ module Api
 
     def show
       post = Post.kept.includes(:user).with_counts.find(params[:id])
-      attempts = Attempt.listing_for(post).page(page_param)
+      attempts = Attempt.listing_for(post, sort: params[:sort]).page(page_param)
+      best_attempts = Attempt.best_for(post)
       # 一覧ぶんのいいね済み判定を 1 クエリでまとめて引く（1 件ずつ引くと N+1 になる）。
+      # 表彰台と一覧は同じ挑戦を含みうるので、id を束ねて 1 回だけ引く。
       # 未ログインなら空集合が返り、すべて false になる。
-      liked_ids = Like.liked_attempt_ids(current_user, attempts.map(&:id))
+      liked_ids = Like.liked_attempt_ids(current_user, attempts.map(&:id) | best_attempts.map(&:id))
 
       render json: {
         post: PostSerializer.call(post, favorited: favorited?(post)),
-        # 挑戦の並びは新着順で固定。いいね順（ベスト再現）は 6-1 で
-        # ここに sort の分岐を足す。
-        attempts: attempts.map { |attempt| AttemptSerializer.call(attempt, liked: liked_ids.include?(attempt.id)) },
+        # 表彰台は sort / page によらず常にいいね上位。一覧とは別のセクションなので、
+        # 同じ挑戦が両方に現れる。一覧から除くと kaminari の total_count と OFFSET が
+        # ずれ、ページ境界で重複・抜けが出る（設計書参照）。
+        best_attempts: best_attempts.map { |attempt| attempt_list_json(attempt, liked_ids) },
+        attempts: attempts.map { |attempt| attempt_list_json(attempt, liked_ids) },
         meta: PaginationSerializer.call(attempts)
       }
     end
@@ -66,6 +70,16 @@ module Api
     end
 
     private
+
+    # 一覧・表彰台に並べる挑戦 1 件。いいね済みかは、あらかじめ 1 クエリで引いた
+    # id の集合から判定する。単体用の AttemptRendering#liked?（このコントローラは
+    # include していない）は 1 件ずつ DB を引くので、一覧では使えない。
+    #
+    # 6-2（全体ランキング）が同じ「id 集合ベースの liked」を必要とするので、
+    # 3 つ目の呼び出し元が来たら AttemptRendering に引き上げる。
+    def attempt_list_json(attempt, liked_ids)
+      AttemptSerializer.call(attempt, liked: liked_ids.include?(attempt.id))
+    end
 
     # 数値以外・配列・巨大な値のいずれで来ても 1 ページ目〜上限に収める。
     # 0 以下や数値でない値は kaminari 自身が 1 ページ目に丸めるが、
