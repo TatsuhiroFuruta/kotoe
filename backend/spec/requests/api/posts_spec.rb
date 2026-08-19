@@ -371,6 +371,28 @@ RSpec.describe "GET /api/posts/:id", type: :request do
     expect(response.parsed_body["meta"]["total_count"]).to eq(13)
   end
 
+  it "sort=likes で挑戦がいいねの多い順になる" do
+    post_record = create(:post)
+    popular = create(:attempt, :published, post: post_record, created_at: 2.days.ago)
+    newer = create(:attempt, :published, post: post_record, created_at: 1.day.ago)
+    create_list(:like, 2, attempt: popular)
+
+    get "/api/posts/#{post_record.id}", params: { sort: "likes" }
+
+    expect(response.parsed_body["attempts"].map { |a| a["id"] }).to eq([ popular.id, newer.id ])
+  end
+
+  it "未知の sort は新着順にフォールバックする" do
+    post_record = create(:post)
+    popular = create(:attempt, :published, post: post_record, created_at: 2.days.ago)
+    newer = create(:attempt, :published, post: post_record, created_at: 1.day.ago)
+    create_list(:like, 2, attempt: popular)
+
+    get "/api/posts/#{post_record.id}", params: { sort: "nonsense" }
+
+    expect(response.parsed_body["attempts"].map { |a| a["id"] }).to eq([ newer.id, popular.id ])
+  end
+
   it "削除済みのお題は 404 を返す" do
     post_record = create(:post)
     post_record.discard!

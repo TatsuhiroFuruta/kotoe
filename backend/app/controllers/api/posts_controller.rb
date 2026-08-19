@@ -43,7 +43,7 @@ module Api
 
     def show
       post = Post.kept.includes(:user).with_counts.find(params[:id])
-      attempts = Attempt.listing_for(post).page(page_param)
+      attempts = Attempt.listing_for(post, sort: params[:sort]).page(page_param)
       # 一覧ぶんのいいね済み判定を 1 クエリでまとめて引く（1 件ずつ引くと N+1 になる）。
       # 未ログインなら空集合が返り、すべて false になる。
       liked_ids = Like.liked_attempt_ids(current_user, attempts.map(&:id))
