@@ -421,15 +421,22 @@ RSpec.describe "GET /api/posts/:id", type: :request do
     expect(with_default).to eq(with_likes)
   end
 
-  it "best_attempts は page=2 でも同じ内容で入る" do
+  # 配列を丸ごと突き合わせる。first だけを見ると、2 ページ目で 1 件に切り詰められても
+  # 並びが変わっても通ってしまい、案C（page=1 のときだけ返す）を排除できない。
+  it "best_attempts は page=2 でも 1 ページ目と同じ内容で入る" do
     post_record = create(:post)
     create_list(:attempt, 13, :published, post: post_record)
     best = create(:attempt, :published, post: post_record)
     create_list(:like, 5, attempt: best)
 
+    get "/api/posts/#{post_record.id}"
+    on_page_1 = response.parsed_body["best_attempts"]
+
     get "/api/posts/#{post_record.id}", params: { page: 2 }
 
-    expect(response.parsed_body["best_attempts"].first["id"]).to eq(best.id)
+    expect(on_page_1.size).to eq(3)
+    expect(on_page_1.first["id"]).to eq(best.id)
+    expect(response.parsed_body["best_attempts"]).to eq(on_page_1)
     expect(response.parsed_body["attempts"].size).to eq(2)
   end
 

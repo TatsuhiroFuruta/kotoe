@@ -102,10 +102,15 @@ RSpec.describe Attempt, type: :model do
     end
 
     # 同着で順序が不定になると、ページをまたいで重複や抜けが出る（Post.popular と同じ理由）。
+    #
+    # created_at は同じ Time オブジェクトを渡すこと。1.day.ago を2回書くと
+    # timestamp(6) にマイクロ秒差が残り、created_at だけで並びが決まってしまう。
+    # それだと popular から id の指定を消してもこのテストが通り、何も守れない。
     it "sort: \"likes\" の同着は新着順、created_at も同着なら id の降順" do
+      same_time = 1.day.ago
       old = create(:attempt, :published, post: post, created_at: 2.days.ago)
-      same_a = create(:attempt, :published, post: post, created_at: 1.day.ago)
-      same_b = create(:attempt, :published, post: post, created_at: 1.day.ago)
+      same_a = create(:attempt, :published, post: post, created_at: same_time)
+      same_b = create(:attempt, :published, post: post, created_at: same_time)
 
       expect(Attempt.listing_for(post, sort: "likes").map(&:id)).to eq([ same_b.id, same_a.id, old.id ])
     end
