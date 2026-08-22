@@ -74,6 +74,41 @@ RSpec.describe "GET /api/posts", type: :request do
     expect(response.parsed_body["posts"].map { |post| post["id"] }).to eq([ loud.id, quiet.id ])
   end
 
+  # 並び替えとページングを組み合わせた経路が、ここまで一度も通っていなかった。
+  #
+  # sort=popular は Post.with_counts が SELECT 句で作る別名 likes_count で ORDER BY する。
+  # 総件数のクエリは SELECT 句が COUNT(*) に置き換わり、その別名が存在しないため、
+  # ORDER BY を持ち越すと column "likes_count" does not exist で 500 になる。
+  #
+  # 実際には二重に守られている。kaminari は total_count で except(:order) しており
+  # （gem 側にも「#count は #order が参照する生成列を含む #select を上書きする」と
+  # このケースを名指ししたコメントがある）、ActiveRecord の count も group が無ければ
+  # order を落とす。生 SQL で数える形に書き換えない限り壊れない。
+  #
+  # **件数は「最終ページが端数にならない」ように選ぶこと。** kaminari の total_count には
+  # 「ロード済みかつ最終ページが端数なら、COUNT を発行せず (current_page - 1) * limit + 件数
+  # で算術的に導出する」分岐がある（active_record_relation_methods.rb）。13 件の 2 ページ目
+  # （1 件）はこの短絡に入り、数えるクエリが 1 本も走らないままテストが通ってしまう。
+  # 24 件なら 2 ページ目がちょうど 12 件になり、短絡を回避して COUNT が実際に走る。
+  #
+  # 並び順そのものはここでは見ない。同着のタイブレークは model spec
+  # （post_spec.rb「人気順の同着は id の降順で並ぶ」）が固定している。ページ境界での
+  # 重複・抜けを request spec から検出しようとしても、Postgres はこの規模だと
+  # タイブレーク無しでも安定した順序を返すため、検査として成立しない。
+  #
+  # 挑戦一覧（GET /api/posts/:id?sort=likes）にも同じ検査がある。
+  it "sort=popular をページングと併用しても総件数が正しく出る" do
+    create_list(:post, 24)
+
+    get "/api/posts", params: { sort: "popular", page: 2 }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["posts"].size).to eq(12)
+    expect(response.parsed_body["meta"]).to eq(
+      "current_page" => 2, "total_pages" => 2, "total_count" => 24
+    )
+  end
+
   it "未知の sort は新着順にフォールバックする" do
     older = create(:post, created_at: 2.days.ago)
     newer = create(:post, created_at: 1.day.ago)
@@ -475,19 +510,21 @@ RSpec.describe "GET /api/posts/:id", type: :request do
     expect(response.parsed_body["best_attempts"].find { |a| a["id"] == best.id }["liked"]).to be(true)
   end
 
-  # sort=likes は SELECT 句の別名で ORDER BY するため、ページングとの両立は
-  # kaminari の総件数カウントが order を落とす（except(:order)）ことに依存している。
-  # コード上に現れない依存なので、ここで固定しておく。
+  # 並び替えとページングを組み合わせた経路の検査。sort=likes は SELECT 句の別名
+  # likes_count で ORDER BY するが、総件数のクエリではその別名が存在しない。
+  # 二重に守られている仕組みと、24 件にしている理由（最終ページを端数にすると
+  # kaminari が COUNT を発行せず算術で導出してしまう）は
+  # GET /api/posts の同型の検査に書いた。
   it "sort=likes をページングと併用しても総件数が正しく出る" do
     post_record = create(:post)
-    create_list(:attempt, 13, :published, post: post_record)
+    create_list(:attempt, 24, :published, post: post_record)
 
     get "/api/posts/#{post_record.id}", params: { sort: "likes", page: 2 }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body["attempts"].size).to eq(1)
+    expect(response.parsed_body["attempts"].size).to eq(12)
     expect(response.parsed_body["meta"]).to eq(
-      "current_page" => 2, "total_pages" => 2, "total_count" => 13
+      "current_page" => 2, "total_pages" => 2, "total_count" => 24
     )
   end
 
