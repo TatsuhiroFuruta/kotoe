@@ -85,16 +85,22 @@ RSpec.describe "GET /api/posts", type: :request do
   # このケースを名指ししたコメントがある）、ActiveRecord の count も group が無ければ
   # order を落とす。生 SQL で数える形に書き換えない限り壊れない。
   #
+  # **件数は「最終ページが端数にならない」ように選ぶこと。** kaminari はロード済みかつ
+  # 最終ページが端数のとき、COUNT を発行せず (current_page - 1) * limit + 件数 で算術的に
+  # 求める（active_record_relation_methods.rb:25）。13 件の 2 ページ目（1 件）だと
+  # この短絡に入り、数えるクエリが 1 本も走らないままテストが通る。24 件なら
+  # 2 ページ目がちょうど 12 件になり、短絡を回避して COUNT が実際に走る。
+  #
   # 挑戦一覧（GET /api/posts/:id?sort=likes）にも同じ検査がある。
   it "sort=popular をページングと併用しても総件数が正しく出る" do
-    create_list(:post, 13)
+    create_list(:post, 24)
 
     get "/api/posts", params: { sort: "popular", page: 2 }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body["posts"].size).to eq(1)
+    expect(response.parsed_body["posts"].size).to eq(12)
     expect(response.parsed_body["meta"]).to eq(
-      "current_page" => 2, "total_pages" => 2, "total_count" => 13
+      "current_page" => 2, "total_pages" => 2, "total_count" => 24
     )
   end
 
@@ -501,17 +507,19 @@ RSpec.describe "GET /api/posts/:id", type: :request do
 
   # 並び替えとページングを組み合わせた経路の検査。sort=likes は SELECT 句の別名
   # likes_count で ORDER BY するが、総件数のクエリではその別名が存在しない。
-  # 二重に守られている仕組みは GET /api/posts の同型の検査に書いた。
+  # 二重に守られている仕組みと、24 件にしている理由（最終ページを端数にすると
+  # kaminari が COUNT を発行せず算術で導出してしまう）は
+  # GET /api/posts の同型の検査に書いた。
   it "sort=likes をページングと併用しても総件数が正しく出る" do
     post_record = create(:post)
-    create_list(:attempt, 13, :published, post: post_record)
+    create_list(:attempt, 24, :published, post: post_record)
 
     get "/api/posts/#{post_record.id}", params: { sort: "likes", page: 2 }
 
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body["attempts"].size).to eq(1)
+    expect(response.parsed_body["attempts"].size).to eq(12)
     expect(response.parsed_body["meta"]).to eq(
-      "current_page" => 2, "total_pages" => 2, "total_count" => 13
+      "current_page" => 2, "total_pages" => 2, "total_count" => 24
     )
   end
 
