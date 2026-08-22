@@ -74,6 +74,30 @@ RSpec.describe "GET /api/posts", type: :request do
     expect(response.parsed_body["posts"].map { |post| post["id"] }).to eq([ loud.id, quiet.id ])
   end
 
+  # 並び替えとページングを組み合わせた経路が、ここまで一度も通っていなかった。
+  #
+  # sort=popular は Post.with_counts が SELECT 句で作る別名 likes_count で ORDER BY する。
+  # 総件数のクエリは SELECT 句が COUNT(*) に置き換わり、その別名が存在しないため、
+  # ORDER BY を持ち越すと column "likes_count" does not exist で 500 になる。
+  #
+  # 実際には二重に守られている。kaminari は total_count で except(:order) しており
+  # （gem 側にも「#count は #order が参照する生成列を含む #select を上書きする」と
+  # このケースを名指ししたコメントがある）、ActiveRecord の count も group が無ければ
+  # order を落とす。生 SQL で数える形に書き換えない限り壊れない。
+  #
+  # 挑戦一覧（GET /api/posts/:id?sort=likes）にも同じ検査がある。
+  it "sort=popular をページングと併用しても総件数が正しく出る" do
+    create_list(:post, 13)
+
+    get "/api/posts", params: { sort: "popular", page: 2 }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["posts"].size).to eq(1)
+    expect(response.parsed_body["meta"]).to eq(
+      "current_page" => 2, "total_pages" => 2, "total_count" => 13
+    )
+  end
+
   it "未知の sort は新着順にフォールバックする" do
     older = create(:post, created_at: 2.days.ago)
     newer = create(:post, created_at: 1.day.ago)
@@ -475,9 +499,9 @@ RSpec.describe "GET /api/posts/:id", type: :request do
     expect(response.parsed_body["best_attempts"].find { |a| a["id"] == best.id }["liked"]).to be(true)
   end
 
-  # sort=likes は SELECT 句の別名で ORDER BY するため、ページングとの両立は
-  # kaminari の総件数カウントが order を落とす（except(:order)）ことに依存している。
-  # コード上に現れない依存なので、ここで固定しておく。
+  # 並び替えとページングを組み合わせた経路の検査。sort=likes は SELECT 句の別名
+  # likes_count で ORDER BY するが、総件数のクエリではその別名が存在しない。
+  # 二重に守られている仕組みは GET /api/posts の同型の検査に書いた。
   it "sort=likes をページングと併用しても総件数が正しく出る" do
     post_record = create(:post)
     create_list(:attempt, 13, :published, post: post_record)
