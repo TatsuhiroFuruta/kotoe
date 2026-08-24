@@ -127,4 +127,51 @@ RSpec.describe Post, type: :model do
       expect(Post.ransackable_associations).to eq([])
     end
   end
+
+  describe ".favorited_by" do
+    let(:user) { create(:user) }
+
+    # 「お気に入りした順」であることを見るため、お題の作成順は期待する順序と逆にする。
+    # 揃えると、並び替えを消して新着順のままでもテストが通ってしまう。
+    it "お気に入りした新しい順に返る" do
+      older_post = create(:post, created_at: 1.day.ago)
+      newer_post = create(:post, created_at: 2.days.ago)
+      create(:favorite, user: user, post: older_post, created_at: 2.days.ago)
+      create(:favorite, user: user, post: newer_post, created_at: 1.day.ago)
+
+      expect(Post.favorited_by(user).map(&:id)).to eq([ newer_post.id, older_post.id ])
+    end
+
+    it "お気に入りしていないお題を含めない" do
+      create(:post)
+
+      expect(Post.favorited_by(user)).to be_empty
+    end
+
+    it "他人のお気に入りを含めない" do
+      create(:favorite, post: create(:post))
+
+      expect(Post.favorited_by(user)).to be_empty
+    end
+
+    # 5-2 が削除済みお題への解除を 404 にしているので、出すと必ず 404 を返す
+    # 解除ボタンが画面に並ぶ（設計書参照）。
+    it "削除済みのお題を含めない" do
+      post = create(:post)
+      create(:favorite, user: user, post: post)
+      post.discard!
+
+      expect(Post.favorited_by(user)).to be_empty
+    end
+
+    it "attempts_count と likes_count を持つ" do
+      post = create(:post)
+      create(:favorite, user: user, post: post)
+      create_list(:like, 2, attempt: create(:attempt, :published, post: post))
+
+      result = Post.favorited_by(user).first
+      expect(result.attempts_count).to eq(1)
+      expect(result.likes_count).to eq(2)
+    end
+  end
 end

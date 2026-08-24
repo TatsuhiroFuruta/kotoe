@@ -12,4 +12,18 @@ class User < ApplicationRecord
   has_many :reports, foreign_key: :reporter_id, inverse_of: :reporter, dependent: :restrict_with_exception
 
   validates :name, presence: true
+
+  # マイページのプロフィールヘッダーに出す統計。集計条件は各タブの一覧と揃えてあり、
+  # kept_posts_count は GET /api/me/posts、published_attempts_count は
+  # GET /api/me/attempts の meta.total_count と一致する（設計書参照）。
+  def kept_posts_count = posts.kept.count
+
+  def published_attempts_count = attempts.kept.published.count
+
+  # 自分の挑戦が集めたいいねの総数。お題の削除状態は見ない（得た票は消えないし、
+  # me/attempts の母集合と揃える）。集計条件は Attempt のスコープから組み立てるので、
+  # published の定義が変わってもここが自動で追随する。
+  def likes_received_count
+    Like.joins(:attempt).merge(Attempt.kept.published).where(attempts: { user_id: id }).count
+  end
 end

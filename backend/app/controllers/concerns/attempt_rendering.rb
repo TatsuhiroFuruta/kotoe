@@ -1,4 +1,5 @@
-# 挑戦を JSON にする手順の共有。AttemptsController と LikesController が使う。
+# 挑戦を JSON にする手順の共有。
+# AttemptsController / PostsController / LikesController / MeController が使う。
 module AttemptRendering
   extend ActiveSupport::Concern
 
@@ -20,5 +21,11 @@ module AttemptRendering
   # 単体の挑戦に対する判定。一覧は Like.liked_attempt_ids を直接呼んで 1 クエリにまとめる。
   def liked?(attempt)
     Like.liked_attempt_ids(current_user, [ attempt.id ]).include?(attempt.id)
+  end
+
+  # 一覧に並べる挑戦 1 件。いいね済みかは、あらかじめ 1 クエリで引いた id の集合から
+  # 判定する。すぐ上の liked? は 1 件ずつ DB を引くので、一覧では使ってはいけない。
+  def attempt_list_json(attempt, liked_ids)
+    AttemptSerializer.call(attempt, liked: liked_ids.include?(attempt.id))
   end
 end

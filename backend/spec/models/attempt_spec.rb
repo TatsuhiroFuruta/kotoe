@@ -159,4 +159,60 @@ RSpec.describe Attempt, type: :model do
       expect(Attempt.best_for(post).map(&:id)).to eq([ published.id ])
     end
   end
+
+  describe ".listing_for_user" do
+    let(:user) { create(:user) }
+
+    # 新着順であることを見るため、作成順は期待する順序と逆にする。
+    it "status: :published は自分の公開済みの挑戦を新着順で返す" do
+      older = create(:attempt, :published, user: user, created_at: 2.days.ago)
+      newer = create(:attempt, :published, user: user, created_at: 1.day.ago)
+
+      expect(Attempt.listing_for_user(user, status: :published).map(&:id)).to eq([ newer.id, older.id ])
+    end
+
+    it "status: :draft は下書きだけを返す" do
+      draft = create(:attempt, user: user)
+      create(:attempt, :published, user: user)
+
+      expect(Attempt.listing_for_user(user, status: :draft).map(&:id)).to eq([ draft.id ])
+    end
+
+    it "生成中・失敗はどちらの status でも返さない" do
+      create(:attempt, :generating, user: user)
+      create(:attempt, :failed, user: user)
+
+      expect(Attempt.listing_for_user(user, status: :published)).to be_empty
+      expect(Attempt.listing_for_user(user, status: :draft)).to be_empty
+    end
+
+    it "他人の挑戦を含めない" do
+      create(:attempt, :published)
+
+      expect(Attempt.listing_for_user(user, status: :published)).to be_empty
+    end
+
+    it "削除済みの挑戦を含めない" do
+      create(:attempt, :published, user: user).discard!
+
+      expect(Attempt.listing_for_user(user, status: :published)).to be_empty
+    end
+
+    # Post#discard は挑戦にカスケードしない。ここで隠すと、片付ける手段
+    # （DELETE /api/attempts/:id）に画面から辿り着けなくなる（4-4 案A の前提）。
+    it "削除済みのお題にぶら下がる自分の挑戦は含める" do
+      post = create(:post)
+      attempt = create(:attempt, :published, post: post, user: user)
+      post.discard!
+
+      expect(Attempt.listing_for_user(user, status: :published).map(&:id)).to eq([ attempt.id ])
+    end
+
+    it "likes_count を持つ" do
+      attempt = create(:attempt, :published, user: user)
+      create_list(:like, 2, attempt: attempt)
+
+      expect(Attempt.listing_for_user(user, status: :published).first.likes_count).to eq(2)
+    end
+  end
 end

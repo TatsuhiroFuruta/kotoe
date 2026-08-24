@@ -24,4 +24,17 @@ class UserSerializer
   def self.private_profile(user)
     { id: user.id, name: user.name, email: user.email }
   end
+
+  # /api/me 専用。マイページのプロフィールヘッダーが使う統計を足す。
+  # sign_up / sign_in は private_profile のまま（登録直後は必ず全部 0 で、
+  # サインインのたびに集計 3 本を走らせる理由が無い）。
+  def self.private_profile_with_stats(user)
+    private_profile(user).merge(
+      stats: {
+        posts_count: user.kept_posts_count,
+        attempts_count: user.published_attempts_count,
+        likes_received_count: user.likes_received_count
+      }
+    )
+  end
 end

@@ -2,12 +2,9 @@ module Api
   # お題（Post）の CRUD。絞り込み・集計の判定はモデル（Post.listing）に、
   # JSON の形はシリアライザに寄せ、ここは HTTP の入出力だけを扱う。
   class PostsController < ApplicationController
+    include AttemptRendering
     include PostRendering
-
-    # kaminari は OFFSET = 12 * (page - 1) を組み立てるため、巨大な値を渡されると
-    # int8 を溢れてアダプタが例外になる。認証不要の一覧が誰でも 500 にできてしまうので
-    # 上限を設ける。12 * 100 万件ぶんあれば実用上の到達点より十分に先。
-    MAX_PAGE = 1_000_000
+    include Paginating
 
     before_action :authenticate_user!, only: %i[create destroy]
 
@@ -70,23 +67,6 @@ module Api
     end
 
     private
-
-    # 一覧・表彰台に並べる挑戦 1 件。いいね済みかは、あらかじめ 1 クエリで引いた
-    # id の集合から判定する。単体用の AttemptRendering#liked?（このコントローラは
-    # include していない）は 1 件ずつ DB を引くので、一覧では使えない。
-    #
-    # 6-2（全体ランキング）が同じ「id 集合ベースの liked」を必要とするので、
-    # 3 つ目の呼び出し元が来たら AttemptRendering に引き上げる。
-    def attempt_list_json(attempt, liked_ids)
-      AttemptSerializer.call(attempt, liked: liked_ids.include?(attempt.id))
-    end
-
-    # 数値以外・配列・巨大な値のいずれで来ても 1 ページ目〜上限に収める。
-    # 0 以下や数値でない値は kaminari 自身が 1 ページ目に丸めるが、
-    # 上限側と「配列を渡されて to_i が無い」ケースはこちらで潰す必要がある。
-    def page_param
-      params[:page].to_s.to_i.clamp(1, MAX_PAGE)
-    end
 
     # params[:post] の型はクライアントが決められる。スカラー（post=foo）や
     # 配列（post[]=foo）を送られても 500 にせず、通常の検証エラー（422）として扱う。

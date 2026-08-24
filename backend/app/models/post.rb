@@ -33,6 +33,23 @@ class Post < ApplicationRecord
   # ransack の述語（title_cont）は外に漏れない。
   scope :search_by_title, ->(query) { query.blank? ? all : ransack(title_cont: query).result }
 
+  # 一覧で返すお題の読み込み方。listing（お題一覧）とマイページの各一覧が共有する。
+  scope :for_listing, -> { kept.includes(:user).with_counts }
+
+  # マイページのお気に入り一覧。並びは「お気に入りした順」なので favorites 側の時刻で
+  # 並べる（お題の新着順にすると、古いお題を今お気に入りしても奥に埋もれる）。
+  # 同着は id でタイブレークしてページ間の重複・抜けを防ぐ（recent と同じ理由）。
+  #
+  # kept で絞るのは、5-2 が削除済みお題への解除を 404 にしているため。出すと、
+  # 解除ボタンが必ず 404 を返す行が画面に出る（設計書参照）。
+  #
+  # joins を足しても total_count は壊れない。favorites の (user_id, post_id) が
+  # 複合ユニークなので、1 つのお題が 2 行に増えることがなく distinct は要らない。
+  scope :favorited_by, ->(user) {
+    for_listing.joins(:favorites).where(favorites: { user_id: user.id })
+               .order(Favorite.arel_table[:created_at].desc, Favorite.arel_table[:id].desc)
+  }
+
   # 一覧の組み立て口。コントローラはこれだけを呼ぶ。
   #
   # search_by_title を先頭に置いている。ransack は受け取った関係から Post.all を
@@ -40,7 +57,7 @@ class Post < ApplicationRecord
   # 同じ SQL になる。それでも先頭に固定するのは、その引き継ぎの挙動に依存せずに
   # 読めるようにするため。
   def self.listing(q: nil, sort: nil)
-    relation = search_by_title(q).kept.includes(:user).with_counts
+    relation = search_by_title(q).for_listing
 
     sort == "popular" ? relation.popular : relation.recent
   end

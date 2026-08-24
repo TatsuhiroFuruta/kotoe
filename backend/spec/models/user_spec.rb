@@ -51,4 +51,60 @@ RSpec.describe User, type: :model do
     # devise の validatable が既定で6文字以上を要求する。
     expect(build(:user, password: "12345")).to be_invalid
   end
+
+  describe "#kept_posts_count" do
+    it "自分の未削除のお題だけを数える" do
+      user = create(:user)
+      create_list(:post, 2, user: user)
+      create(:post, user: user).discard!
+      create(:post)
+
+      expect(user.kept_posts_count).to eq(2)
+    end
+  end
+
+  describe "#published_attempts_count" do
+    it "自分の未削除かつ公開済みの挑戦だけを数える" do
+      user = create(:user)
+      create_list(:attempt, 2, :published, user: user)
+      create(:attempt, user: user)
+      create(:attempt, :generating, user: user)
+      create(:attempt, :failed, user: user)
+      create(:attempt, :published, user: user).discard!
+      create(:attempt, :published)
+
+      expect(user.published_attempts_count).to eq(2)
+    end
+  end
+
+  describe "#likes_received_count" do
+    it "自分の公開済み挑戦が集めたいいねを数える" do
+      user = create(:user)
+      create_list(:like, 3, attempt: create(:attempt, :published, user: user))
+
+      expect(user.likes_received_count).to eq(3)
+    end
+
+    it "下書き・削除済みの挑戦、他人の挑戦へのいいねは数えない" do
+      user = create(:user)
+      create(:like, attempt: create(:attempt, user: user))
+      discarded = create(:attempt, :published, user: user)
+      create(:like, attempt: discarded)
+      discarded.discard!
+      create(:like, attempt: create(:attempt, :published))
+
+      expect(user.likes_received_count).to eq(0)
+    end
+
+    # 得た票は消えない。me/attempts が削除済みお題ぶら下がりの挑戦を出す以上、
+    # 「一覧に出ている挑戦のいいねを足すと合計になる」関係も保つ（設計書参照）。
+    it "削除済みのお題にぶら下がる挑戦へのいいねは数える" do
+      user = create(:user)
+      post = create(:post)
+      create(:like, attempt: create(:attempt, :published, post: post, user: user))
+      post.discard!
+
+      expect(user.likes_received_count).to eq(1)
+    end
+  end
 end
