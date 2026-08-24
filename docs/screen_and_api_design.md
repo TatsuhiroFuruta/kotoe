@@ -161,11 +161,27 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
 | メソッド | パス | 役割 | 画面 |
 |---|---|---|---|
 | GET | `/api/rankings` | いいね数等の全体順位（kaminari） | ランキング |
-| GET | `/api/me/posts` | 自分の投稿一覧 | マイページ |
-| GET | `/api/me/attempts` | 自分の公開済み挑戦一覧（`status: published`） | マイページ |
-| GET | `/api/me/drafts` | 自分の下書き一覧（`status: draft`／保存したプロンプト） | マイページ |
-| GET | `/api/me/favorites` | お気に入り一覧 | マイページ |
+| GET | `/api/me/posts` | 自分の投稿一覧（`kept`・新着順・12件/頁） | マイページ |
+| GET | `/api/me/attempts` | 自分の公開済み挑戦一覧（`status: published`・新着順・12件/頁） | マイページ |
+| GET | `/api/me/drafts` | 自分の下書き一覧（`status: draft`／保存したプロンプト・新着順・12件/頁） | マイページ |
+| GET | `/api/me/favorites` | お気に入り一覧（`Post.kept` のみ・お気に入りした新しい順・12件/頁） | マイページ |
 | POST | `/api/attempts/:id/report` | 挑戦を通報（モデレーション） | 比較ビュー |
+
+### マイページ API の補足（6-3）
+- マイページの4本は**要ログイン**。`meta` は他の一覧と同じ形（`current_page` / `total_pages` / `total_count`）。
+- `me/posts` と `me/favorites` の要素は**お題一覧と同じ形**（`favorited` を含む）。
+  `me/favorites` の `favorited` は定義上つねに `true`。
+- `me/attempts` と `me/drafts` の要素は**挑戦一覧と同じ形に `post` を 1 つ足した形**。
+  `post` は `{ id, title, image_public_id, discarded }` の最小サマリで、集計も `favorited` も持たない。
+  応答キーはどちらも `attempts`（下書きは `status` が `draft` の Attempt なので形が同じ）。
+- **`me/attempts` / `me/drafts` は削除済みのお題にぶら下がる自分の挑戦も返す**（`post.discarded`
+  が `true` になる）。`Post#discard` は挑戦にカスケードせず、片付ける手段（`DELETE /api/attempts/:id`）
+  を画面に残すため（4-4 案A）。`me/favorites` だけは逆に `Post.kept` で絞る（解除の口が 5-2 で
+  404 になっており、出すと必ず失敗するボタンが並ぶため）。
+- `GET /api/me` は `id` / `name` / `email` に加えて `stats`
+  （`posts_count` / `attempts_count` / `likes_received_count`）を返す。マイページのヘッダー用。
+  `posts_count` は `me/posts`、`attempts_count` は `me/attempts` の `meta.total_count` と一致する。
+  `POST /api/auth/sign_up` と `POST /api/auth/sign_in` の応答には `stats` を**含めない**。
 
 ---
 
