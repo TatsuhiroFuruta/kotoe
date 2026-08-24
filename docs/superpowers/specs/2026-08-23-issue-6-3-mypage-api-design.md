@@ -502,4 +502,4 @@ get "me/favorites" => "me#favorites"
 - **通報履歴のタブ**… 5-3 の範囲。ブリーフの4タブに含まれない
 - **`generating` / `failed` な挑戦のタブ**… ブリーフの4タブに含まれない。生成中の挑戦は、生成を起動した画面が手元に持っている `id` をポーリングして追う（7-3）
 
-  **ただしこの issue のあと、`generating` と `failed` はどの一覧にも出ない状態になる**（お題詳細は `kept.published`、`me/attempts` は `published`、`me/drafts` は `draft`）。生成を起動したタブを閉じてから失敗すると、その挑戦の `id` を知る手段が無くなり、本人が消すこともできない（`failed` は `Attempts::Generation` が `draft?` を要求するので再生成もできない）。**6-3 の scope 外だが、放置すると 4-4 案A の「片付ける手段を残す」と矛盾する**ので、別 issue として積む。
+  **ただしこの issue のあと、`generating` と `failed` はどの一覧にも出ない状態になる**（お題詳細は `kept.published`、`me/attempts` は `published`、`me/drafts` は `draft`）。生成を起動したタブを閉じてから失敗すると、その挑戦の `id` を知る手段が無くなり、本人が消すこともできない（`failed` は `Attempts::Generation` が `draft?` を要求するので再生成もできない）。**6-3 の scope 外だが、放置すると 4-4 案A の「片付ける手段を残す」と矛盾する**ので、別 issue として積んだ（`docs/issues_backlog.md` の **4-5**）。
