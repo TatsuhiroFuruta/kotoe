@@ -58,6 +58,16 @@
 
 代わりに、挑戦に添えるお題の表現へ `discarded` を持たせ、フロントが「このお題は削除されました」と描き分けられるようにする。カードから飛べる先（`GET /api/attempts/:id`）は 404 になるので、リンクを殺すかどうかもフロントが決められる。
 
+### ただし削除済みのお題は、タイトルと画像を伏せる
+
+`post` サマリは、`discarded` が `true` のとき `title` と `image_public_id` を `null` にする（`id` と `discarded` だけを返す）。
+
+`discard` はモデレーションの取り下げ手段でもある（通報 → ソフトデリート）。伏せないと、取り下げたお題の `image_public_id` を、そのお題に挑戦した全員のマイページから配り続けることになる。Cloudinary の URL は `public_id` から誰でも組み立てられるため、これは画像を配り続けるのと同じ。**この issue より前は、削除済みのお題の情報を返す経路がひとつも無かった**（すべて `Post.kept` 起点で、`GET /api/attempts/:id` もお題が削除済みなら応答ごと 404 になる）ので、ここで初めて開く穴になる。
+
+伏せても失うものが無い。削除済みのお題のカードに残る操作は `DELETE /api/attempts/:id` だけで、それに要るのは挑戦の `id` と「削除済みである」ことだけ。どの下書きかは自分が書いた `description` で見分けられる。
+
+型は `{ id: number, title: string | null, image_public_id: string | null, discarded: boolean }` になる。
+
 ### `me/favorites` だけは `Post.kept` で絞る
 
 こちらは issue の制約文どおり。5-2 が削除済みお題への `DELETE /api/posts/:id/favorite` を 404 にしているのは、「その行はどの画面にも出てこないので片付ける導線に意味がない」という前提に立っているため。絞らないと、解除ボタンが必ず 404 を返す行が画面に出る。しかもお題は discard なので `has_many :favorites, dependent: :destroy` が発火せず、その行はユーザーが二度と消せない。
@@ -477,4 +487,6 @@ get "me/favorites" => "me#favorites"
 - **全体ランキング**（`GET /api/rankings`）… 6-2
 - **一覧の検索・並び替えパラメータ**（`?q=` / `?sort=`）… マイページのタブに絞り込み UI は無い。必要になってから足す
 - **通報履歴のタブ**… 5-3 の範囲。ブリーフの4タブに含まれない
-- **`generating` / `failed` な挑戦のタブ**… ブリーフの4タブに含まれない。生成中の挑戦はお題詳細から辿る（7-3 のポーリング）
+- **`generating` / `failed` な挑戦のタブ**… ブリーフの4タブに含まれない。生成中の挑戦は、生成を起動した画面が手元に持っている `id` をポーリングして追う（7-3）
+
+  **ただしこの issue のあと、`generating` と `failed` はどの一覧にも出ない状態になる**（お題詳細は `kept.published`、`me/attempts` は `published`、`me/drafts` は `draft`）。生成を起動したタブを閉じてから失敗すると、その挑戦の `id` を知る手段が無くなり、本人が消すこともできない（`failed` は `Attempts::Generation` が `draft?` を要求するので再生成もできない）。**6-3 の scope 外だが、放置すると 4-4 案A の「片付ける手段を残す」と矛盾する**ので、別 issue として積む。

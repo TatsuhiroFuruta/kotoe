@@ -8,13 +8,21 @@
 # discarded を持つのはこの表現だけ。マイページは削除済みのお題にぶら下がる自分の挑戦も
 # 出すので（4-4 案A：片付ける手段を残す）、フロントが描き分けるのに要る。公開 API の
 # お題一覧・詳細には削除済みが出てこないので、PostSerializer 側には足さない。
+#
+# その削除済みのお題では、タイトルと画像を伏せて id と discarded だけにする。
+# discard はモデレーションの取り下げ手段でもあり（通報 → ソフトデリート）、伏せないと
+# 取り下げた画像の public_id を、そのお題に挑戦した全員のマイページから配り続けることに
+# なる。Cloudinary の URL は public_id から誰でも組み立てられるため。
+# カードに残る操作は DELETE /api/attempts/:id だけなので、この 2 つで足りる。
 class PostSummarySerializer
   def self.call(post)
+    discarded = post.discarded?
+
     {
       id: post.id,
-      title: post.title,
-      image_public_id: post.image_public_id,
-      discarded: post.discarded?
+      title: discarded ? nil : post.title,
+      image_public_id: discarded ? nil : post.image_public_id,
+      discarded: discarded
     }
   end
 end

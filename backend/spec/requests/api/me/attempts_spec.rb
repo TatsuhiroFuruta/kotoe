@@ -64,7 +64,10 @@ RSpec.describe "GET /api/me/attempts", type: :request do
 
   # Post#discard は挑戦にカスケードしない。片付ける手段（DELETE /api/attempts/:id）に
   # 画面から辿り着けるよう、出したうえで discarded で描き分けさせる（4-4 案A の前提）。
-  it "削除済みのお題にぶら下がる挑戦も返り、post.discarded が true になる" do
+  #
+  # ただしタイトルと画像は伏せる。通報で取り下げられたお題の public_id を、
+  # 挑戦した全員のマイページから配り続けることになるため。
+  it "削除済みのお題にぶら下がる挑戦も返るが、タイトルと画像は伏せる" do
     post_record = create(:post)
     create(:attempt, :published, post: post_record, user: user)
     post_record.discard!
@@ -72,7 +75,12 @@ RSpec.describe "GET /api/me/attempts", type: :request do
     get "/api/me/attempts", headers: auth_headers(token)
 
     expect(response.parsed_body["attempts"].size).to eq(1)
-    expect(response.parsed_body["attempts"].first["post"]["discarded"]).to be(true)
+    expect(response.parsed_body["attempts"].first["post"]).to eq(
+      "id" => post_record.id,
+      "title" => nil,
+      "image_public_id" => nil,
+      "discarded" => true
+    )
   end
 
   it "likes_count と liked を返す" do

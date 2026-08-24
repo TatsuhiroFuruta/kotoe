@@ -173,6 +173,8 @@ README の機能・データモデルから導いた、**画面一覧 → Next.j
   `me/favorites` の `favorited` は定義上つねに `true`。
 - `me/attempts` と `me/drafts` の要素は**挑戦一覧と同じ形に `post` を 1 つ足した形**。
   `post` は `{ id, title, image_public_id, discarded }` の最小サマリで、集計も `favorited` も持たない。
+  **`discarded` が `true` のときは `title` と `image_public_id` を `null` にする**（`discard` は
+  通報による取り下げの手段でもあり、取り下げた画像の `public_id` を挑戦者全員に配り続けないため）。
   応答キーはどちらも `attempts`（下書きは `status` が `draft` の Attempt なので形が同じ）。
 - **`me/attempts` / `me/drafts` は削除済みのお題にぶら下がる自分の挑戦も返す**（`post.discarded`
   が `true` になる）。`Post#discard` は挑戦にカスケードせず、片付ける手段（`DELETE /api/attempts/:id`）

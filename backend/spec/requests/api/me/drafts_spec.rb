@@ -68,8 +68,9 @@ RSpec.describe "GET /api/me/drafts", type: :request do
   end
 
   # 削除済みお題の下書きこそ、片付ける手段（DELETE /api/attempts/:id）に
-  # 辿り着ける必要がある（4-4 案A の前提）。
-  it "削除済みのお題にぶら下がる下書きも返り、post.discarded が true になる" do
+  # 辿り着ける必要がある（4-4 案A の前提）。ただしタイトルと画像は伏せる
+  # （取り下げられたお題の public_id を配り続けないため）。
+  it "削除済みのお題にぶら下がる下書きも返るが、タイトルと画像は伏せる" do
     post_record = create(:post)
     create(:attempt, post: post_record, user: user)
     post_record.discard!
@@ -77,7 +78,12 @@ RSpec.describe "GET /api/me/drafts", type: :request do
     get "/api/me/drafts", headers: auth_headers(token)
 
     expect(response.parsed_body["attempts"].size).to eq(1)
-    expect(response.parsed_body["attempts"].first["post"]["discarded"]).to be(true)
+    expect(response.parsed_body["attempts"].first["post"]).to eq(
+      "id" => post_record.id,
+      "title" => nil,
+      "image_public_id" => nil,
+      "discarded" => true
+    )
   end
 
   it "1 ページ 12 件で、13 件目は 2 ページ目に出る" do
