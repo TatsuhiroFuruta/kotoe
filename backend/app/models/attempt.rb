@@ -67,7 +67,10 @@ class Attempt < ApplicationRecord
   # PostSummarySerializer が discarded として返し、フロントが描き分ける。
   #
   # includes(:post) はカードに出すお題サマリのため、includes(:user) は
-  # AttemptSerializer が投稿者を出すため（常に本人なので preload は 1 クエリで済む）。
+  # AttemptSerializer が投稿者を出すため。user は常に本人だが、Attempt 起点の
+  # リレーションなので current_user は再利用されず、1 件のための SELECT が 1 本走る。
+  # current_user.attempts 起点にすれば消せるものの、listing_for（お題詳細）との
+  # 対称性が崩れるので、その 1 本は払う。
   def self.listing_for_user(user, status:)
     kept.where(user: user, status: status).includes(:user, :post).with_likes_count.recent
   end

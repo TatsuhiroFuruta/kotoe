@@ -951,6 +951,8 @@ Expected: FAIL（`ActionController::RoutingError: No route matches [GET] "/api/m
 
 `backend/app/serializers/post_summary_serializer.rb`（新規）:
 
+> **実行後の追記**：レビュー指摘により、実際に入ったものは下のスケッチと違い、`discarded` が `true` のとき `title` と `image_public_id` を `nil` にする。正は設計書の「ただし削除済みのお題は、タイトルと画像を伏せる」節。
+
 ```ruby
 # 挑戦アイテムに添える「どのお題への挑戦か」の最小表現。マイページの
 # 「自分の挑戦」「下書き」カードが使う（サムネイル・タイトル・リンク先）。

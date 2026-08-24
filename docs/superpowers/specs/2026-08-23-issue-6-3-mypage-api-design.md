@@ -68,6 +68,10 @@
 
 型は `{ id: number, title: string | null, image_public_id: string | null, discarded: boolean }` になる。
 
+**判定は `discarded?` だけを見る。「誰が消したか」では分けない。** つまり自分が投稿して自分で消したお題への自分の挑戦でも、タイトルと画像は伏せられる。分けようとすると、シリアライザに `current_user` を渡して所有者を比べる必要が生まれ、「削除済みのお題の中身は返さない」という一文の規則が「場合による」に変わる。取り下げの目的（もう配らない）は投稿者本人の画面でも同じなので、単純なほうを採る。
+
+**7-6 への申し送り**：この結果、削除済みのお題のカードは「タイトルも画像も無く、自分が書いた `description` だけがある」状態になる。空カードのデザインはこのケース（自分で消した場合を含む）を想定しておくこと。
+
 ### `me/favorites` だけは `Post.kept` で絞る
 
 こちらは issue の制約文どおり。5-2 が削除済みお題への `DELETE /api/posts/:id/favorite` を 404 にしているのは、「その行はどの画面にも出てこないので片付ける導線に意味がない」という前提に立っているため。絞らないと、解除ボタンが必ず 404 を返す行が画面に出る。しかもお題は discard なので `has_many :favorites, dependent: :destroy` が発火せず、その行はユーザーが二度と消せない。
@@ -233,13 +237,18 @@ end
 #
 # discarded を持つのはここだけ。マイページは削除済みのお題にぶら下がる自分の挑戦も
 # 出すので（4-4 案A：片付ける手段を残す）、フロントが描き分けるのに要る。
+#
+# その削除済みのお題では、タイトルと画像を伏せて id と discarded だけにする
+# （上の「ただし削除済みのお題は、タイトルと画像を伏せる」節が根拠）。
 class PostSummarySerializer
   def self.call(post)
+    discarded = post.discarded?
+
     {
       id: post.id,
-      title: post.title,
-      image_public_id: post.image_public_id,
-      discarded: post.discarded?
+      title: discarded ? nil : post.title,
+      image_public_id: discarded ? nil : post.image_public_id,
+      discarded: discarded
     }
   end
 end
@@ -387,14 +396,18 @@ get "me/favorites" => "me#favorites"
 
 ## クエリ本数（件数に比例しない）
 
-| エンドポイント | 内訳 | 本数 |
-|---|---|---|
-| `me/posts` | 一覧＋集計サブクエリ／総件数／`users` preload／お気に入り判定 | 4 |
-| `me/attempts` ／ `me/drafts` | 一覧＋`likes_count`／総件数／`users` preload／`posts` preload／いいね判定 | 5 |
-| `me/favorites` | 一覧＋集計サブクエリ（`favorites` と JOIN）／総件数／`users` preload | 3 |
-| `me` | 統計3本（認証のためのユーザー取得は devise の分） | 3 |
+見積もり（上限）と、実装後に測った実数は次のとおり。実数のほうが少ないのは 2 つの理由による。**1 ページに収まる結果では kaminari が `total_count` を COUNT を発行せずに導出する**（ロード済みかつ最終ページが端数なら件数から計算できる）。また **`me/posts` は `current_user.posts` 起点なので `users` の preload 自体がスキップされる**（関連元のレコードが既に手元にあるため）。どちらも「1ページに収まるあいだは」の話で、上限は表のとおり。
+
+| エンドポイント | 内訳（上限） | 上限 | 実測（認証2本を除く） |
+|---|---|---|---|
+| `me/posts` | 一覧＋集計サブクエリ／総件数／`users` preload／お気に入り判定 | 4 | 2 |
+| `me/attempts` ／ `me/drafts` | 一覧＋`likes_count`／総件数／`users` preload／`posts` preload／いいね判定 | 5 | 4 |
+| `me/favorites` | 一覧＋集計サブクエリ（`favorites` と JOIN）／総件数／`users` preload | 3 | 2 |
+| `me` | 統計3本（認証のためのユーザー取得は devise の分） | 3 | 3 |
 
 いずれも一覧の件数に比例しない。既存の N+1 検査（`count_select_queries` で件数を変えて2回測り、同じであることを見る）を4本すべてに付ける。
+
+`me/attempts` の `includes(:user)` は、`Attempt` 起点のリレーションなので `me/posts` のようにはスキップされず、常に本人1件のための `SELECT users.*` が1本走る。`current_user.attempts` 起点に寄せれば消せるが、`listing_for(post)`（お題詳細）との対称性が崩れるので、1本を払って揃えるほうを選ぶ。
 
 `me/posts` と `me/favorites` の集計は `Post.with_counts` の相関サブクエリ（お題1件につき COUNT が2回）で、6-1 の設計書が指摘した「本数と仕事量は別」の話がここにも当たる。ただし対象は1ページ12件に限られ、`popular` のようにソートのために全行を評価する形にはならない（並びは `posts.created_at` か `favorites.created_at` で、どちらもテーブルの実カラム）。
 
