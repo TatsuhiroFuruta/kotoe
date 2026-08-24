@@ -59,6 +59,19 @@ class Attempt < ApplicationRecord
   # best_attempts と attempts?sort=likes の並びが定義上ずれない。
   def self.best_for(post) = listing_for(post, sort: "likes").limit(BEST_LIMIT)
 
+  # マイページの「自分の挑戦」「下書き」の組み立て口。listing_for（お題詳細）と対になる。
+  #
+  # お題は kept で絞らない。Post#discard は挑戦にカスケードしないので、削除済みお題の
+  # 下に自分の挑戦が残る。ここで隠すと片付ける手段（DELETE /api/attempts/:id）に
+  # 画面から辿り着けなくなる（4-4 案A の前提）。削除済みかどうかは
+  # PostSummarySerializer が discarded として返し、フロントが描き分ける。
+  #
+  # includes(:post) はカードに出すお題サマリのため、includes(:user) は
+  # AttemptSerializer が投稿者を出すため（常に本人なので preload は 1 クエリで済む）。
+  def self.listing_for_user(user, status:)
+    kept.where(user: user, status: status).includes(:user, :post).with_likes_count.recent
+  end
+
   def self.likes_count_sql
     Like.where("likes.attempt_id = attempts.id").select("COUNT(*)").to_sql
   end
