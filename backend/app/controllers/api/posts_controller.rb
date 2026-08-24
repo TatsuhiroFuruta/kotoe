@@ -2,6 +2,7 @@ module Api
   # お題（Post）の CRUD。絞り込み・集計の判定はモデル（Post.listing）に、
   # JSON の形はシリアライザに寄せ、ここは HTTP の入出力だけを扱う。
   class PostsController < ApplicationController
+    include AttemptRendering
     include PostRendering
     include Paginating
 
@@ -66,16 +67,6 @@ module Api
     end
 
     private
-
-    # 一覧・表彰台に並べる挑戦 1 件。いいね済みかは、あらかじめ 1 クエリで引いた
-    # id の集合から判定する。単体用の AttemptRendering#liked?（このコントローラは
-    # include していない）は 1 件ずつ DB を引くので、一覧では使えない。
-    #
-    # 6-2（全体ランキング）が同じ「id 集合ベースの liked」を必要とするので、
-    # 3 つ目の呼び出し元が来たら AttemptRendering に引き上げる。
-    def attempt_list_json(attempt, liked_ids)
-      AttemptSerializer.call(attempt, liked: liked_ids.include?(attempt.id))
-    end
 
     # params[:post] の型はクライアントが決められる。スカラー（post=foo）や
     # 配列（post[]=foo）を送られても 500 にせず、通常の検証エラー（422）として扱う。
