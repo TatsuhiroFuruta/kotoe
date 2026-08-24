@@ -15,10 +15,11 @@ Rails.application.routes.draw do
     get "health" => "health#show"
 
     # ログイン中のユーザー自身の情報とマイページの各タブ（issue 6-3）。
-    get "me"       => "me#show"
-    get "me/posts"    => "me#posts"
-    get "me/attempts" => "me#attempts"
-    get "me/drafts"   => "me#drafts"
+    get "me"           => "me#show"
+    get "me/posts"     => "me#posts"
+    get "me/attempts"  => "me#attempts"
+    get "me/drafts"    => "me#drafts"
+    get "me/favorites" => "me#favorites"
 
     # お題（issue 3-2）。一覧・詳細は認証不要、投稿・削除は要ログイン。
     resources :posts, only: %i[index create show destroy] do

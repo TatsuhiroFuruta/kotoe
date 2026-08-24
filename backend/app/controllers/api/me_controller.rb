@@ -29,6 +29,17 @@ module Api
     # 下書きも Attempt なので応答キーは attempts のまま。URL だけを分ける。
     def drafts = render_attempts(Attempt.listing_for_user(current_user, status: :draft))
 
+    def favorites
+      posts = Post.favorited_by(current_user).page(page_param)
+
+      render json: {
+        # この一覧に載っている時点でお気に入り済みなので、判定クエリは引かない。
+        # me/attempts の liked と違い、行の存在そのものが根拠になる（設計書参照）。
+        posts: posts.map { |post| PostSerializer.call(post, favorited: true) },
+        meta: PaginationSerializer.call(posts)
+      }
+    end
+
     private
 
     def render_attempts(relation)
