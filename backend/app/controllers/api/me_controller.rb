@@ -2,9 +2,9 @@ module Api
   class MeController < ApplicationController
     before_action :authenticate_user!
 
-    # 「いま誰でログインしているか」だけを返す。
+    # 「いま誰でログインしているか」と、マイページのヘッダーに出す統計。
     def show
-      render json: UserSerializer.private_profile(current_user)
+      render json: UserSerializer.private_profile_with_stats(current_user)
     end
   end
 end
