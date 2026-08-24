@@ -26,6 +26,9 @@ module Api
 
     def attempts = render_attempts(Attempt.listing_for_user(current_user, status: :published))
 
+    # 下書きも Attempt なので応答キーは attempts のまま。URL だけを分ける。
+    def drafts = render_attempts(Attempt.listing_for_user(current_user, status: :draft))
+
     private
 
     def render_attempts(relation)
