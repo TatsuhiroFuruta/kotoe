@@ -435,6 +435,20 @@ RSpec.describe "挑戦 API", type: :request do
       expect(attempt.reload).to be_discarded
     end
 
+    # 4-4 案A。PATCH と generate はお題の生死を見るが、DELETE だけは見ない。
+    # 塞ぐと、マイページに出ている削除済みお題の下の挑戦を片付ける手段が無くなる
+    # （Attempt.listing_for_user と PostSummarySerializer がこの導線を前提にしている）。
+    # 「塞がっていないこと」を縛るテストなので、3 つとも塞ぐ案に倒したときにここが落ちる。
+    it "お題が削除されていても片付けられる（4-4 案A）" do
+      attempt = create(:attempt, :published, user: user, post: post_record)
+      post_record.discard!
+
+      delete "/api/attempts/#{attempt.id}", headers: auth_headers(token)
+
+      expect(response).to have_http_status(:no_content)
+      expect(attempt.reload).to be_discarded
+    end
+
     it "他人の挑戦は 404" do
       others = create(:attempt)
 
