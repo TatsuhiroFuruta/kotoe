@@ -146,6 +146,19 @@ RSpec.describe "挑戦 API", type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
+    # Post#discard は挑戦にカスケードしないので、挑戦だけを見ると kept のまま残る。
+    # 読み取り API から辿れない（お題が 404）のに書き込みだけ通る状態を塞ぐ。
+    it "お題が削除されていたら 404" do
+      post_record.discard!
+
+      patch "/api/attempts/#{attempt.id}",
+        params: { attempt: { description: "after" } },
+        headers: auth_headers(token), as: :json
+
+      expect(response).to have_http_status(:not_found)
+      expect(attempt.reload.description).to eq("before")
+    end
+
     # 生成後に描写だけ書き換えられると、公開されている画像と説明が食い違う。
     it "draft でなければ 422 と attempt_not_draft" do
       published = create(:attempt, :published, user: user)
@@ -196,6 +209,21 @@ RSpec.describe "挑戦 API", type: :request do
       post "/api/attempts/#{others.id}/generate", headers: auth_headers(token), as: :json
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    # この issue の本体。生成枠は enqueue 時に消費して削除しても戻らないので、
+    # 404 を返すだけでなく「ジョブが積まれない・枠が減らない」ところまで縛る。
+    # 通してしまうと、ユーザーは 1 日の枠と実費を、比較相手のいない結果のために失う。
+    it "お題が削除されていたら 404。ジョブも積まれず、生成枠も消費しない" do
+      post_record.discard!
+
+      expect {
+        post "/api/attempts/#{attempt.id}/generate", headers: auth_headers(token), as: :json
+      }.not_to have_enqueued_job(GenerateImageJob)
+
+      expect(response).to have_http_status(:not_found)
+      expect(attempt.reload).to be_draft
+      expect(attempt.generated_at).to be_nil
     end
 
     it "draft でなければ 422 と attempt_not_draft" do
