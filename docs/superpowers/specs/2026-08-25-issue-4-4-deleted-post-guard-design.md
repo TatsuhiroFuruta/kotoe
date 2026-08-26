@@ -51,7 +51,10 @@
 
 窓の大きさと被害：
 
-- 窓は enqueue からワーカーが拾うまで。Solid Queue の `polling_interval` は 1 秒（`config/queue.yml`）なので通常 1〜2 秒。他の生成が詰まっていれば延びる（生成1本は最大 150 秒）
+- 窓は 2 つある。
+  - **コントローラ側**：`editable_attempt` がお題を見た SELECT から、`Attempts::Generation#start_generation` が `update!(status: :generating)` で枠を消費するまで。`start_generation` はロックを取ってから `@attempt.reload.draft?` を読み直すが、`reload` は joins を引き継がないので**お題の生死は読み直さない**。同一ユーザーの並行 generate は `with_lock`（users 行の `SELECT ... FOR UPDATE`）で直列化されるため、待たされたぶんこの窓は広がる
+  - **ジョブ側**：enqueue からワーカーが拾うまで。Solid Queue の `polling_interval` は 1 秒（`config/queue.yml`）なので通常 1〜2 秒。他の生成が詰まっていれば延びる（生成1本は最大 150 秒）
+- どちらの窓も、通り抜けたときの結果は同じ（下記）。コントローラ側を塞ぐには `start_generation` にお題の再確認を足すことになるが、そこで止めた場合に返すエラーコードが新たに要る点もジョブ側と同じなので、まとめて許容する
 - 窓に入る条件は「ユーザーが生成を押した直後に、お題の作者がそのお題を削除する」
 - 通り抜けた場合の損失は **$0.011 と生成枠1つ**。生成された挑戦は `published` になるが、`GET /api/attempts/:id` もお題詳細も `Post.kept` 起点なので他人からは見えず、ベスト再現（6-1）と全体ランキング（6-2）の集計も post 起点なので**順位は汚れない**
 

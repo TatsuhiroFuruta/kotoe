@@ -70,8 +70,9 @@ module Api
       current_user.attempts.kept.joins(:post).merge(Post.kept).find(params[:id])
     end
 
-    # DELETE 用。お題の状態は見ない。お題が消えたあとに自分の挑戦を片付ける手段を
-    # 残すため（4-4 案A）。マイページが削除済みお題の下の挑戦を出しているのは、
+    # DELETE 用。所有と削除済みの扱いは editable_attempt と同じ（他人の挑戦・存在しない
+    # ID・削除済みは 404）で、お題の状態だけを見ない。お題が消えたあとに自分の挑戦を
+    # 片付ける手段を残すため（4-4 案A）。マイページが削除済みお題の下の挑戦を出しているのは、
     # この導線が生きている前提である（Attempt.listing_for_user 参照）。
     def owned_attempt
       current_user.attempts.kept.find(params[:id])
