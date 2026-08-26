@@ -19,7 +19,7 @@ module Api
     end
 
     def update
-      attempt = owned_attempt
+      attempt = editable_attempt
       return render_error("attempt_not_draft") unless attempt.draft?
 
       attempt.description = attempt_attributes[:description]
@@ -29,7 +29,7 @@ module Api
     end
 
     def generate
-      attempt = owned_attempt
+      attempt = editable_attempt
       result = Attempts::Generation.call(attempt)
 
       return render_generation_error(result) unless result.ok?
@@ -56,8 +56,24 @@ module Api
 
     private
 
+    # PATCH / generate 用。自分の未削除の挑戦のうち、お題も生きているものだけを掴む。
+    #
     # current_user.attempts に限定することで、所有チェックの書き忘れが起こりようがない。
     # 他人の挑戦・存在しない ID・削除済みは、すべて RecordNotFound → 404 になる。
+    #
+    # お題側も見るのは Post#discard が挑戦にカスケードしないため（likeable_attempt と
+    # 同じ形・同じ理由）。挑戦だけを見ると kept のままなので、読み取り API からは
+    # 辿れない（お題が 404 になる）のに書き込みだけ通る。とくに generate は、
+    # 比較相手のいない結果のために 1 日の生成枠と実費を失わせる
+    # （枠は enqueue 時に消費し、削除しても戻らない）。
+    def editable_attempt
+      current_user.attempts.kept.joins(:post).merge(Post.kept).find(params[:id])
+    end
+
+    # DELETE 用。所有と削除済みの扱いは editable_attempt と同じ（他人の挑戦・存在しない
+    # ID・削除済みは 404）で、お題の状態だけを見ない。お題が消えたあとに自分の挑戦を
+    # 片付ける手段を残すため（4-4 案A）。マイページが削除済みお題の下の挑戦を出しているのは、
+    # この導線が生きている前提である（Attempt.listing_for_user 参照）。
     def owned_attempt
       current_user.attempts.kept.find(params[:id])
     end
