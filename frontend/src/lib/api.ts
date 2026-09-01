@@ -1,5 +1,6 @@
 // Rails API を叩く共通クライアント。個別コンポーネントで直接 fetch しない。
-// JWT を Authorization ヘッダに載せる処理は issue 7-1 でここに足す。
+
+import { tokenStore } from "@/lib/auth/token-store";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -14,25 +15,74 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export type ApiRequestInit = RequestInit & {
+  /**
+   * true なら Authorization ヘッダを載せない。sign_up / sign_in で使う。
+   * 「まだトークンを持っていないはずだから省略できる」ではなく、
+   * ログイン中に再ログインされても下の 401 判定を壊さないために明示する。
+   */
+  skipAuth?: boolean;
+};
+
+/**
+ * ボディの取り出し。status ではなく「中身が空かどうか」で判断する。
+ *
+ * 204 だけを特別扱いすると DELETE /api/auth/sign_out で落ちる。あちらは
+ * `head :ok` なので 204 ではなく「ボディが空の 200」で返って来る。
+ *
+ * JSON でない応答も握り潰さず生の文字列で返す。Render のプロキシや
+ * Vercel のエラーページは HTML を返すことがあり、ここで例外にすると
+ * 本当のステータスコード（502 など）が失われて切り分けができなくなる。
+ */
+async function parseBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+/** 低レベル。Response ごと返す。レスポンスヘッダから JWT を取る認証まわりが使う。 */
+export async function apiRequest<T>(
+  path: string,
+  init?: ApiRequestInit,
+): Promise<{ data: T; response: Response }> {
   if (!API_BASE_URL) {
     throw new Error("NEXT_PUBLIC_API_BASE_URL が設定されていません");
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  });
+  const { skipAuth, ...requestInit } = init ?? {};
+  const token = skipAuth ? null : tokenStore.get();
 
-  // 204 No Content にはボディがない。
-  const body = response.status === 204 ? null : await response.json();
+  const headers = new Headers(requestInit.headers);
+  headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  if (!response.ok) {
-    throw new ApiError(response.status, body);
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...requestInit, headers });
+
+  // Authorization を載せたリクエストが 401 を返した＝そのトークンが失効している。
+  // 載せていないリクエストの 401 はログインの失敗（パスワード不一致）なので、
+  // トークンを捨ててはいけない。Rails はどちらも 401 で返してくるため、
+  // ステータスコードではなく「送信時に載せたか」で分ける。
+  //
+  // ここではリダイレクトしない。状態を落とすのは AuthProvider、
+  // 画面遷移を決めるのは RequireAuth の仕事。認証不要ページで期限が切れても
+  // ユーザーを画面から放り出さないため。
+  if (response.status === 401 && token) {
+    tokenStore.clear();
   }
 
-  return body as T;
+  const data = await parseBody(response);
+
+  if (!response.ok) throw new ApiError(response.status, data);
+
+  return { data: data as T, response };
+}
+
+export async function apiFetch<T>(path: string, init?: ApiRequestInit): Promise<T> {
+  const { data } = await apiRequest<T>(path, init);
+  return data;
 }
