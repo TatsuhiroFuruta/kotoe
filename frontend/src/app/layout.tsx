@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+
+import { AuthProvider } from "@/lib/auth/auth-context";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +30,14 @@ export default function RootLayout({
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      {/*
+        AuthProvider はクライアントコンポーネントだが、children として渡された
+        サーバーコンポーネントはサーバー描画のままこの中に収まる。全ページが
+        クライアントコンポーネントになるわけではない（useAuth を呼ぶものだけ）。
+      */}
+      <body className="min-h-full flex flex-col">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
