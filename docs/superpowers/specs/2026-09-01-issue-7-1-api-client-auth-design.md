@@ -150,6 +150,12 @@ export async function apiFetch<T>(path: string, init?: ApiRequestInit): Promise<
 
 `apiFetch` は `apiRequest` の `data` を返すだけになる。既存の `page.tsx` の `apiFetch<HealthResponse>("/api/health")` は無変更で通る。401 の判定とトークン破棄は `apiRequest` に置くので、`apiFetch` 経由の呼び出しにも等しく効く。
 
+### ボディのパースは「204 かどうか」ではなく「空かどうか」で判断する
+
+既存の `apiFetch` は `response.status === 204` のときだけボディを読まない。これでは足りない。**`DELETE /api/auth/sign_out` は 204 ではなく「ボディが空の 200」を返す**（`head :ok, content_type: "application/json"`）ため、`response.json()` が空文字列をパースして `SyntaxError` になる。ログアウトが必ず失敗する。
+
+`response.text()` を読み、**空文字列なら `null`、それ以外は `JSON.parse`** に変える。さらに `JSON.parse` の失敗も握って生の文字列を `body` に載せる。Render のプロキシや Vercel のエラーページは HTML を返すことがあり、ここで例外にすると本当のステータスコード（502 など）が失われて切り分けができなくなるため。
+
 ### トークンの取り出し
 
 Rails は `Authorization: Bearer eyJ…` の形で返す。CORS の `expose: ["Authorization"]` が効いているので JS から読める。`"Bearer "` を剥がして保存し、送信時に付け直す。
@@ -161,6 +167,8 @@ Rails は `Authorization: Bearer eyJ…` の形で返す。CORS の `expose: ["A
 `localStorage` が使えない状況は 2 つある。**SSR（`window` が無い）** と、**サイトデータを拒否している環境（アクセス自体が例外を投げる）**。読み書きを `try`/`catch` で包み、失敗時は「トークン無し」として振る舞う。
 
 これは机上の話ではない。`AuthProvider` はルートレイアウトに入るので、**認証不要ページを含む全ページのサーバーレンダリングで必ず `getServerSnapshot` が呼ばれる**。ここで落とすとサイト全体が 500 になる。
+
+書き込みが例外を投げる環境では、**モジュール内の変数にトークンを保持して読み出しのフォールバックにする**。これが無いと、そういうブラウザではログインが成功した直後に「トークンが読み出せない＝未ログイン」に戻り、ユーザーは何度ログインしても入れない。フォールバックはタブを閉じると消えるが、その 1 セッションは成立する。
 
 購読は `useSyncExternalStore` に合わせて `subscribe` / `getSnapshot` / `getServerSnapshot` を提供する。`subscribe` では自前の購読者集合に加えて `window` の `storage` イベントも購読する（`storage` は他タブでしか発火しないため、自タブ用の通知は自前で持つ必要がある）。結果として**別タブでログアウトすると全タブが同期して落ちる**。
 
@@ -252,21 +260,24 @@ CLAUDE.md は「フロント単体テストは MVP では導入しない。た�
 - `package.json` に `"test": "vitest run"` を追加
 - **React Testing Library は入れない**（コンポーネント結合テストは E2E と役割が被るとして CLAUDE.md が見送っている）。`AuthProvider` / `RequireAuth` はテスト対象外
 
-### 対象 3 ファイル・14 ケース
+### 対象 3 ファイル・17 ケース
 
-**`token-store.ts`（4）**
+**`token-store.ts`（5）**
 - 保存したトークンを読み出せる
 - 削除すると `null` を返す
 - `window` が無い環境で `null` を返す（例外を投げない）
-- `localStorage` へのアクセスが例外を投げる環境で `null` を返す（例外を投げない）
+- `localStorage` の読み出しが例外を投げる環境で `null` を返す（例外を投げない）
+- `localStorage` の書き込みが例外を投げる環境でも、同じセッション内では読み出せる（メモリのフォールバック）
 
-**`api.ts`（6）**
+**`api.ts`（8）**
 - トークンがあれば `Authorization: Bearer …` が載る
 - トークンが無ければ載らない
 - `skipAuth: true` なら、トークンがあっても載らない
 - **Authorization を載せたリクエストが 401 を返すとトークンを破棄する**
 - **Authorization を載せていないリクエストが 401 を返してもトークンを破棄しない**
 - 204 の空ボディで例外にならない
+- **ボディが空の 200 で例外にならない**（`sign_out` の応答。これが無いとログアウトが必ず失敗する）
+- 2xx 以外で `ApiError` を投げ、`status` と `body` を持つ
 
 **`safe-next-path.ts`（4）**
 - `/mypage` はそのまま通る
@@ -319,7 +330,7 @@ CLAUDE.md は「フロント単体テストは MVP では導入しない。た�
 | `frontend/src/app/auth-check/page.tsx` | 新規（暫定） |
 | `frontend/vitest.config.ts` | 新規 |
 | `frontend/package.json` | `vitest` / `jsdom` の追加、`test` スクリプト |
-| `frontend/src/lib/**/*.test.ts` | 新規（14 ケース） |
+| `frontend/src/lib/**/*.test.ts` | 新規（17 ケース） |
 | `.github/workflows/ci.yml` | `frontend` ジョブの追加 |
 
 バックエンドは変更しない。
