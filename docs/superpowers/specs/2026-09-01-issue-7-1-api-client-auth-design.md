@@ -311,9 +311,17 @@ CLAUDE.md は「フロント単体テストは MVP では導入しない。た�
 
 > In development, routes are rendered on-demand, so `useSearchParams` doesn't suspend and things may appear to work without `Suspense`. During production builds, a static page that calls `useSearchParams` from a Client Component must be wrapped in a `Suspense` boundary, otherwise the build fails.
 
-**ローカルで通って Vercel のビルドだけが落ちる**典型なので、7-2 の実装時に必ず確認すること。
+**ローカルで通って Vercel のビルドだけが落ちる**典型なので、7-2 の実装時に必ず確認すること。`RequireAuth` はこの罠を避けて `window.location.search` から組み立てている。
 
-あわせて、7-2 は `/login` を実装したら `src/app/auth-check/page.tsx` を削除し、`/` の認証疎通確認カードからログインフォーム部分を取り除くこと。
+### 暫定 UI は 7-2 で消す（7-7 まで残さない）
+
+7-2 の着手時に、`src/app/_components/`（`auth-probe.tsx`）、`src/app/auth-check/`、`src/app/page.tsx` の `<AuthProbe />` を削除する。
+
+当初は「暫定トップごと 7-7 で消える」前提だったが、**main は Vercel の本番を追跡している**ため、その間ずっと本番のトップページに「パスワードが初期値で入った認証デバッグパネル」が公開されることになる。`NEXT_PUBLIC_VERCEL_ENV` で本番だけ隠す案もあったが、CLAUDE.md が「PR ごとに Vercel のプレビューURLで確認する」としており、7-1 でいちばん確認したい Vercel↔Render の CORS/JWT がプレビューでも見えなくなる。7-2 で `/login` ができれば `AuthProbe` の役目は終わるので、**露出を 1 issue 分に抑える**ほうが確実（環境変数の挙動に賭けずに済む）。
+
+### `?next=` は必ず `safeNextPath()` を通す
+
+生の値を `router.replace()` へ渡さないこと。7-1 のコードレビューで、当初のホワイトリスト（`//` と `/\` の列挙）に実際の穴が見つかっている。URL パーサが解析前に ASCII のタブ・LF・CR を**除去する**ため、`?next=%2F%09%2Fevil.example` がデコード後に `//evil.example` として解決され、外部オリジンへ飛べた。現在の `safeNextPath` は同じ正規化を先に行ってから判定している。
 
 ## 変更するファイル
 

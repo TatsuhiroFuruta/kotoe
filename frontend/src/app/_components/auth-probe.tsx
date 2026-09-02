@@ -8,7 +8,12 @@ import { useAuth } from "@/lib/auth/auth-context";
 import type { MeResponse } from "@/types/api";
 
 // 7-1 の動作確認用の暫定 UI。ログイン画面は 7-2 が作るので、それまでの
-// つなぎとしてここに最小のフォームを置く。7-7 でこのフォルダごと削除する。
+// つなぎとしてここに最小のフォームを置く。
+//
+// **7-2 でこのフォルダごと削除すること（7-7 まで残さない）。**
+// main は Vercel の本番を追跡しているため、これは本番のトップページに
+// 「パスワードが初期値で入った認証パネル」として公開される。7-2 で /login が
+// できれば役目は終わるので、露出を 1 issue 分に抑える。
 
 export function AuthProbe() {
   const auth = useAuth();

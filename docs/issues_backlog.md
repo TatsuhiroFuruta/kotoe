@@ -489,11 +489,25 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 ### 🟢 7-1. APIクライアントと認証プラミング
 - 依存：2-2, 0-3
 - タスク：fetch ラッパ、JWT の保存/付与、ログイン状態管理、認証ガード。
+- 設計書：`docs/superpowers/specs/2026-09-01-issue-7-1-api-client-auth-design.md`
 - 完了条件：ログイン→JWT保持→認証必須APIの呼び出しが通る。
 
 ### 🟢 7-2. 共通レイアウト＋認証画面（/login, /signup）
 - 依存：7-1
 - タスク：グローバルナビ/フッター、ログイン・新規登録フォーム。
+- **7-1 からの申し送り（着手時に必ず処理する）**：
+  1. **暫定 UI を削除する**。`frontend/src/app/_components/`（`auth-probe.tsx`）と
+     `frontend/src/app/auth-check/`、および `src/app/page.tsx` の `<AuthProbe />` を消す。
+     main は Vercel の本番を追跡するので、これは**本番トップに「パスワードが初期値で
+     入った認証パネル」として公開されている**。7-7 まで残さない。
+  2. **`?next=` は必ず `safeNextPath()`（`src/lib/auth/safe-next-path.ts`）を通す**。
+     生の値を `router.replace()` に渡すとオープンリダイレクトになる（7-1 のレビューで
+     実際に穴が見つかっている）。
+  3. **`useSearchParams()` を使うなら `<Suspense>` 境界が要る**。無いと
+     **ローカルでは通るのに Vercel の本番ビルドだけ落ちる**（Next.js の仕様）。
+     避けたい場合は `window.location.search` を使う。
+  4. エラー文言の辞書はここで持つ。バックは `invalid_credentials` /
+     `{"errors":{"email":["taken"]}}` のように**コードだけ**返す。
 - 完了条件：登録・ログイン・ログアウトが画面から一通りできる。
 
 ### 🟢 7-3. お題一覧・検索（/posts）＋お題詳細（/posts/[id]）
