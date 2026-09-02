@@ -28,6 +28,22 @@ describe("safeNextPath", () => {
     expect(safeNextPath("/\\evil.example")).toBe("/");
   });
 
+  // URL パーサは解析の前に ASCII のタブ・LF・CR を取り除く。そのため
+  // "/\t/evil.example" は "//evil.example" として解釈され、別オリジンへ飛ぶ。
+  // ?next=%2F%09%2Fevil.example がデコードされるとこの形になるので、
+  // 「// で始まるか」だけを見ていると素通りする。
+  it("タブ・改行を挟んで // を隠した形も / に落とす", () => {
+    expect(safeNextPath("/\t/evil.example")).toBe("/");
+    expect(safeNextPath("/\n/evil.example")).toBe("/");
+    expect(safeNextPath("/\r/evil.example")).toBe("/");
+    expect(safeNextPath("/\r\\evil.example")).toBe("/");
+    expect(safeNextPath("/\t\\/evil.example")).toBe("/");
+  });
+
+  it("パスの途中のタブ・改行は取り除いたうえで通す", () => {
+    expect(safeNextPath("/my\tpage")).toBe("/mypage");
+  });
+
   it("未指定・空文字は / を返す", () => {
     expect(safeNextPath(null)).toBe("/");
     expect(safeNextPath(undefined)).toBe("/");

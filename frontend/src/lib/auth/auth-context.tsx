@@ -21,12 +21,24 @@ type AuthState =
   | { status: "unauthenticated" };
 
 type AuthContextValue = AuthState & {
+  /**
+   * 401 以外の理由（通信断、サーバーのコールドスタート等）で /api/me による
+   * 復元に失敗したか。トークンは残っているので「未ログインが確定した」のとは
+   * 意味が違う。ガードはこれを見て、ログイン画面へ飛ばすかどうかを分ける。
+   */
+  restoreFailed: boolean;
   signUp(params: { name: string; email: string; password: string }): Promise<void>;
   signIn(params: { email: string; password: string }): Promise<void>;
   signOut(): Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+// ハイドレーションが済んだかを返すための、値が変わらない外部ストア。
+// 参照が毎回変わると購読し直しになるのでモジュール直下に置く。
+const neverChanges = () => () => {};
+const hydratedOnClient = () => true;
+const notHydratedOnServer = () => false;
 
 /**
  * レスポンスヘッダから JWT を取り出す。
@@ -61,6 +73,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<{ token: string; user: User } | null>(null);
   // 復元に失敗したトークン。無限リトライを防ぐ。
   const [restoreFailedFor, setRestoreFailedFor] = useState<string | null>(null);
+
+  // ハイドレーションが済んだか。
+  //
+  // useSyncExternalStore はハイドレーション中 getServerSnapshot（= null）を
+  // 返し、クライアントの実値へ切り替えるのは passive effect で行う。React は
+  // 子の effect を親より先に実行するため、この状態を素直に「未ログイン」と
+  // 見せると、子孫の RequireAuth が先に判断して /login へ飛ばしてしまう。
+  // 有効なトークンを持っているのに、ガード付きページをリロードするたび
+  // ログイン画面へ追い出されることになる。
+  //
+  // ハイドレーションが済むまでは loading に留め、子に判断させない。SSR と
+  // ハイドレーション初回はどちらも loading なので、描画結果も食い違わない。
+  const hydrated = useSyncExternalStore(neverChanges, hydratedOnClient, notHydratedOnServer);
 
   // 起動時の復元。トークンが無ければリクエストを一切出さない（未ログインの
   // 訪問者にコストを掛けない）。あるときだけ /api/me を 1 本だけ叩く。
@@ -139,17 +164,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => {
-    const state: AuthState =
-      token === null
+    const restoreFailed = token !== null && restoreFailedFor === token;
+
+    const state: AuthState = !hydrated
+      ? { status: "loading" }
+      : token === null
         ? { status: "unauthenticated" }
         : session?.token === token
           ? { status: "authenticated", user: session.user }
-          : restoreFailedFor === token
+          : restoreFailed
             ? { status: "unauthenticated" }
             : { status: "loading" };
 
-    return { ...state, signUp, signIn, signOut };
-  }, [token, session, restoreFailedFor, signUp, signIn, signOut]);
+    return { ...state, restoreFailed, signUp, signIn, signOut };
+  }, [hydrated, token, session, restoreFailedFor, signUp, signIn, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

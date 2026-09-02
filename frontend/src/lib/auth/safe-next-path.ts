@@ -16,11 +16,25 @@ export const DEFAULT_NEXT_PATH = "/";
 export function safeNextPath(next: string | null | undefined): string {
   if (!next) return DEFAULT_NEXT_PATH;
 
+  // 判定の前に、URL パーサと同じ前処理を自分でも行う。これをしないと
+  // 下の startsWith が全部空振りする。
+  //
+  //   1. パーサは解析の前に ASCII のタブ・LF・CR を「取り除く」。
+  //      "/\t/evil.example" は "//evil.example" として解釈され、別オリジンへ飛ぶ。
+  //      ?next=%2F%09%2Fevil.example がデコードされてこの形になる。
+  //   2. パーサはバックスラッシュをスラッシュとして扱う。
+  //
+  // つまり「攻撃者が書いた文字列」ではなく「パーサが最終的に見る文字列」を
+  // 検査しないと、ホワイトリストの意味が無くなる。
+  const normalized = next.replace(/[\t\n\r]/g, "").replace(/\\/g, "/");
+
   // 「/」で始まらないものは全部拒否する（javascript: も https:// もここで落ちる）。
-  if (!next.startsWith("/")) return DEFAULT_NEXT_PATH;
+  if (!normalized.startsWith("/")) return DEFAULT_NEXT_PATH;
 
-  // 「/」で始まるが別オリジンへ飛ぶ2つの形。
-  if (next.startsWith("//") || next.startsWith("/\\")) return DEFAULT_NEXT_PATH;
+  // 「/」で始まるが別オリジンへ飛ぶ形（protocol-relative）。
+  if (normalized.startsWith("//")) return DEFAULT_NEXT_PATH;
 
-  return next;
+  // 検査した文字列そのものを返す。元の値を返すと「検査した対象」と
+  // 「実際に遷移する対象」が食い違い、同じ穴が開き直る。
+  return normalized;
 }

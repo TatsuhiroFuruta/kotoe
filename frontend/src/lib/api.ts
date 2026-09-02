@@ -58,7 +58,21 @@ export async function apiRequest<T>(
   const token = skipAuth ? null : tokenStore.get();
 
   const headers = new Headers(requestInit.headers);
-  headers.set("Content-Type", "application/json");
+
+  // Content-Type は「ボディがあり、FormData でなく、呼び出し側が指定して
+  // いない」ときだけ付ける。無条件に set すると2つ壊れる。
+  //
+  //   1. 7-3 / 7-5 の画像アップロードで FormData を渡したとき、ブラウザが
+  //      付ける multipart の boundary 付きヘッダを潰し、Rails が本文を
+  //      パースできなくなる（原因がここだと気づきにくい）。
+  //   2. ボディの無い GET にまで application/json が付くと CORS の
+  //      safelist を外れ、認証不要ページのリクエストにも毎回プリフライトの
+  //      往復が増える。
+  const hasBody = requestInit.body !== undefined && requestInit.body !== null;
+  if (hasBody && !(requestInit.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(`${API_BASE_URL}${path}`, { ...requestInit, headers });
@@ -71,7 +85,13 @@ export async function apiRequest<T>(
   // ここではリダイレクトしない。状態を落とすのは AuthProvider、
   // 画面遷移を決めるのは RequireAuth の仕事。認証不要ページで期限が切れても
   // ユーザーを画面から放り出さないため。
-  if (response.status === 401 && token) {
+  //
+  // 「今も同じトークンが入っているか」まで見るのは、token が送信時に
+  // キャプチャした値だから。応答が返るまでの間に再ログインで別のトークンへ
+  // 差し替わっていることがあり、そのとき古い 401 で新しいトークンを消すと、
+  // ログイン成功直後に未ログインへ戻される（複数の API を並行で叩く
+  // マイページで踏む）。
+  if (response.status === 401 && token && tokenStore.get() === token) {
     tokenStore.clear();
   }
 

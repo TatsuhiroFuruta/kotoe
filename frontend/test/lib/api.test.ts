@@ -22,11 +22,15 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** fetch に渡された Authorization ヘッダを取り出す。 */
-function sentAuthorization(fetchMock: ReturnType<typeof stubFetch>): string | null {
+/** fetch に渡されたヘッダを取り出す。 */
+function sentHeader(fetchMock: ReturnType<typeof stubFetch>, name: string): string | null {
   const init = fetchMock.mock.calls[0]?.[1];
   // new Headers(undefined) は空のヘッダになるので、呼ばれていない場合も落ちない。
-  return new Headers(init?.headers).get("Authorization");
+  return new Headers(init?.headers).get(name);
+}
+
+function sentAuthorization(fetchMock: ReturnType<typeof stubFetch>): string | null {
+  return sentHeader(fetchMock, "Authorization");
 }
 
 describe("apiRequest", () => {
@@ -88,6 +92,63 @@ describe("apiRequest", () => {
     ).rejects.toBeInstanceOf(ApiError);
 
     expect(tokenStore.get()).toBe("jwt-abc");
+  });
+
+  // token は送信時にキャプチャした値。応答が返るまでの間に再ログインで
+  // 差し替わっていた場合、古い 401 で新しいトークンを消してはいけない。
+  it("応答が返るまでに別のトークンへ差し替わっていたら破棄しない", async () => {
+    tokenStore.set("jwt-old");
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      // 送信後・応答前に再ログインが完了した状況を作る。
+      tokenStore.set("jwt-new");
+      return jsonResponse({ error: "unauthorized" }, 401);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiFetch("/api/me")).rejects.toBeInstanceOf(ApiError);
+
+    expect(tokenStore.get()).toBe("jwt-new");
+  });
+
+  // 無条件に Content-Type を付けると、FormData でブラウザが付ける
+  // multipart の boundary 付きヘッダを潰す（7-3 / 7-5 の画像アップロード）。
+  // ボディの無い GET に付けると CORS のプリフライトも毎回増える。
+  it("ボディの無いリクエストには Content-Type を付けない", async () => {
+    const fetchMock = stubFetch(jsonResponse({ posts: [] }));
+
+    await apiFetch("/api/posts");
+
+    expect(sentHeader(fetchMock, "Content-Type")).toBeNull();
+  });
+
+  it("JSON のボディがあれば Content-Type を付ける", async () => {
+    const fetchMock = stubFetch(jsonResponse({ id: 1 }, 201));
+
+    await apiFetch("/api/posts", { method: "POST", body: JSON.stringify({ title: "x" }) });
+
+    expect(sentHeader(fetchMock, "Content-Type")).toBe("application/json");
+  });
+
+  it("FormData には Content-Type を付けない（boundary はブラウザが決める）", async () => {
+    const fetchMock = stubFetch(jsonResponse({ id: 1 }, 201));
+    const body = new FormData();
+    body.append("post[image]", new Blob(["dummy"]), "image.png");
+
+    await apiFetch("/api/posts", { method: "POST", body });
+
+    expect(sentHeader(fetchMock, "Content-Type")).toBeNull();
+  });
+
+  it("呼び出し側が指定した Content-Type を上書きしない", async () => {
+    const fetchMock = stubFetch(jsonResponse({ ok: true }));
+
+    await apiFetch("/api/posts", {
+      method: "POST",
+      body: "raw",
+      headers: { "Content-Type": "text/plain" },
+    });
+
+    expect(sentHeader(fetchMock, "Content-Type")).toBe("text/plain");
   });
 
   it("204 の空ボディで例外にならない", async () => {
