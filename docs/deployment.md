@@ -166,6 +166,21 @@ curl -si -X POST "$API/api/auth/sign_in" \
 ## Vercel プレビューの継続検証
 
 - プレビューURLは `CORS_ALLOWED_ORIGIN_REGEX`（チーム slug を含む）でカバーされる。
+  - **slug は途中で切らず、最後まで書くこと。** 7-1 のプレビュー確認時、値が
+    `https://kotoe-[a-z0-9-]+-tatsuhiro\.vercel\.app` になっており、**プレビューを 1 つも
+    許可していなかった**。実際の URL は `kotoe-<hash>-tatsuhiro-furutas-projects.vercel.app`
+    で、末尾が `-tatsuhiro.vercel.app` にならないため一致しない。本番オリジンは
+    `CORS_ALLOWED_ORIGINS`（完全一致）側で通っていたので、**本番だけ動いていて
+    プレビューが全滅していることに気づけなかった**。
+  - `[a-z0-9-]+` はデプロイハッシュ形式（`kotoe-<hash>-<slug>`）とブランチ形式
+    （`kotoe-git-<branch>-<slug>`）の両方を吸収する。`\A` `\z` は
+    `lib/cors/allowed_origins.rb` が付けるので書かない。
+  - **値を変えたら再デプロイ（再起動）が要る。** 設定は起動時にしか読まれない。
+  - 確認は curl でオリジンを詐称して行う。`access-control-allow-origin` が返れば許可：
+    ```bash
+    curl -s -D - -o /dev/null https://kotoe-api.onrender.com/api/health \
+      -H "Origin: <プレビューURL>" | grep -i access-control-allow-origin
+    ```
 - プレビューの `NEXT_PUBLIC_API_BASE_URL` は本番バックエンド（スケルトン）を指す。
 - 以降は PR ごとに発行されるプレビューで、Vercel↔Render のつなぎ目（CORS/JWT/ポーリング）を
   継続的に検証する。**半完成機能を毎回本番へ出す運用（フル継続"本番"デプロイ）はしない**。
