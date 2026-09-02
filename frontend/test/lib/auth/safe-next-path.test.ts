@@ -44,6 +44,16 @@ describe("safeNextPath", () => {
     expect(safeNextPath("/my\tpage")).toBe("/mypage");
   });
 
+  // ログイン成功後にログイン画面へ戻すと、ユーザーには「ログインできて
+  // いない」ように見える。7-2 が ?next=/login を受け取っても起きないようにする。
+  it("認証画面自身は戻り先にしない", () => {
+    expect(safeNextPath("/login")).toBe("/");
+    expect(safeNextPath("/signup")).toBe("/");
+    expect(safeNextPath("/login?next=%2Fmypage")).toBe("/");
+    // 前方一致ではなくパスの一致で見る（/loginhistory のような別ページは通す）。
+    expect(safeNextPath("/logins")).toBe("/logins");
+  });
+
   it("未指定・空文字は / を返す", () => {
     expect(safeNextPath(null)).toBe("/");
     expect(safeNextPath(undefined)).toBe("/");

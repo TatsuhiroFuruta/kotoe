@@ -61,6 +61,11 @@ function notify(): void {
   for (const listener of listeners) listener();
 }
 
+/**
+ * どのメソッドも `this` を使わないこと。呼び出し側は
+ * `useSyncExternalStore(tokenStore.subscribe, tokenStore.get, ...)` のように
+ * メソッドを関数として切り離して渡すため、`this` を書いた瞬間に壊れる。
+ */
 export const tokenStore = {
   // キャッシュを持たず毎回読む。useSyncExternalStore は戻り値を Object.is で
   // 比較するが、文字列と null は値で比較されるため参照の安定は要らない。

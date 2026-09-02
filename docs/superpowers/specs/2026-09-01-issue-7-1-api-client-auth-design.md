@@ -260,7 +260,7 @@ CLAUDE.md は「フロント単体テストは MVP では導入しない。た�
 - `package.json` に `"test": "vitest run"` を追加
 - **React Testing Library は入れない**（コンポーネント結合テストは E2E と役割が被るとして CLAUDE.md が見送っている）。`AuthProvider` / `RequireAuth` はテスト対象外
 
-### 対象 3 ファイル・17 ケース
+### 対象 3 ファイル・17 ケース（最終的な実装は 31 件）
 
 **`token-store.ts`（5）**
 - 保存したトークンを読み出せる
@@ -317,7 +317,11 @@ CLAUDE.md は「フロント単体テストは MVP では導入しない。た�
 
 7-2 の着手時に、`src/app/_components/`（`auth-probe.tsx`）、`src/app/auth-check/`、`src/app/page.tsx` の `<AuthProbe />` を削除する。
 
-当初は「暫定トップごと 7-7 で消える」前提だったが、**main は Vercel の本番を追跡している**ため、その間ずっと本番のトップページに「パスワードが初期値で入った認証デバッグパネル」が公開されることになる。`NEXT_PUBLIC_VERCEL_ENV` で本番だけ隠す案もあったが、CLAUDE.md が「PR ごとに Vercel のプレビューURLで確認する」としており、7-1 でいちばん確認したい Vercel↔Render の CORS/JWT がプレビューでも見えなくなる。7-2 で `/login` ができれば `AuthProbe` の役目は終わるので、**露出を 1 issue 分に抑える**ほうが確実（環境変数の挙動に賭けずに済む）。
+当初は「暫定トップごと 7-7 で消える」前提だったが、**main は Vercel の本番を追跡している**ため、その間ずっと本番のトップページに認証デバッグパネルが公開されることになる。7-2 で `/login` ができれば `AuthProbe` の役目は終わるので、**露出を 1 issue 分に抑える**。
+
+あわせて、**パスワード欄の初期値は空にした**。初期値を入れたままだと、この画面が本番に出ている間「誰でも入れる共有アカウントの ID とパスワード」をトップページに掲示することになる。sign_up は元から公開 API なので「誰でも登録できる」こと自体は差分ではないが、**動く資格情報を掲示する**のは別の話で、第三者がそのアカウントで UGC を投稿できてしまう（通報・モデレーションは 5-3 でまだ無い）。
+
+> **訂正（レビュー指摘による）**：この節には当初「`NEXT_PUBLIC_VERCEL_ENV` で本番だけ隠す案は、プレビューでも見えなくなるので採らない」と書いていたが、**これは事実として誤り**。Vercel はプレビューのデプロイで `VERCEL_ENV=preview` を返すため、`NEXT_PUBLIC_VERCEL_ENV !== "production"` で囲めば「プレビューでは見える・本番だけ消える」という、まさに欲しい形になる。7-2 で消す方針自体は変えないが、却下理由が誤りだったことは記録として残す。
 
 ### `?next=` は必ず `safeNextPath()` を通す
 
@@ -338,7 +342,7 @@ CLAUDE.md は「フロント単体テストは MVP では導入しない。た�
 | `frontend/src/app/auth-check/page.tsx` | 新規（暫定） |
 | `frontend/vitest.config.mts` | 新規 |
 | `frontend/package.json` | `vitest` / `jsdom` の追加、`test` スクリプト |
-| `frontend/test/lib/**/*.test.ts` | 新規（17 ケース） |
+| `frontend/test/lib/**/*.test.ts` | 新規（下記 17 ケース＋実装中に足した分で計 31 件） |
 | `.github/workflows/ci.yml` | `frontend` ジョブの追加 |
 
 バックエンドは変更しない。

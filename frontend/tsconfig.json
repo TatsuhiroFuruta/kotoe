@@ -22,6 +22,11 @@
       "@/*": ["./src/*"]
     }
   },
+  // `**/*.ts` は test/ 配下も拾う。テストにも型検査が効くのは狙いどおりだが、
+  // その結果 `next build` の型検査が vitest の型に依存する。Vercel は既定で
+  // devDependencies を入れるので通っているだけで、インストールを --omit=dev に
+  // 変えた日に、原因からいちばん遠い形でビルドが落ちる。切り離すなら test/ を
+  // exclude して vitest 側に専用 tsconfig を持たせること。
   "include": [
     "next-env.d.ts",
     "**/*.ts",

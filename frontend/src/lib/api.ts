@@ -68,8 +68,10 @@ export async function apiRequest<T>(
   //   2. ボディの無い GET にまで application/json が付くと CORS の
   //      safelist を外れ、認証不要ページのリクエストにも毎回プリフライトの
   //      往復が増える。
-  const hasBody = requestInit.body !== undefined && requestInit.body !== null;
-  if (hasBody && !(requestInit.body instanceof FormData) && !headers.has("Content-Type")) {
+  // 条件を「文字列のボディ」に絞るのは、この既定値が JSON.stringify した
+  // 文字列を送る場合のためのものだから。FormData / Blob / URLSearchParams は
+  // ブラウザが正しい Content-Type を付けるので、こちらは手を出さない。
+  if (typeof requestInit.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 

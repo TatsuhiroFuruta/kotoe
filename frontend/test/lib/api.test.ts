@@ -44,6 +44,17 @@ describe("apiRequest", () => {
     vi.restoreAllMocks();
   });
 
+  // ベース URL の連結を検査しないと、fetch(path) と書き換えても全部 green の
+  // ままになる（相対 URL は Next のオリジンに解決されるので、テストでは
+  // 気づけない）。
+  it("NEXT_PUBLIC_API_BASE_URL を前に付けて叩く", async () => {
+    const fetchMock = stubFetch(jsonResponse({ posts: [] }));
+
+    await apiFetch("/api/posts");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:3000/api/posts");
+  });
+
   it("トークンがあれば Authorization ヘッダを載せる", async () => {
     tokenStore.set("jwt-abc");
     const fetchMock = stubFetch(jsonResponse({ id: 1 }));

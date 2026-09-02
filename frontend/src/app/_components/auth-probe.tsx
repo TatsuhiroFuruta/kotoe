@@ -19,7 +19,10 @@ export function AuthProbe() {
   const auth = useAuth();
   const [name, setName] = useState("テスト太郎");
   const [email, setEmail] = useState("probe@example.com");
-  const [password, setPassword] = useState("password123");
+  // パスワードは初期値を入れない。入れると、この画面が本番に出ている間
+  // 「誰でも入れる共有アカウントの ID とパスワード」をトップページに
+  // 掲示することになる（通報・モデレーションは 5-3 でまだ無い）。
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
 

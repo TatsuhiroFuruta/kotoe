@@ -34,6 +34,12 @@ export function safeNextPath(next: string | null | undefined): string {
   // 「/」で始まるが別オリジンへ飛ぶ形（protocol-relative）。
   if (normalized.startsWith("//")) return DEFAULT_NEXT_PATH;
 
+  // 認証画面自身は戻り先にしない。ログイン成功直後にログイン画面へ戻す
+  // ことになり、ユーザーには「ログインできていない」ように見える。
+  // 判定はクエリ・フラグメントを落としたパス部分で行う。
+  const pathname = normalized.split(/[?#]/)[0];
+  if (pathname === "/login" || pathname === "/signup") return DEFAULT_NEXT_PATH;
+
   // 検査した文字列そのものを返す。元の値を返すと「検査した対象」と
   // 「実際に遷移する対象」が食い違い、同じ穴が開き直る。
   return normalized;
