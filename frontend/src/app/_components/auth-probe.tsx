@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
@@ -108,9 +109,9 @@ export function AuthProbe() {
       {message && <p className="mt-4 font-mono text-xs break-all">{message}</p>}
       {me && <pre className="mt-2 overflow-x-auto text-xs">{JSON.stringify(me, null, 2)}</pre>}
 
-      <a className="mt-4 block text-sm underline" href="/auth-check">
+      <Link className="mt-4 block text-sm underline" href="/auth-check">
         /auth-check（ガードの確認）
-      </a>
+      </Link>
     </section>
   );
 }
