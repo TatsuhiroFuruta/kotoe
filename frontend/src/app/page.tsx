@@ -47,9 +47,17 @@ export default function Home() {
           </dl>
         )}
 
+        {/*
+          原因をローカル前提で断定しない。ここはプレビューや本番でも表示され、
+          そこでの失敗理由はたいてい CORS の許可オリジンか NEXT_PUBLIC_API_BASE_URL
+          であって、backend が起動していないことではない。実際に 7-1 のプレビュー
+          確認で「docker compose up を確認してください」と案内し、切り分けを遅らせた。
+        */}
         {state.kind === "failure" && (
           <p className="text-sm text-red-600 dark:text-red-400">
-            Rails API に接続できませんでした。`docker compose up` で backend が起動しているか確認してください。
+            Rails API に接続できませんでした。ブラウザの Console と Network を確認してください
+            （ローカルなら backend の起動、別オリジンなら CORS の許可オリジンと
+            NEXT_PUBLIC_API_BASE_URL が主な原因です）。
           </p>
         )}
       </section>
