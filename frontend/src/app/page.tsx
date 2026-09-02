@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { AuthProbe } from "@/app/_components/auth-probe";
 import { apiFetch } from "@/lib/api";
 import type { HealthResponse } from "@/types/api";
 
@@ -52,6 +53,8 @@ export default function Home() {
           </p>
         )}
       </section>
+
+      <AuthProbe />
     </main>
   );
 }
