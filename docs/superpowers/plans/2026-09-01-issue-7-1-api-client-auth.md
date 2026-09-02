@@ -41,7 +41,7 @@
 
 | ファイル | 責務 | タスク |
 |---|---|---|
-| `frontend/vitest.config.ts` | テスト実行の設定（jsdom、`@/` エイリアス、env） | 1 |
+| `frontend/vitest.config.mts` | テスト実行の設定（jsdom、`@/` エイリアス、env） | 1 |
 | `frontend/src/lib/auth/safe-next-path.ts` | `?next=` の検証。純粋関数。何も知らない | 1 |
 | `frontend/src/lib/auth/token-store.ts` | 「トークンは今なにか」だけを知る。React も fetch も知らない | 2 |
 | `frontend/src/lib/api.ts` | HTTP を叩き、トークンを載せ、失効を検知して捨てる。React も画面遷移も知らない | 3 |
@@ -59,9 +59,9 @@
 ## Task 1: Vitest の導入と `safe-next-path`
 
 **Files:**
-- Create: `frontend/vitest.config.ts`
+- Create: `frontend/vitest.config.mts`
 - Create: `frontend/src/lib/auth/safe-next-path.ts`
-- Create: `frontend/src/lib/auth/safe-next-path.test.ts`
+- Create: `frontend/test/lib/auth/safe-next-path.test.ts`
 - Modify: `frontend/package.json`（`devDependencies` と `scripts.test`）
 
 **Interfaces:**
@@ -86,7 +86,7 @@ docker compose exec frontend npm install --save-dev vitest jsdom
     "test": "vitest run"
 ```
 
-- [ ] **Step 3: `frontend/vitest.config.ts` を作る**
+- [ ] **Step 3: `frontend/vitest.config.mts` を作る**
 
 ```ts
 import { fileURLToPath } from "node:url";
@@ -106,7 +106,7 @@ export default defineConfig({
     // window が無い場合（SSR）の検査だけは、ファイル先頭の
     // `// @vitest-environment node` で node に切り替える。
     environment: "jsdom",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
     env: {
       // api.ts はモジュール読み込み時にこれを読む。未設定だと全テストが落ちる。
       NEXT_PUBLIC_API_BASE_URL: "http://localhost:3000",
@@ -117,7 +117,7 @@ export default defineConfig({
 
 - [ ] **Step 4: 失敗するテストを書く**
 
-`frontend/src/lib/auth/safe-next-path.test.ts`：
+`frontend/test/lib/auth/safe-next-path.test.ts`：
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -219,8 +219,8 @@ Expected: どちらもエラーなし。
 - [ ] **Step 9: コミット**
 
 ```bash
-git add frontend/package.json frontend/package-lock.json frontend/vitest.config.ts \
-        frontend/src/lib/auth/safe-next-path.ts frontend/src/lib/auth/safe-next-path.test.ts
+git add frontend/package.json frontend/package-lock.json frontend/vitest.config.mts \
+        frontend/src/lib/auth/safe-next-path.ts frontend/test/lib/auth/safe-next-path.test.ts
 git commit -m "test: Vitest を導入し ?next= の検証を追加（issue 7-1）"
 ```
 
@@ -230,8 +230,8 @@ git commit -m "test: Vitest を導入し ?next= の検証を追加（issue 7-1�
 
 **Files:**
 - Create: `frontend/src/lib/auth/token-store.ts`
-- Create: `frontend/src/lib/auth/token-store.test.ts`
-- Create: `frontend/src/lib/auth/token-store.server.test.ts`
+- Create: `frontend/test/lib/auth/token-store.test.ts`
+- Create: `frontend/test/lib/auth/token-store.server.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 の Vitest 設定
@@ -248,7 +248,7 @@ git commit -m "test: Vitest を導入し ?next= の検証を追加（issue 7-1�
 
 - [ ] **Step 1: 失敗するテストを書く（jsdom 環境）**
 
-`frontend/src/lib/auth/token-store.test.ts`：
+`frontend/test/lib/auth/token-store.test.ts`：
 
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -322,7 +322,7 @@ describe("tokenStore", () => {
 
 - [ ] **Step 2: 失敗するテストを書く（node 環境 ＝ SSR）**
 
-`frontend/src/lib/auth/token-store.server.test.ts`：
+`frontend/test/lib/auth/token-store.server.test.ts`：
 
 ```ts
 // @vitest-environment node
@@ -474,8 +474,8 @@ docker compose exec frontend npx tsc --noEmit
 
 ```bash
 git add frontend/src/lib/auth/token-store.ts \
-        frontend/src/lib/auth/token-store.test.ts \
-        frontend/src/lib/auth/token-store.server.test.ts
+        frontend/test/lib/auth/token-store.test.ts \
+        frontend/test/lib/auth/token-store.server.test.ts
 git commit -m "feat: JWT の置き場所（token-store）を追加（issue 7-1）"
 ```
 
@@ -485,7 +485,7 @@ git commit -m "feat: JWT の置き場所（token-store）を追加（issue 7-1�
 
 **Files:**
 - Modify: `frontend/src/lib/api.ts`（全面的に書き換える。`ApiError` と `apiFetch` のシグネチャは保つ）
-- Create: `frontend/src/lib/api.test.ts`
+- Create: `frontend/test/lib/api.test.ts`
 
 **Interfaces:**
 - Consumes: `tokenStore.get()` / `tokenStore.clear()`（Task 2）
@@ -501,7 +501,7 @@ git commit -m "feat: JWT の置き場所（token-store）を追加（issue 7-1�
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`frontend/src/lib/api.test.ts`：
+`frontend/test/lib/api.test.ts`：
 
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -645,7 +645,7 @@ describe("apiRequest", () => {
 - [ ] **Step 2: テストが失敗することを確認する**
 
 ```bash
-docker compose exec frontend npm run test src/lib/api.test.ts
+docker compose exec frontend npm run test test/lib/api.test.ts
 ```
 
 Expected: FAIL。`apiRequest` が export されていない／`skipAuth` が型に無い。
@@ -783,7 +783,7 @@ http://localhost:3001 を開き、「Rails API 疎通確認」カードが `ok` 
 - [ ] **Step 8: コミット**
 
 ```bash
-git add frontend/src/lib/api.ts frontend/src/lib/api.test.ts
+git add frontend/src/lib/api.ts frontend/test/lib/api.test.ts
 git commit -m "feat: API クライアントに JWT の付与と失効検知を入れる（issue 7-1）"
 ```
 

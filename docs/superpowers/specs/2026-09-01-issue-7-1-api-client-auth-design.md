@@ -256,7 +256,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 CLAUDE.md は「フロント単体テストは MVP では導入しない。ただし、UIから切り出せる純粋なロジックが生まれたら、その部分にだけ Vitest を後付けする」としている。7-1 はその純粋ロジックを 3 つ生むため、ここで Vitest を導入する。
 
 - 追加する依存：`vitest`、`jsdom`
-- `vitest.config.ts` で `@/` エイリアスを解決する
+- `vitest.config.mts` で `@/` エイリアスを解決する
 - `package.json` に `"test": "vitest run"` を追加
 - **React Testing Library は入れない**（コンポーネント結合テストは E2E と役割が被るとして CLAUDE.md が見送っている）。`AuthProvider` / `RequireAuth` はテスト対象外
 
@@ -328,9 +328,9 @@ CLAUDE.md は「フロント単体テストは MVP では導入しない。た�
 | `frontend/src/app/layout.tsx` | `AuthProvider` を巻く |
 | `frontend/src/app/page.tsx` | 認証疎通確認カードを追加（暫定） |
 | `frontend/src/app/auth-check/page.tsx` | 新規（暫定） |
-| `frontend/vitest.config.ts` | 新規 |
+| `frontend/vitest.config.mts` | 新規 |
 | `frontend/package.json` | `vitest` / `jsdom` の追加、`test` スクリプト |
-| `frontend/src/lib/**/*.test.ts` | 新規（17 ケース） |
+| `frontend/test/lib/**/*.test.ts` | 新規（17 ケース） |
 | `.github/workflows/ci.yml` | `frontend` ジョブの追加 |
 
 バックエンドは変更しない。
