@@ -526,6 +526,18 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - **7-1 からの申し送り**：`apiRequest` には timeout も `AbortSignal` も無く、**無限に待つ**。
   Render の無料枠はスリープするので、放置後の初回アクセスでコールドスタートに数十秒かかる。
   ポーリングを入れるこの issue の前に、`AbortSignal.timeout()` 対応を足しておくこと。
+- **他人が入力した値を初めて表示する issue（XSS の注意）**：ここで `title` /
+  `description` / `name`（`PostSerializer` / `AttemptSerializer` / `UserSerializer`）を
+  画面に出す。React は JSX 内の値を自動でエスケープするので、**普通に `{value}` と書く限り安全**。
+  危険なのは、そのエスケープを迂回する 3 経路。
+  1. **`dangerouslySetInnerHTML`** … `react/no-danger` を eslint で **error にしてある**ので
+     CI が止める。踏みやすいのは「描写文の改行を反映したい」場面で、
+     `text.replace(/\n/g, "<br>")` は XSS になる。**`className="whitespace-pre-wrap"` を使う**こと。
+  2. **`href` / `src` に変数を入れる** … React はここをエスケープしない。`javascript:` が
+     実行される（7-1 の `?next=` と同じ穴）。ユーザー由来の URL を入れるなら
+     `safe-next-path.ts` と同型の検証を挟む。現状 Cloudinary の URL はフロントで組み立てる
+     ので該当しないが、外部リンク機能を足すときは必要。
+  3. `style={{ ... }}` にユーザー由来の値を入れる … 現状予定は無い。
 - 完了条件：お題を探し、描写して生成（即公開）し、結果が表示されるコアループが動く。
 
 ### 🟢 7-4. 挑戦詳細・比較ビュー（/attempts/[id]）
@@ -596,6 +608,46 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 依存：コアループ完成（7-3 まで）、8-1、8-2a
 - タスク：全機能の本番反映、Cloudinary・画像生成キー等の本番疎通、カスタムドメイン/DNS、最終確認。
 - 完了条件：本番URLでコアループが動作し、E2E が green。
+
+### 🔵 8-5. CSP（Content-Security-Policy）の導入
+- 目的：XSS が起きたときに、注入されたスクリプトの**実行そのものをブラウザに拒否させる**。
+  入口の封鎖（`react/no-danger`、`href`/`src` の検証）は 1 箇所の見落としで破られるため、
+  二重の防御として置く。
+- 依存：**7-5 完了後に着手する**（下記「なぜ今やらないか」参照）
+- 前提の整理（2026-09-05 の検討）：
+  - **認証方式とは独立**。`localStorage` のままでも、httpOnly cookie + BFF にしても、
+    CSP の要否・内容は変わらない。`token-store.ts` / `auth-context.tsx` は 1 行も触らない。
+  - **httpOnly + BFF は XSS 対策にならない**。防げるのはトークンの持ち出しだけで、
+    XSS を踏めば攻撃スクリプトは被害者のブラウザ内から認証済みリクエストを投げられる
+    （BFF でも cookie は自動送信される）。なりすまし投稿・お題削除は同じように起きる。
+    **XSS に効くのは CSP。** BFF を検討するのは CSP を入れた後でよい。
+  - **CSRF 対策は現状不要**。Rails は cookie を見ず（`devise-jwt` は Authorization ヘッダのみ）、
+    `cors.rb` も `credentials: true` を設定していない。BFF に変えたときだけ必要になる。
+- **なぜ 7-5 完了後か**：それまで CSP のポリシーが確定しないため。先に入れると
+  7-3・7-4・7-5 のたびに CSP を直すことになる。
+  - `img-src` に Cloudinary が要る → **7-3**（お題画像の表示）で確定
+  - `connect-src` の実際の使われ方（ポーリング含む） → **7-3** で確定
+  - 画像アップロードの経路 → **7-5** で確定
+- タスク：
+  - [ ] `frontend/proxy.ts` を作る（Next.js 16 は `middleware` ではなく **`proxy`**。
+        同梱ドキュメント `node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`
+        に実装例あり。約 40 行）
+  - [ ] **`Content-Security-Policy-Report-Only` から始める**。違反はコンソールに出るだけで
+        **ビルドは通る**ため、いきなり遮断すると本番で画像が出ないといった形で事故る
+  - [ ] 一定期間プレビュー／本番で違反を観測 → 出なくなってから遮断モードへ
+- **踏みやすい罠（着手時に必ず確認）**：
+  1. **`default-src 'self'` だけだと Rails API を叩けなくなる**。ドキュメントの例に
+     `connect-src` が無い。指定しないと `default-src` にフォールバックし、別オリジンへの
+     `fetch` が全部ブロックされて**アプリが完全に動かなくなる**。
+     `connect-src 'self' <Render の URL>` が必須。ローカル（`http://localhost:3000`）と
+     本番で値が変わるため、環境ごとの設定が要る。
+  2. **`img-src` に Cloudinary が必要**（7-3 以降）。`'self' blob: data:` のままだと画像が出ない。
+  3. **nonce 方式にすると全ページが動的レンダリングになる**。静的最適化・ISR・CDN
+     キャッシュが無効化され、ページによっては `await connection()` の明示も要る。
+     現在 `/` と `/auth-check` は静的プリレンダリング（ビルド出力の `○ (Static)`）なので、
+     その最適化を失う。`'unsafe-inline'` を使う nonce 無し方式なら静的化は保てるが、
+     **インラインスクリプトを全部許すので XSS はほぼ防げない**（周辺の攻撃には効く）。
+- 完了条件：本番とプレビューで CSP ヘッダが付き、違反ゼロで遮断モードが有効になっている。
 
 ### 🔵 8-3. SNSシェア・OGP
 - タスク：挑戦/お題の共有、OGP画像。
