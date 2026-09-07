@@ -79,6 +79,16 @@ CI の bundler-audit は**脆弱性DBが更新された時点で落ちる**。�
 - API 呼び出しは共通クライアント（fetch ラッパ）経由に集約する。個別コンポーネントで直接 fetch を散らさない。
 - サーバー状態とクライアント状態を混同しない。フォームやトグルはローカル状態で扱う。
 - TailwindCSS のユーティリティで組む。デザインの意図は `docs/design_briefs.md` を参照。
+- **XSS：React の自動エスケープを迂回しない。** Kotoe は公開 UGC（お題タイトル・描写文・
+  ユーザー名）を表示するため、ここが最短の攻撃経路になる。`{value}` と普通に書く限り安全。
+  - `dangerouslySetInnerHTML` は **eslint（`react/no-danger`）で禁止**。改行を反映したいだけなら
+    `className="whitespace-pre-wrap"` を使う（`replace(/\n/g, "<br>")` は XSS になる）。
+  - **`href` / `src` に変数を入れるときは検証を挟む。** ここは React がエスケープしないため
+    `javascript:` が実行される。`src/lib/auth/safe-next-path.ts` が同じ問題への対処なので、
+    形を揃えること（URL パーサはタブ・改行を解析前に除去するため、単純な前方一致では漏れる）。
+  - トークンは `localStorage` に置いており、**XSS を踏めば盗まれる**前提で設計している
+    （設計書 `2026-09-01-issue-7-1-api-client-auth-design.md`）。入口を作らないことが第一の防御。
+    第二の防御としての CSP は issue 8-5。
 
 ## テスト戦略
 方針：**ロジックが集中するレイヤーに投資する**。ビジネスロジックは Rails 側にあるため RSpec が主戦場。フロントとバックの「つなぎ目」（CORS / JWT / ポーリング）は E2E で守る。
