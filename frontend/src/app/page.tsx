@@ -28,12 +28,12 @@ export default function Home() {
     <main className="flex flex-1 flex-col items-center justify-center gap-8 p-8">
       <div className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Kotoe</h1>
-        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 text-ink-muted">
           画像を言葉だけで描写し、その言葉から AI が再現した画像の再現度を競う
         </p>
       </div>
 
-      <section className="w-full max-w-md rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
+      <section className="w-full max-w-md rounded-card border border-line bg-surface p-6">
         <h2 className="mb-4 text-sm font-semibold text-zinc-500">Rails API 疎通確認</h2>
 
         {state.kind === "loading" && <p className="text-zinc-500">確認中…</p>}
@@ -54,7 +54,7 @@ export default function Home() {
           確認で「docker compose up を確認してください」と案内し、切り分けを遅らせた。
         */}
         {state.kind === "failure" && (
-          <p className="text-sm text-red-600 dark:text-red-400">
+          <p className="text-sm text-danger">
             Rails API に接続できませんでした。ブラウザの Console と Network を確認してください
             （ローカルなら backend の起動、別オリジンなら CORS の許可オリジンと
             NEXT_PUBLIC_API_BASE_URL が主な原因です）。
