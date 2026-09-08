@@ -18,12 +18,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // 飛ばすのは「未ログインが確定した」ときだけ。unreachable では飛ばさない
+    // （トークンはまだ残っており、飛ばすと有効な JWT を持ったままログイン画面へ
+    // 追い出される）。7-1 では restoreFailed フラグを併せて見る必要があったが、
+    // 状態が分かれたので status だけで判断できる。
     if (auth.status !== "unauthenticated") return;
-
-    // 通信断で復元に失敗しただけなら、トークンはまだ残っている。ここで
-    // 飛ばすと、有効な JWT を持ったままログイン画面へ追い出される。
-    // Render の無料枠はスリープするので、放置後の初回アクセスで現実に起きる。
-    if (auth.restoreFailed) return;
 
     // usePathname はクエリを含まない。/posts/1?sort=likes でガードに掛かると
     // ログイン後に並び順が失われるので、location から組み立てる。
@@ -35,22 +34,28 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     // また /login へ飛ばされるループができる。
     router.replace(`/login?next=${encodeURIComponent(current)}`);
     // pathname を依存に残すのは、クライアント遷移でここが再評価されるようにするため。
-  }, [auth.status, auth.restoreFailed, pathname, router]);
+  }, [auth.status, pathname, router]);
+
+  if (auth.status === "unreachable") {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
+        <p className="text-ink-muted">サーバーに接続できませんでした。</p>
+        <button
+          type="button"
+          onClick={auth.retryRestore}
+          className="rounded-card bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-strong"
+        >
+          再試行
+        </button>
+      </div>
+    );
+  }
 
   if (auth.status !== "authenticated") {
-    // 復元に失敗した場合は、リダイレクトせずここで止まる。
-    if (auth.restoreFailed) {
-      return (
-        <p className="p-8 text-zinc-500">
-          サーバーに接続できませんでした。ページを再読み込みしてください。
-        </p>
-      );
-    }
-
     // レンダリング中に遷移してはいけないので、判定が付くまでは待つ表示を出す。
     // localStorage は SSR で読めないため、この一瞬は localStorage を選んだ
-    // 時点で避けられない（設計書「A のコスト」）。
-    return <p className="p-8 text-zinc-500">読み込み中…</p>;
+    // 時点で避けられない（7-1 設計書「A のコスト」）。
+    return <p className="p-8 text-ink-muted">読み込み中…</p>;
   }
 
   return <>{children}</>;
