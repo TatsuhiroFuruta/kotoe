@@ -1,68 +1,70 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
 
-import { AuthProbe } from "@/app/_components/auth-probe";
-import { apiFetch } from "@/lib/api";
-import type { HealthResponse } from "@/types/api";
+import { HealthPanel } from "@/components/dev/health-panel";
+import { useAuth } from "@/lib/auth/auth-context";
 
-// 疎通確認用の暫定トップページ。issue 7-7 で本来のトップ（ヒーロー＋新着/人気）に差し替える。
-// ブラウザから Rails を叩くためクライアントコンポーネントにしている
-// （NEXT_PUBLIC_API_BASE_URL は localhost:3000 を指すので、コンテナ内のサーバー側からは解決できない）。
-
-type HealthState =
-  | { kind: "loading" }
-  | { kind: "success"; health: HealthResponse }
-  | { kind: "failure" };
+/**
+ * 疎通確認パネルを出すかどうか。**「本番以外なら出す」ではなく「出してよいと
+ * 分かっているときだけ出す」と書く**（失敗したら閉じる向きにする）。
+ *
+ *   - NEXT_PUBLIC_VERCEL_ENV === "preview" … PR ごとのプレビュー。出す
+ *   - NODE_ENV !== "production" … ローカルの `npm run dev`。出す
+ *   - どちらでもない … 本番、または判断がつかない。出さない
+ *
+ * `NEXT_PUBLIC_VERCEL_ENV !== "production"` と書かないのは、この変数が
+ * 「Vercel のプロジェクト設定が Next.js プリセットで、システム環境変数の
+ * 自動公開が有効」であることに依存しているため。このリポジトリはプリセットが
+ * "Other" に落ちる事故を踏んでおり（PR で / が NOT_FOUND になった件）、
+ * その形だと変数が未注入のときに undefined !== "production" が真になって、
+ * **本番のトップにデバッグパネルが無音で出る**。
+ *
+ * 代償はローカルの本番ビルド（npm run build && start）で出なくなることだけで、
+ * ローカルの通常作業は npm run dev なので影響しない。
+ *
+ * 本来のトップ（ヒーロー＋遊び方＋新着/人気）は 7-7。それまでこのページが
+ * 本番のトップになるため、デバッグ用のパネルを出しっぱなしにしない。
+ */
+const SHOW_HEALTH_PANEL =
+  process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" || process.env.NODE_ENV !== "production";
 
 export default function Home() {
-  const [state, setState] = useState<HealthState>({ kind: "loading" });
-
-  useEffect(() => {
-    apiFetch<HealthResponse>("/api/health")
-      .then((health) => setState({ kind: "success", health }))
-      .catch(() => setState({ kind: "failure" }));
-  }, []);
+  const auth = useAuth();
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-8 p-8">
-      <div className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">Kotoe</h1>
-        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-          画像を言葉だけで描写し、その言葉から AI が再現した画像の再現度を競う
+    <main className="flex flex-1 flex-col items-center justify-center gap-10 p-8">
+      <div className="max-w-xl text-center">
+        <h1 className="text-3xl font-semibold tracking-tight text-ink">
+          言葉だけで、その絵を伝えられますか。
+        </h1>
+        <p className="mt-3 text-ink-muted">
+          画像を言葉で描写すると、その言葉から AI が画像を再現します。どれだけ近づけるかを競うゲームです。
         </p>
-      </div>
-
-      <section className="w-full max-w-md rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
-        <h2 className="mb-4 text-sm font-semibold text-zinc-500">Rails API 疎通確認</h2>
-
-        {state.kind === "loading" && <p className="text-zinc-500">確認中…</p>}
-
-        {state.kind === "success" && (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-            <dt className="text-zinc-500">API</dt>
-            <dd className="font-mono">{state.health.status}</dd>
-            <dt className="text-zinc-500">データベース</dt>
-            <dd className="font-mono">{state.health.database}</dd>
-          </dl>
-        )}
 
         {/*
-          原因をローカル前提で断定しない。ここはプレビューや本番でも表示され、
-          そこでの失敗理由はたいてい CORS の許可オリジンか NEXT_PUBLIC_API_BASE_URL
-          であって、backend が起動していないことではない。実際に 7-1 のプレビュー
-          確認で「docker compose up を確認してください」と案内し、切り分けを遅らせた。
+          CTA もナビと同じ方針で、実在するルートだけを出す。「お題を探す」→ /posts は
+          7-3 が、「お題を投稿」→ /posts/new は 7-5 がここに足す。
         */}
-        {state.kind === "failure" && (
-          <p className="text-sm text-red-600 dark:text-red-400">
-            Rails API に接続できませんでした。ブラウザの Console と Network を確認してください
-            （ローカルなら backend の起動、別オリジンなら CORS の許可オリジンと
-            NEXT_PUBLIC_API_BASE_URL が主な原因です）。
-          </p>
+        {auth.status === "unauthenticated" && (
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <Link
+              href="/signup"
+              className="rounded-card bg-accent px-5 py-2.5 font-medium text-white hover:bg-accent-strong"
+            >
+              新規登録
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-card border border-line px-5 py-2.5 font-medium text-ink-muted hover:text-ink"
+            >
+              ログイン
+            </Link>
+          </div>
         )}
-      </section>
+      </div>
 
-      <AuthProbe />
+      {SHOW_HEALTH_PANEL && <HealthPanel />}
     </main>
   );
 }

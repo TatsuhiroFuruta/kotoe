@@ -12,24 +12,21 @@ import {
 } from "react";
 
 import { apiFetch, apiRequest } from "@/lib/api";
+import { deriveAuthState, type AuthState } from "@/lib/auth/derive-auth-state";
 import { tokenStore } from "@/lib/auth/token-store";
 import type { MeResponse, User } from "@/types/api";
 
-type AuthState =
-  | { status: "loading" }
-  | { status: "authenticated"; user: User }
-  | { status: "unauthenticated" };
-
 type AuthContextValue = AuthState & {
-  /**
-   * 401 以外の理由（通信断、サーバーのコールドスタート等）で /api/me による
-   * 復元に失敗したか。トークンは残っているので「未ログインが確定した」のとは
-   * 意味が違う。ガードはこれを見て、ログイン画面へ飛ばすかどうかを分ける。
-   */
-  restoreFailed: boolean;
   signUp(params: { name: string; email: string; password: string }): Promise<void>;
   signIn(params: { email: string; password: string }): Promise<void>;
   signOut(): Promise<void>;
+  /**
+   * unreachable からの再試行。復元に失敗したトークンの記録を捨てて
+   * GET /api/me をやり直す。7-1 は 401 以外の失敗でトークンを捨てずに
+   * 未ログイン表示にしていたが、restoreFailedFor が同じトークンでの再試行を
+   * 恒久的に塞ぐため、回復手段がリロードしか無かった。
+   */
+  retryRestore(): void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -163,21 +160,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo<AuthContextValue>(() => {
-    const restoreFailed = token !== null && restoreFailedFor === token;
+  // 復元の useEffect は依存配列に restoreFailedFor を持っている（上の効果）ので、
+  // null に戻すだけで GET /api/me が再実行される。新しい仕組みは要らない。
+  const retryRestore = useCallback(() => setRestoreFailedFor(null), []);
 
-    const state: AuthState = !hydrated
-      ? { status: "loading" }
-      : token === null
-        ? { status: "unauthenticated" }
-        : session?.token === token
-          ? { status: "authenticated", user: session.user }
-          : restoreFailed
-            ? { status: "unauthenticated" }
-            : { status: "loading" };
-
-    return { ...state, restoreFailed, signUp, signIn, signOut };
-  }, [hydrated, token, session, restoreFailedFor, signUp, signIn, signOut]);
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      ...deriveAuthState({ hydrated, token, session, restoreFailedFor }),
+      signUp,
+      signIn,
+      signOut,
+      retryRestore,
+    }),
+    [hydrated, token, session, restoreFailedFor, signUp, signIn, signOut, retryRestore],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

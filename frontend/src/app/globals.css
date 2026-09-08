@@ -1,26 +1,57 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Kotoe のデザイントークン。デザインブリーフ 0（docs/design_briefs.md）の
+  「クリーンで余白広め、画像を引き立てる落ち着いた背景、アクセントカラー 1 色（青緑）、
+  カード基調、角丸控えめ」を数値にしたもの。
+
+  ダークモードは対応範囲に入れない（設計書「4. ダークモードは対応範囲に入れない」）。
+  中途半端なダーク対応は無対応より悪い（背景だけ暗くなって文字が読めないカードが出る）
+  ため、ここでは変数を定義するだけに留め、必要になったら変数の再定義で足りる形にする。
+*/
+@theme {
+  --color-canvas: #fafaf9; /* 背景。白より一段落として画像とカードを浮かせる */
+  --color-surface: #ffffff; /* カード面・ヘッダー・フッター */
+  --color-ink: #1c1917; /* 本文 */
+  --color-ink-muted: #57534e; /* 副次テキスト */
+  --color-line: #e7e5e4; /* 境界線 */
+  /*
+    ブリーフの「青緑」。白文字を載せる主 CTA と、白地に置くリンクの両方で使うので、
+    どちらも WCAG AA（通常テキスト 4.5:1）を満たす濃さにしてある。
+    1 段明るい #0d9488 は 3.74:1 で、通常サイズの文字には足りない。
+  */
+  --color-accent: #0f766e; /* 白との比 5.47:1 */
+  --color-accent-strong: #115e59; /* hover。7.58:1 */
+  --color-danger: #dc2626; /* バリデーションエラーの文字色 */
+  --radius-card: 6px; /* 角丸は控えめ */
 }
 
+/*
+  ライト固定であることをブラウザに宣言する。
+  これが無いと Chrome の「ダークテーマを強制」が自動ダーク化の対象にし、
+  背景とテキストだけが反転して、上のコメントで避けたいと書いた
+  「背景だけ暗くなって文字が読めないカード」がそのまま起きる。
+*/
+:root {
+  color-scheme: light;
+}
+
+/*
+  inline を付けるのは、値が @theme の外（layout.tsx の next/font）で定義された
+  変数を参照しているため。
+*/
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/*
+  font-family に --font-geist-sans を直接書く。以前ここは
+  `font-family: Arial, Helvetica, sans-serif;` で、layout.tsx が読み込んでいる
+  Geist を上書きしてしまっていた（Next.js の初期テンプレート由来のバグ）。
+*/
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }

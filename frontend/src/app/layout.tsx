@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { SiteFooter } from "@/components/layout/site-footer";
+import { SiteHeader } from "@/components/layout/site-header";
 import { AuthProvider } from "@/lib/auth/auth-context";
 
 import "./globals.css";
@@ -35,8 +37,16 @@ export default function RootLayout({
         サーバーコンポーネントはサーバー描画のままこの中に収まる。全ページが
         クライアントコンポーネントになるわけではない（useAuth を呼ぶものだけ）。
       */}
-      <body className="min-h-full flex flex-col">
-        <AuthProvider>{children}</AuthProvider>
+      <body className="flex min-h-full flex-col">
+        <AuthProvider>
+          <SiteHeader />
+          {/*
+            children を flex-1 で包むのは、各ページが flex-1 を付け忘れても
+            フッターが最下部に留まるようにするため。ページごとに忘れうる。
+          */}
+          <div className="flex flex-1 flex-col">{children}</div>
+          <SiteFooter />
+        </AuthProvider>
       </body>
     </html>
   );
