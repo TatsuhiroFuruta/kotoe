@@ -147,8 +147,12 @@ router.replace(next);
 一方このパネルには実用的な価値がある。CLAUDE.md の「② PR を出すたび Vercel のプレビュー URL で確認する」を実際に支えているのがこれで、CORS 許可オリジンや `NEXT_PUBLIC_API_BASE_URL` の設定ミスはここで最初に見つかる（7-1 の実績あり）。
 
 ```tsx
-{process.env.NEXT_PUBLIC_VERCEL_ENV !== "production" && <HealthPanel />}
+const SHOW_HEALTH_PANEL = process.env.NEXT_PUBLIC_VERCEL_ENV !== "production";
+// ...
+{SHOW_HEALTH_PANEL && <HealthPanel />}
 ```
+
+パネルを `src/components/dev/health-panel.tsx` に切り出すのは、`/api/health` を叩く `useEffect` を条件付きにできないため（フックは条件分岐の中に置けない）。コンポーネントごと出し分ければ、本番では effect も動かない。
 
 | 環境 | `NEXT_PUBLIC_VERCEL_ENV` | パネル |
 |---|---|---|
@@ -177,9 +181,11 @@ frontend/src/
 │   ├── _components/auth-probe.tsx  削除
 │   └── auth-check/page.tsx         削除
 ├── components/                     新規ディレクトリ
-│   └── layout/
-│       ├── site-header.tsx         新規  "use client"（useAuth を呼ぶ）
-│       └── site-footer.tsx         新規  サーバーコンポーネント
+│   ├── layout/
+│   │   ├── site-header.tsx         新規  "use client"（useAuth を呼ぶ）
+│   │   └── site-footer.tsx         新規  サーバーコンポーネント
+│   ├── ui/text-field.tsx           新規  ラベル＋入力欄＋エラー表示
+│   └── dev/health-panel.tsx        新規  疎通確認パネル（本番では描画しない）
 └── lib/auth/
     ├── derive-auth-state.ts        新規  純粋関数
     ├── error-messages.ts           新規  エラーコード辞書
@@ -309,7 +315,7 @@ return <>{children}</>;
 | 422 の**未知コード** | 「入力内容を確認してください（password: xxx）」 |
 | その他の `ApiError`（500 / 502 / HTML ボディ） | 「サーバーでエラーが発生しました。時間をおいて再度お試しください」 |
 | `TypeError`（fetch 自体の失敗＝通信断・CORS） | 「サーバーに接続できませんでした。通信環境を確認してください」 |
-| `extractToken` の Error | 「ログインに失敗しました」＋ **`console.error` に原文を出す** |
+| `extractToken` の Error（その他の例外も同じ経路） | 「認証に失敗しました。時間をおいて再度お試しください」＋ **`console.error` に原文を出す**。文言を「ログイン」に寄せないのは `/signup` でも同じ関数を使うため |
 
 辞書が持つコードは Rails 側の実体に対応させる：`name: blank` ／ `email: blank, invalid, taken` ／ `password: blank, too_short, too_long`。
 
@@ -328,6 +334,7 @@ return <>{children}</>;
   --color-line: #E7E5E4;
   --color-accent: #0D9488;        /* ブリーフの「青緑」 */
   --color-accent-strong: #0F766E; /* hover */
+  --color-danger: #DC2626;        /* バリデーションエラーの文字色 */
   --radius-card: 6px;             /* 角丸控えめ */
 }
 ```
@@ -344,23 +351,27 @@ return <>{children}</>;
 
 CLAUDE.md の方針通り、**UI から切り出せる純粋なロジックにだけ Vitest** を書く。React Testing Library は導入しない（8-1 の E2E と役割が被る）。
 
-CI は既に `npm run lint` / `tsc` / `npm run test` を回している（`.github/workflows/ci.yml:106-137`）ので、CI 側の変更は無い。
+CI は既に `npm run lint` / `tsc` / `npm run test` を回している（`.github/workflows/ci.yml:106-137`）ので、CI 側の変更は無い。合計 12 件。
 
-### `test/lib/auth/derive-auth-state.test.ts`（5 件）
+### `test/lib/auth/derive-auth-state.test.ts`（6 件）
 
 1. `hydrated: false` はトークンがあっても `loading`（7-1 のバグ）
 2. `token: null` → `unauthenticated`
 3. `session.token === token` → `authenticated` でユーザーを返す
 4. `restoreFailedFor === token` → **`unreachable`**（`unauthenticated` ではない）
 5. `restoreFailedFor` が別のトークン → `loading`（再ログイン時に古い失敗を引きずらない）
+6. `session` が別のトークンのもの → `loading`（古いユーザーを `authenticated` として見せない）
 
-### `test/lib/auth/error-messages.test.ts`（5 件）
+5・6 を分けて書くのは、`session?.token === token` と `restoreFailedFor === token` の**トークン比較を落として `session !== null` / `restoreFailedFor !== null` に単純化する変更**を、それぞれ独立に落とすため。片方だけだと、もう片方の比較が消されても green のまま通る。
 
-6. 401 `invalid_credentials` → フォームエラー文言
-7. 422 `{errors:{email:["taken"]}}` → `fieldErrors.email` に文言
-8. **未知コード** → 空文字にならず、コードが分かる文言になる
-9. `TypeError` → 通信エラー文言
-10. 500 / 文字列ボディ → サーバーエラー文言
+### `test/lib/auth/error-messages.test.ts`（6 件）
+
+7. 401 `invalid_credentials` → フォームエラー文言
+8. 422 `{errors:{email:["taken"]}}` → `fieldErrors.email` に文言
+9. 422 の**未知コード** → 空文字にならず、フィールド名とコードが文言に含まれる
+10. `TypeError` → 通信エラー文言
+11. 500（文字列ボディ）→ サーバーエラー文言
+12. 素の `Error`（`extractToken` の失敗）→ 文言を返し、かつ `console.error` に原文を出す
 
 ### 手動確認
 
@@ -381,7 +392,9 @@ CI は既に `npm run lint` / `tsc` / `npm run test` を回している（`.gith
 
 `auth-check/` を削除すると、**`RequireAuth` を使うページがリポジトリから一時的に消える**。次に使うのは 7-5（`/posts/new`）で、E2E（8-1）は 7-3・7-4 依存。つまり 7-2 で `RequireAuth` に入れる変更（`unreachable` 分岐と再試行ボタン）は、**自動テストでも画面でも確認されないまま 7-5 までマージされる**。
 
-それでも削除する。申し送り 1 が問題にしているのは本番に公開されている認証パネルであり、確認手段のために本番の穴を残すのは割に合わない。代わりに次の 2 つで受ける。
+それでも削除する。申し送り 1 が問題にしているのは本番に公開されている認証パネルであり、確認手段のために本番の穴を残すのは割に合わない。代わりに次の 3 つで受ける。
+
+- **ブランチ内では `auth-check/` の削除を最後のタスクに回す。** `RequireAuth` を書き換えるタスクの時点ではまだこのページが残っているので、`unreachable` の分岐と再試行ボタンを**実際の画面で手動確認できる**（devtools のオフラインで再現する）。マージ後に確認手段が無くなる事実は変わらないが、この issue の中では検証されないまま入ることを避けられる
 
 - `RequireAuth` の変更を**機械的な置き換えに限定**する（`auth.restoreFailed` → `auth.status === "unreachable"`）。判定ロジック本体は `deriveAuthState` のテストが守る
 - 7-5 で `/posts/new` にガードを敷いた回に、**直接ロード／リロードで `/login` に飛ばされないこと**を必ず手で確認する（7-1 で実際に埋め込んだバグ。`<Link>` のクライアント遷移では露出しない）
@@ -402,12 +415,14 @@ CI は既に `npm run lint` / `tsc` / `npm run test` を回している（`.gith
 | `src/app/(auth)/signup/page.tsx` | 新規 |
 | `src/components/layout/site-header.tsx` | 新規 |
 | `src/components/layout/site-footer.tsx` | 新規 |
+| `src/components/ui/text-field.tsx` | 新規（ラベル＋入力欄＋エラー表示） |
+| `src/components/dev/health-panel.tsx` | 新規（`page.tsx` から切り出し。本番では描画しない） |
 | `src/lib/auth/derive-auth-state.ts` | 新規 |
 | `src/lib/auth/error-messages.ts` | 新規 |
 | `src/lib/auth/auth-context.tsx` | `deriveAuthState` を使う、`restoreFailed` 廃止、`retryRestore` 追加 |
 | `src/lib/auth/require-auth.tsx` | `unreachable` 分岐と再試行ボタン |
-| `test/lib/auth/derive-auth-state.test.ts` | 新規（5 件） |
-| `test/lib/auth/error-messages.test.ts` | 新規（5 件） |
+| `test/lib/auth/derive-auth-state.test.ts` | 新規（6 件） |
+| `test/lib/auth/error-messages.test.ts` | 新規（6 件） |
 | `src/app/_components/auth-probe.tsx` | 削除 |
 | `src/app/auth-check/page.tsx` | 削除 |
 
