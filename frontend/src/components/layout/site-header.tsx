@@ -87,6 +87,21 @@ export function SiteHeader() {
               >
                 再試行
               </button>
+              {/*
+                この状態からの脱出口。再試行を何度押しても復帰しないとき、これが
+                無いと全ページのヘッダーが unreachable のままになり、ログイン画面へ
+                向かう導線もアプリ内に存在しなくなる（トップの CTA も
+                unauthenticated のときしか出ない）。signOut() は失効の API 呼び出しに
+                失敗しても finally でローカルのトークンを必ず捨てるので、
+                サーバーに届かない状態でも unauthenticated へ抜けられる。
+              */}
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="rounded-card border border-line px-3 py-1.5 text-ink-muted hover:text-ink"
+              >
+                ログアウト
+              </button>
             </>
           )}
         </nav>

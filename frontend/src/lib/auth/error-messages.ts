@@ -47,11 +47,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 未知のコードでも空文字を返さない。Rails 側にバリデーションが増えたとき、
- * 「送信しても画面に何も出ない」という原因の分からない状態になるのを防ぐ。
+ * 422 のボディを、フィールド別の文言とフォーム全体の文言に振り分ける。
+ *
+ * 「画面に何も出ない」状態を作らないことが目的で、そのために 2 段構えにしている。
+ *
+ *   1. 未知の**コード**（既知フィールドの新しいバリデーション）… そのフィールドの
+ *      下にコードを含む文言を出す。
+ *   2. 未知の**フィールド**（base など、フォームが入力欄を持たないもの）…
+ *      fieldErrors に入れても描画されないので、formError へ回す。
+ *
+ * 2 が要るのは、fieldErrors が非空でも画面に何も出ないことがあるため。
+ * FIELD_MESSAGES のキーを「フォームが描画するフィールド」の集合として使っている
+ * （/login は email・password、/signup は name・email・password を描画し、
+ * /login に name のエラーが返ることはない＝ name を送っていないため）。
  */
-function toFieldErrors(errors: Record<string, unknown>): Record<string, string> {
-  const result: Record<string, string> = {};
+function toFieldErrors(errors: Record<string, unknown>): {
+  fieldErrors: Record<string, string>;
+  unrenderable: string[];
+} {
+  const fieldErrors: Record<string, string> = {};
+  const unrenderable: string[] = [];
 
   for (const [field, codes] of Object.entries(errors)) {
     if (!Array.isArray(codes)) continue;
@@ -59,11 +74,16 @@ function toFieldErrors(errors: Record<string, unknown>): Record<string, string> 
     const code = codes.find((candidate): candidate is string => typeof candidate === "string");
     if (code === undefined) continue;
 
-    result[field] =
-      FIELD_MESSAGES[field]?.[code] ?? `入力内容を確認してください（${field}: ${code}）`;
+    const messages = FIELD_MESSAGES[field];
+    if (messages === undefined) {
+      unrenderable.push(`${field}: ${code}`);
+      continue;
+    }
+
+    fieldErrors[field] = messages[code] ?? `入力内容を確認してください（${field}: ${code}）`;
   }
 
-  return result;
+  return { fieldErrors, unrenderable };
 }
 
 export function toAuthFormErrors(error: unknown): AuthFormErrors {
@@ -75,7 +95,16 @@ export function toAuthFormErrors(error: unknown): AuthFormErrors {
     }
 
     if (error.status === 422 && isRecord(body) && isRecord(body.errors)) {
-      const fieldErrors = toFieldErrors(body.errors);
+      const { fieldErrors, unrenderable } = toFieldErrors(body.errors);
+
+      if (unrenderable.length > 0) {
+        // 入力欄が無いフィールドのエラー。fieldErrors に入れても描画されないので
+        // フォーム全体のエラーとして出す。
+        return {
+          formError: `入力内容を確認してください（${unrenderable.join(" / ")}）`,
+          fieldErrors,
+        };
+      }
 
       // 422 なのに 1 件も翻訳できなかったときに無言で終わらせない。
       if (Object.keys(fieldErrors).length > 0) {

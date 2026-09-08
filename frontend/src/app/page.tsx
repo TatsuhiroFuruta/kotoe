@@ -6,17 +6,28 @@ import { HealthPanel } from "@/components/dev/health-panel";
 import { useAuth } from "@/lib/auth/auth-context";
 
 /**
- * 疎通確認パネルを出すかどうか。
+ * 疎通確認パネルを出すかどうか。**「本番以外なら出す」ではなく「出してよいと
+ * 分かっているときだけ出す」と書く**（失敗したら閉じる向きにする）。
  *
- * NEXT_PUBLIC_VERCEL_ENV は Vercel が自動で入れる変数で、本番のビルドでは
- * "production"、プレビューのビルドでは "preview"、ローカルでは未定義になる。
- * つまりローカルとプレビューでは今まで通り表示され、本番でだけ消える。
- * NEXT_PUBLIC_* はビルド時に値が埋め込まれるので、この条件は定数に畳まれる。
+ *   - NEXT_PUBLIC_VERCEL_ENV === "preview" … PR ごとのプレビュー。出す
+ *   - NODE_ENV !== "production" … ローカルの `npm run dev`。出す
+ *   - どちらでもない … 本番、または判断がつかない。出さない
+ *
+ * `NEXT_PUBLIC_VERCEL_ENV !== "production"` と書かないのは、この変数が
+ * 「Vercel のプロジェクト設定が Next.js プリセットで、システム環境変数の
+ * 自動公開が有効」であることに依存しているため。このリポジトリはプリセットが
+ * "Other" に落ちる事故を踏んでおり（PR で / が NOT_FOUND になった件）、
+ * その形だと変数が未注入のときに undefined !== "production" が真になって、
+ * **本番のトップにデバッグパネルが無音で出る**。
+ *
+ * 代償はローカルの本番ビルド（npm run build && start）で出なくなることだけで、
+ * ローカルの通常作業は npm run dev なので影響しない。
  *
  * 本来のトップ（ヒーロー＋遊び方＋新着/人気）は 7-7。それまでこのページが
  * 本番のトップになるため、デバッグ用のパネルを出しっぱなしにしない。
  */
-const SHOW_HEALTH_PANEL = process.env.NEXT_PUBLIC_VERCEL_ENV !== "production";
+const SHOW_HEALTH_PANEL =
+  process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" || process.env.NODE_ENV !== "production";
 
 export default function Home() {
   const auth = useAuth();

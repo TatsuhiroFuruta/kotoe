@@ -33,6 +33,16 @@ describe("toAuthFormErrors", () => {
     expect(result.fieldErrors.password).toContain("too_weak");
   });
 
+  it("フォームが入力欄を持たないフィールドのエラーは、フォーム全体のエラーとして出す", () => {
+    // fieldErrors に入れても、/login も /signup も base の入力欄を持たないので
+    // 画面には何も出ない。「押しても何も起きない」を作らないための振り分け。
+    const result = toAuthFormErrors(new ApiError(422, { errors: { base: ["invalid"] } }));
+
+    expect(result.formError).toContain("base");
+    expect(result.formError).toContain("invalid");
+    expect(result.fieldErrors).toEqual({});
+  });
+
   it("fetch 自体の失敗（TypeError）を通信エラーとして扱う", () => {
     const result = toAuthFormErrors(new TypeError("Failed to fetch"));
 
