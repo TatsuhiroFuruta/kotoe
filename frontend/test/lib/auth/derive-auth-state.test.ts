@@ -14,10 +14,18 @@ const base: AuthStateInput = {
 };
 
 describe("deriveAuthState", () => {
-  it("ハイドレーション前は、トークンがあっても loading を返す", () => {
+  it("ハイドレーション前は、トークンの有無にかかわらず loading を返す", () => {
     // 7-1 で実際に埋め込んだバグ。useSyncExternalStore はハイドレーション中に
     // getServerSnapshot（= null）を返すため、hydrated を先に見ないと、有効な
     // トークンを持つ人を「未ログイン」と誤判定して /login へ飛ばしてしまう。
+    //
+    // token: null がハイドレーション中に実際に起きる入力で、!hydrated ガードを
+    // 外すとここが unauthenticated に変わる。token: "t1" のほうは最終行の
+    // フォールバックにも落ちるため、ガードを外しても loading のまま通ってしまう
+    // ＝ この 1 行だけではバグの再発を検知できない。両方置くこと。
+    expect(deriveAuthState({ ...base, hydrated: false, token: null })).toEqual({
+      status: "loading",
+    });
     expect(deriveAuthState({ ...base, hydrated: false, token: "t1" })).toEqual({
       status: "loading",
     });

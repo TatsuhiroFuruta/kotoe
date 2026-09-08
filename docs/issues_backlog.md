@@ -493,9 +493,10 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 設計書：`docs/superpowers/specs/2026-09-01-issue-7-1-api-client-auth-design.md`
 - 完了条件：ログイン→JWT保持→認証必須APIの呼び出しが通る。
 
-### 🟢 7-2. 共通レイアウト＋認証画面（/login, /signup）
+### ✅ 🟢 7-2. 共通レイアウト＋認証画面（/login, /signup）
 - 依存：7-1
 - タスク：グローバルナビ/フッター、ログイン・新規登録フォーム。
+- 設計書：`docs/superpowers/specs/2026-09-07-issue-7-2-layout-auth-screens-design.md`
 - **7-1 からの申し送り（着手時に必ず処理する）**：
   1. **暫定 UI を削除する**。`frontend/src/app/_components/`（`auth-probe.tsx`）と
      `frontend/src/app/auth-check/`、および `src/app/page.tsx` の `<AuthProbe />` を消す。
@@ -518,6 +519,26 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
      `unauthenticated` だが `tokenStore` にはトークンが残り、`api.ts` は載せ続ける。
      ナビが「ログイン」を出すのに実際のリクエストは認証済み、という食い違いが起きる。
      4 つ目の状態（例：`unreachable`）に分けるなら、消費側が増える前の今が変え時。
+- **7-2 で決めたこと（以降の全画面が乗る前提）**：
+  - 認証状態は **4 つ**（`loading` / `authenticated` / `unauthenticated` / `unreachable`）。
+    `restoreFailed` フラグは廃止した。導出は `src/lib/auth/derive-auth-state.ts` の
+    純粋関数に集約してあるので、状態を足すときはそこと 6 件のテストを見ること。
+    **`unreachable` は「未ログイン」ではない**（トークンは残っていて `api.ts` は
+    `Authorization` を載せ続ける）。ここでログイン導線を出すと表示と通信が食い違う。
+  - **ダークモードは対応しない。** `dark:` を新しく書かない。色は `globals.css` の
+    トークン（`bg-canvas` / `bg-surface` / `text-ink` / `text-ink-muted` /
+    `border-line` / `bg-accent` / `text-danger` / `rounded-card`）を使い、
+    `zinc-500` のような生のパレットを書かない。アクセントは白文字・白地の
+    どちらでも WCAG AA を満たす濃さ（5.47:1）に決めてある。
+  - **`useSearchParams()` を使わない。** `<Suspense>` 境界が要求され、ローカルでは
+    通るのに Vercel の本番ビルドだけ落ちる。クエリはイベントハンドラ／effect の中で
+    `window.location.search` から読み、`?next=` は必ず `safeNextPath()` を通す。
+  - **ナビには実在するルートしか置かない**（main は Vercel 本番を追跡するため）。
+    `SiteHeader` にコメントで置き場所を残してある。7-3 が「探す」→ `/posts`、
+    7-5 が「お題を投稿」→ `/posts/new`、7-6 がアバター→ `/mypage` を足す。
+  - エラー文言の辞書は `src/lib/auth/error-messages.ts`。バックのエラーコードを
+    日本語に翻訳する唯一の場所で、未知のコード・フォームが描画しないフィールドでも
+    必ず何かを表示する（「押しても何も起きない」を作らないため）。
 - 完了条件：登録・ログイン・ログアウトが画面から一通りできる。
 
 ### 🟢 7-3. お題一覧・検索（/posts）＋お題詳細（/posts/[id]）
@@ -526,6 +547,18 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - **7-1 からの申し送り**：`apiRequest` には timeout も `AbortSignal` も無く、**無限に待つ**。
   Render の無料枠はスリープするので、放置後の初回アクセスでコールドスタートに数十秒かかる。
   ポーリングを入れるこの issue の前に、`AbortSignal.timeout()` 対応を足しておくこと。
+- **7-2 からの申し送り**：
+  1. **コールドスタート中はトップが無操作になる。** 有効なトークンを持つ再訪
+     ユーザーが `/` を開くと `/api/me` が返るまで `status: "loading"` で、ヘッダーは
+     プレースホルダ、ヒーローの CTA も出ない（CTA は `unauthenticated` ゲート）。
+     Render のコールドスタートでは 30〜60 秒この状態が続き、押せるものがロゴだけになる。
+     上の timeout 対応を入れれば `unreachable` に落ちて再試行ボタンが出るので、
+     **この 2 つは同じ issue で片づく**。
+  2. **ナビに「探す」→ `/posts` を足す**。`SiteHeader` の中央にコメントで場所を残してある。
+  3. **主ボタンのクラス列が 5 箇所に複製されている**（`login` / `signup` / `page` /
+     `site-header` / `require-auth`）。この issue でさらに増えるので、
+     `src/components/ui/button.tsx` に切り出すならこのタイミング。
+     padding が `px-3 py-1.5` / `px-4 py-2` / `px-5 py-2.5` の 3 種類に散っているのも揃える。
 - **他人が入力した値を初めて表示する issue（XSS の注意）**：ここで `title` /
   `description` / `name`（`PostSerializer` / `AttemptSerializer` / `UserSerializer`）を
   画面に出す。React は JSX 内の値を自動でエスケープするので、**普通に `{value}` と書く限り安全**。
@@ -548,6 +581,18 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 ### 🟢 7-5. お題投稿（/posts/new）
 - 依存：7-1, 3-2
 - タスク：画像アップロード（プレビュー）＋タイトル＋投稿、エラー状態。
+- **7-2 からの申し送り（この issue が `RequireAuth` の最初の実利用になる）**：
+  7-2 は `RequireAuth` に `unreachable` 分岐と再試行ボタンを入れたが、同じ回に
+  暫定ページ `/auth-check` を削除したため、**リポジトリに `RequireAuth` を使うページが
+  1 つも無い状態が続いている**。E2E（8-1）も 7-3・7-4 依存なので、ここが初めての
+  自動／手動検証の機会になる。着手時に必ず手で確認すること：
+  1. **ログイン済みのまま `/posts/new` を「直接ロード／リロード」しても `/login` に
+     飛ばされないこと。** 7-1 で実際に埋め込んだバグで、`<Link>` のクライアント遷移では
+     ハイドレーション経路が露出しないため永遠に見つからない。
+  2. 未ログインで開くと `/login?next=/posts/new` へ飛び、ログイン後に戻ってくること。
+  3. backend を止めた状態でリロードすると、`/login` へ飛ばされず「サーバーに接続
+     できませんでした」＋再試行ボタンが出ること（devtools のオフラインでも可）。
+- ナビに「お題を投稿」→ `/posts/new` を足す（`SiteHeader` にコメントで場所がある）。
 - 完了条件：画面からお題を投稿できる。
 
 ### 🟢 7-6. マイページ（/mypage）
@@ -590,6 +635,17 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
     - どちらも jsdom では原理的に検証できない（設計書
       `2026-09-01-issue-7-1-api-client-auth-design.md` の「動作確認（暫定 UI）」参照）。
       7-1 時点では手動確認しか無く、自動テストが 1 件も無い箇所。
+  - [ ] **E2E①に必ず含める（7-2 の申し送り）**：
+    - **`unreachable` からの復帰 2 経路**。バックエンドを落とした状態でガード付き
+      ページをリロードし、(a) `/login` へ飛ばされないこと、(b) ヘッダーとページの
+      「再試行」でバックエンド復帰後にログイン状態へ戻ること、(c) ヘッダーの
+      「ログアウト」でバックエンドが落ちたままでも `unauthenticated` へ抜けられること。
+      (c) はこの状態からの唯一確実な脱出口なので、壊れると全ページのヘッダーが
+      `unreachable` のまま固まる。
+    - **`?next=` のオープンリダイレクト防御**。`/login?next=//evil.example` と
+      `/login?next=%2F%09%2Fevil.example` でログインし、`/` に着地すること
+      （`safe-next-path.test.ts` は関数を単体で見るだけで、画面が本当にそれを
+      通しているかは E2E でしか分からない）。
   - [ ] E2E②：コアループ（ログイン→お題閲覧→描写→生成(ダミー可)→即公開→比較→いいね）
 - 完了条件：2本の E2E がローカル（可能なら CI）で green。プレビュー／本番スケルトン（8-2a）に対しても回せると、つなぎ目を継続的に守れる。
 

@@ -147,22 +147,28 @@ router.replace(next);
 一方このパネルには実用的な価値がある。CLAUDE.md の「② PR を出すたび Vercel のプレビュー URL で確認する」を実際に支えているのがこれで、CORS 許可オリジンや `NEXT_PUBLIC_API_BASE_URL` の設定ミスはここで最初に見つかる（7-1 の実績あり）。
 
 ```tsx
-const SHOW_HEALTH_PANEL = process.env.NEXT_PUBLIC_VERCEL_ENV !== "production";
+const SHOW_HEALTH_PANEL =
+  process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" || process.env.NODE_ENV !== "production";
 // ...
 {SHOW_HEALTH_PANEL && <HealthPanel />}
 ```
 
 パネルを `src/components/dev/health-panel.tsx` に切り出すのは、`/api/health` を叩く `useEffect` を条件付きにできないため（フックは条件分岐の中に置けない）。コンポーネントごと出し分ければ、本番では effect も動かない。
 
-| 環境 | `NEXT_PUBLIC_VERCEL_ENV` | パネル |
-|---|---|---|
-| ローカル（`docker compose up`） | 未定義 | 表示 |
-| Vercel プレビュー（PR ごと） | `"preview"` | 表示 |
-| Vercel 本番（main） | `"production"` | 非表示 |
+**「本番以外なら出す」ではなく「出してよいと分かっているときだけ出す」と書く**（失敗したら閉じる向きにする）。
 
-Vercel が自動で入れる変数なので、ローカルには存在せず `undefined` になる。`undefined !== "production"` は真。**「本番だけ隠す」であって「本番以外で隠す」ではない。**
+| 環境 | `NEXT_PUBLIC_VERCEL_ENV` | `NODE_ENV` | パネル |
+|---|---|---|---|
+| ローカル（`npm run dev`） | 未定義 | `development` | 表示 |
+| Vercel プレビュー（PR ごと） | `"preview"` | `production` | 表示 |
+| Vercel 本番（main） | `"production"` | `production` | 非表示 |
+| **本番＋変数の注入失敗** | **未定義** | `production` | **非表示** |
 
-`NEXT_PUBLIC_*` はビルド時に値が埋め込まれるので、本番ビルドではこの条件が定数 `false` に畳まれる。Rails 側の `/api/health` エンドポイントには手を入れない（8-2a の curl スモークと Render のヘルスチェックはそのまま動く）。
+`NEXT_PUBLIC_VERCEL_ENV !== "production"` と書かない理由が 4 行目にある。この変数は「Vercel のプロジェクト設定が Next.js プリセットで、システム環境変数の自動公開が有効」であることに依存しており、このリポジトリは**プリセットが "Other" に落ちる事故を踏んでいる**（`/` が NOT_FOUND になった件）。未注入だと `undefined !== "production"` が真になり、本番のトップにデバッグパネルが無音で出る。
+
+代償はローカルの本番ビルド（`npm run build && start`）で出なくなることだけで、ローカルの通常作業は `npm run dev` なので影響しない。
+
+`NEXT_PUBLIC_*` と `NODE_ENV` はビルド時に値が埋め込まれるので、判定はデプロイ単位で固定される。Rails 側の `/api/health` エンドポイントには手を入れない（8-2a の curl スモークと Render のヘルスチェックはそのまま動く）。
 
 ## 実装の構え
 
@@ -173,6 +179,7 @@ frontend/src/
 ├── app/
 │   ├── layout.tsx                  変更  ヘッダー／フッターを合成
 │   ├── page.tsx                    変更  仮トップ（health パネルは本番のみ非表示）
+│   ├── not-found.tsx               新規  404（下記の理由で自前で持つ）
 │   ├── globals.css                 変更  デザイントークン定義、ダーク削除
 │   ├── (auth)/
 │   │   ├── layout.tsx              新規  中央寄せカードの枠
@@ -287,9 +294,11 @@ return <>{children}</>;
 | `loading` | プレースホルダ（高さだけ確保）。**SSR と初回クライアント描画で必ず同じものを描く** |
 | `unauthenticated` | 「ログイン」リンク ＋「新規登録」ボタン |
 | `authenticated` | ユーザー名 ＋「ログアウト」ボタン |
-| `unreachable` | 「サーバーに接続できません」＋「再試行」ボタン |
+| `unreachable` | 「サーバーに接続できません」＋「再試行」ボタン ＋「ログアウト」ボタン |
 
 **`unreachable` で「ログイン」を出さないのが要点**。この状態ではトークンが残っていて `api.ts` は `Authorization` を載せ続けるので、「ログイン」を出すと表示と実際の挙動が食い違う（申し送り 6 の指摘そのもの）。
+
+**代わりに「ログアウト」を置く。** 再試行を押しても復帰しない状況（バックエンドが落ちている、CORS の設定が壊れている）では、これが無いと全ページのヘッダーが `unreachable` のままになり、ログイン画面へ向かう導線がアプリ内から消える（トップの CTA も `unauthenticated` のときしか出ない）。`signOut()` は失効の API 呼び出しに失敗しても `finally` でローカルのトークンを必ず捨てるので、サーバーに届かない状態でも `unauthenticated` へ抜けられる。
 
 ユーザー名は公開 UGC なので `{user.name}` と普通に書く（React が自動でエスケープする）。`dangerouslySetInnerHTML` は eslint が禁止している。
 
@@ -326,20 +335,28 @@ return <>{children}</>;
 ### デザイントークン（`globals.css`）
 
 ```css
+:root {
+  color-scheme: light;
+}
+
 @theme {
   --color-canvas: #FAFAF9;        /* 背景。白より一段落として画像とカードを浮かせる */
   --color-surface: #FFFFFF;       /* カード面 */
-  --color-ink: #1C1917;
-  --color-ink-muted: #57534E;
+  --color-ink: #1C1917;           /* 本文。白地に 16.1:1 */
+  --color-ink-muted: #57534E;     /* 副次テキスト。白地に 7.63:1 */
   --color-line: #E7E5E4;
-  --color-accent: #0D9488;        /* ブリーフの「青緑」 */
-  --color-accent-strong: #0F766E; /* hover */
-  --color-danger: #DC2626;        /* バリデーションエラーの文字色 */
+  --color-accent: #0F766E;        /* ブリーフの「青緑」。白との比 5.47:1 */
+  --color-accent-strong: #115E59; /* hover。7.58:1 */
+  --color-danger: #DC2626;        /* バリデーションエラー。白地に 4.83:1 */
   --radius-card: 6px;             /* 角丸控えめ */
 }
 ```
 
 削除するのは `@media (prefers-color-scheme: dark)` ブロックと `--background` / `--foreground`。
+
+アクセントは**白文字を載せる主 CTA と、白地に置くリンクの両方**で使うので、どちらも WCAG AA（通常テキスト 4.5:1）を満たす濃さにする。ブリーフの青緑をそのまま teal-600（`#0D9488`）に取ると**白との比が 3.74:1** で通常サイズの文字には足りないため、1 段暗い側へずらしてある。トークンは残り 6 画面の土台なので、後から直すと差分が全画面に散る。
+
+`:root` に **`color-scheme: light`** も宣言する。これが無いと Chrome の「ダークテーマを強制」が自動ダーク化の対象にし、背景とテキストだけが反転して、まさにここで避けたいと書いた「背景だけ暗くなって文字が読めないカード」が起きる。
 
 **あわせて既存のバグを 1 つ直す**：`globals.css` の `body { font-family: Arial, Helvetica, sans-serif; }` が、`layout.tsx` で読み込んでいる Geist を上書きしていて、フォント指定が効いていない。ここを触る回なので直す。
 
@@ -409,7 +426,8 @@ CI は既に `npm run lint` / `tsc` / `npm run test` を回している（`.gith
 |---|---|
 | `src/app/layout.tsx` | ヘッダー／フッターの合成、`flex-1` のラッパ |
 | `src/app/page.tsx` | 仮トップに差し替え、health パネルを本番で非表示、`<AuthProbe />` 削除 |
-| `src/app/globals.css` | デザイントークン、ダーク削除、Arial 上書きの修正 |
+| `src/app/globals.css` | デザイントークン、`color-scheme: light`、ダーク削除、Arial 上書きの修正 |
+| `src/app/not-found.tsx` | 新規（Next.js 組み込みの 404 が独自のダークスタイルを持つため自前で持つ） |
 | `src/app/(auth)/layout.tsx` | 新規 |
 | `src/app/(auth)/login/page.tsx` | 新規 |
 | `src/app/(auth)/signup/page.tsx` | 新規 |

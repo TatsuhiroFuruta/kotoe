@@ -69,10 +69,19 @@ function toFieldErrors(errors: Record<string, unknown>): {
   const unrenderable: string[] = [];
 
   for (const [field, codes] of Object.entries(errors)) {
-    if (!Array.isArray(codes)) continue;
+    // 想定外の形（配列でない、文字列コードが入っていない）でもフィールド名だけは
+    // 拾って formError へ回す。捨てると SERVER_MESSAGE に丸まり、どの項目が
+    // 問題なのかが画面から失われる。
+    if (!Array.isArray(codes)) {
+      unrenderable.push(`${field}: ${String(codes)}`);
+      continue;
+    }
 
     const code = codes.find((candidate): candidate is string => typeof candidate === "string");
-    if (code === undefined) continue;
+    if (code === undefined) {
+      unrenderable.push(field);
+      continue;
+    }
 
     const messages = FIELD_MESSAGES[field];
     if (messages === undefined) {
