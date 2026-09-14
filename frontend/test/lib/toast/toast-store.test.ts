@@ -2,7 +2,7 @@
 //
 // ストアは DOM を触らないので jsdom は要らない（vitest.config.mts のコメントが
 // 定めている切り替え方に沿う）。
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast, toastStore } from "@/lib/toast/toast-store";
 
@@ -10,7 +10,15 @@ describe("toastStore", () => {
   beforeEach(() => {
     // モジュールスコープの状態はテスト間で持ち越される。テスト専用の export は
     // 足さず、公開 API だけで空に戻す。
+    //
+    // 片付けを先に済ませてからフェイクタイマーに切り替える。逆にすると、
+    // 前のテストが張った実タイマーのハンドルをフェイク側で消すことになる。
     for (const item of toastStore.get()) toast.dismiss(item.id);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("success で追加したトーストに type が付く", () => {
@@ -86,5 +94,50 @@ describe("toastStore", () => {
 
     // 解除後に増えていないこと（2 のまま）。
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("success は 4 秒で自動的に消える", () => {
+    toast.success("ぬま");
+
+    vi.advanceTimersByTime(3999);
+    expect(toastStore.get()).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
+    expect(toastStore.get()).toHaveLength(0);
+  });
+
+  it("error は 8 秒表示される（4 秒では消えない）", () => {
+    // 失敗は読んで判断する必要がある（もう一度押すか決める）ので長くしてある。
+    toast.error("画像の生成に失敗しました");
+
+    vi.advanceTimersByTime(4000);
+    expect(toastStore.get()).toHaveLength(1);
+
+    vi.advanceTimersByTime(4000);
+    expect(toastStore.get()).toHaveLength(0);
+  });
+
+  it("押し出されたトーストのタイマーを止める", () => {
+    // 配列の中身だけを見るテストではこれを検知できない。止め忘れたタイマーが
+    // 発火しても、その id は既に配列に無いので dismiss は何もせず、見た目は
+    // 正しいままになる。動いているタイマーの本数を直接見る。
+    toast.success("ぬま");
+    toast.success("たき");
+    toast.success("そら");
+    expect(vi.getTimerCount()).toBe(3);
+
+    toast.success("かぜ"); // ここで「ぬま」が押し出される
+
+    expect(vi.getTimerCount()).toBe(3);
+  });
+
+  it("手動で閉じたトーストのタイマーを止める", () => {
+    toast.success("ぬま");
+    toast.success("たき");
+    expect(vi.getTimerCount()).toBe(2);
+
+    toast.dismiss(toastStore.get()[0].id);
+
+    expect(vi.getTimerCount()).toBe(1);
   });
 });

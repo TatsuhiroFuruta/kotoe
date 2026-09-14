@@ -25,6 +25,16 @@ export type Toast = {
 const MAX_VISIBLE = 3;
 
 /**
+ * 自動消去までの時間。error を長くするのは、失敗は読んで判断する必要がある
+ * （「生成に失敗しました」→ もう一度押すか決める）のに対し、成功は認識する
+ * だけで済むため。同じ 4 秒だと失敗の文面を読み切る前に消える。
+ */
+const DURATION_MS: Record<ToastType, number> = {
+  success: 4000,
+  error: 8000,
+};
+
+/**
  * 空配列は必ずこの 1 つを使い回す。useSyncExternalStore は戻り値を Object.is で
  * 比較するので、[] リテラルを毎回作ると無限再レンダリングになる。
  */
@@ -35,22 +45,44 @@ let nextId = 0;
 
 const listeners = new Set<() => void>();
 
+/** 自動消去のタイマー。トーストが消える経路すべてで clearTimeout すること。 */
+const timers = new Map<number, ReturnType<typeof setTimeout>>();
+
 function notify(): void {
   for (const listener of listeners) listener();
+}
+
+function clearTimer(id: number): void {
+  const timer = timers.get(id);
+  if (timer === undefined) return;
+  clearTimeout(timer);
+  timers.delete(id);
 }
 
 function push(type: ToastType, message: string): void {
   const id = ++nextId;
   const next = [...toasts, { id, type, message }];
 
-  // 上限を超えた分は古いほうから捨てる。
-  while (next.length > MAX_VISIBLE) next.shift();
+  // 上限を超えた分は古いほうから捨てる。捨てるときにタイマーも止める。
+  // 止め忘れると、既に画面から消えた通知のタイマーが数秒後に発火する。
+  // その時点では id が配列に無いので見た目には何も起きず、テストでも
+  // 配列を見ているだけでは気づけない（だからタイマーの本数を検査している）。
+  while (next.length > MAX_VISIBLE) {
+    const dropped = next.shift();
+    if (dropped !== undefined) clearTimer(dropped.id);
+  }
 
   toasts = next;
+  timers.set(
+    id,
+    setTimeout(() => dismiss(id), DURATION_MS[type]),
+  );
   notify();
 }
 
 function dismiss(id: number): void {
+  clearTimer(id);
+
   const next = toasts.filter((item) => item.id !== id);
 
   // 無かった id なら参照を変えない。変えると購読側が無駄に再レンダリングする。
