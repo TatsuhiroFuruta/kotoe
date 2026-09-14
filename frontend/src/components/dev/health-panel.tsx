@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { toast } from "@/lib/toast/toast-store";
 import type { HealthResponse } from "@/types/api";
 
 type HealthState =
@@ -58,6 +59,31 @@ export function HealthPanel() {
           NEXT_PUBLIC_API_BASE_URL が主な原因です）。
         </p>
       )}
+
+      {/*
+        7-2.5 のトーストの確認用。最初の呼び出し元は 7-3（描写の「保存」）で、
+        それまで画面からトーストを出す手段がここにしか無い。7-3 が入ったら
+        このブロックは消してよい。
+
+        page.tsx の SHOW_HEALTH_PANEL で出し分けられているので、ローカルと
+        Vercel プレビューにだけ出て本番には出ない。
+      */}
+      <div className="mt-4 flex gap-2 border-t border-line pt-4">
+        <button
+          type="button"
+          onClick={() => toast.success("下書きを保存しました")}
+          className="rounded-card border border-line px-3 py-1.5 text-sm text-ink-muted hover:text-ink"
+        >
+          成功トースト
+        </button>
+        <button
+          type="button"
+          onClick={() => toast.error("画像の生成に失敗しました")}
+          className="rounded-card border border-line px-3 py-1.5 text-sm text-ink-muted hover:text-ink"
+        >
+          エラートースト
+        </button>
+      </div>
     </section>
   );
 }
