@@ -55,3 +55,35 @@ body {
   color: var(--color-ink);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/*
+  トーストの入場アニメーション（7-2.5）。
+
+  退場アニメーションは作らない。フェードさせるには「消える途中」という状態を
+  ストアに足して実際の削除を遅らせる必要があり、ロジックをストアに閉じて
+  テストできる形が、見た目のためだけの状態で崩れる。
+
+  Tailwind のユーティリティではなく素の CSS で書くのは、キーフレームを
+  伴うアニメーションが v4 のユーティリティだけでは表現できないため。
+*/
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in 150ms ease-out;
+}
+
+/* 動きを減らす設定をしているユーザーには動かさない。 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-in {
+    animation: none;
+  }
+}
