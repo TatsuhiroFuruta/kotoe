@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
+import { ToastViewport } from "@/components/ui/toast-viewport";
 import { AuthProvider } from "@/lib/auth/auth-context";
 
 import "./globals.css";
@@ -46,6 +47,12 @@ export default function RootLayout({
           */}
           <div className="flex flex-1 flex-col">{children}</div>
           <SiteFooter />
+          {/*
+            トーストはここに 1 つだけ置く（7-2.5）。position: fixed なので
+            DOM 上の位置は見た目に影響しないが、AuthProvider の内側に置いて
+            おくと、将来トーストから認証状態を参照したくなったときに動かさずに済む。
+          */}
+          <ToastViewport />
         </AuthProvider>
       </body>
     </html>
