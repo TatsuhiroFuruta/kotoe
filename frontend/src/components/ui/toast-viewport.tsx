@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type SyntheticEvent } from "react";
 
 import { toast, toastStore, type ToastType } from "@/lib/toast/toast-store";
 
@@ -39,6 +39,23 @@ function ToastIcon({ type }: { type: ToastType }) {
       )}
     </svg>
   );
+}
+
+/**
+ * 触れている間は自動消去を止め、離れたら再開する。
+ *
+ * 4 つのイベント（mouseenter / mouseleave / focus / blur）で同じ判定をするのは、
+ * マウスとキーボードが同時に関わるときに片方の解除でもう片方を無視しないため。
+ * 例：閉じるボタンにフォーカスしたままマウスを外すと mouseleave が来るが、
+ * キーボードの人はまだそこに居る。イベントの種類ではなく「いまこの要素に
+ * 触れているか」を毎回見て決めれば、その取りこぼしが起きない。
+ */
+function handleEngagement(event: SyntheticEvent<HTMLLIElement>, id: number): void {
+  const element = event.currentTarget;
+  const engaged = element.matches(":hover") || element.contains(document.activeElement);
+
+  if (engaged) toast.pause(id);
+  else toast.resume(id);
 }
 
 /**
@@ -86,6 +103,10 @@ export function ToastViewport() {
         {toasts.map((item) => (
           <li
             key={item.id}
+            onMouseEnter={(event) => handleEngagement(event, item.id)}
+            onMouseLeave={(event) => handleEngagement(event, item.id)}
+            onFocus={(event) => handleEngagement(event, item.id)}
+            onBlur={(event) => handleEngagement(event, item.id)}
             className="animate-toast-in pointer-events-auto flex items-start gap-2.5 rounded-card border border-line bg-surface p-3 shadow-md"
           >
             <ToastIcon type={item.type} />

@@ -140,4 +140,63 @@ describe("toastStore", () => {
 
     expect(vi.getTimerCount()).toBe(1);
   });
+
+  it("pause すると自動消去が止まる", () => {
+    toast.success("ぬま");
+
+    vi.advanceTimersByTime(1000);
+    toast.pause(toastStore.get()[0].id);
+    vi.advanceTimersByTime(60000);
+
+    expect(toastStore.get()).toHaveLength(1);
+  });
+
+  it("resume すると pause した時点の残り時間から再開する", () => {
+    // 経過した分は戻さない。離れるたびに寿命が延びると、画面の隅に
+    // トーストが居座り続けることになる。
+    toast.success("ぬま");
+    const id = toastStore.get()[0].id;
+
+    vi.advanceTimersByTime(1000); // 残り 3000
+    toast.pause(id);
+    vi.advanceTimersByTime(60000); // 止まっているので減らない
+    toast.resume(id);
+
+    vi.advanceTimersByTime(2999);
+    expect(toastStore.get()).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
+    expect(toastStore.get()).toHaveLength(0);
+  });
+
+  it("上限を超えたら最も早く消えるものを捨てる（error が success に押し出されない）", () => {
+    // error は 8 秒、success は 4 秒。最古を捨てる実装だと、error に 8 秒を
+    // 与えた意味が消える（読む前に success 3 件で押し出される）。
+    toast.error("しっぱい");
+    vi.advanceTimersByTime(1000);
+    toast.success("ぬま"); // 残り 4000。この時点で最も早く消える
+    vi.advanceTimersByTime(1000);
+    toast.success("たき");
+    vi.advanceTimersByTime(1000);
+    toast.success("そら"); // ここで 4 件目
+
+    expect(toastStore.get().map((item) => item.message)).toEqual([
+      "しっぱい",
+      "たき",
+      "そら",
+    ]);
+  });
+
+  it("いま追加したトーストは押し出しの候補にしない", () => {
+    // 残り時間だけで選ぶと、寿命の短い新着（success 4 秒）が寿命の長い既存
+    // （error 8 秒）に負けて即座に消える。直前の操作への反応が出ないのは
+    // この機能の目的そのものを損なう。
+    toast.error("いち");
+    toast.error("に");
+    toast.error("さん");
+
+    toast.success("よん");
+
+    expect(toastStore.get().map((item) => item.message)).toEqual(["に", "さん", "よん"]);
+  });
 });

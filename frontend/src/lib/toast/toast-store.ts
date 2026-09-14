@@ -45,39 +45,97 @@ let nextId = 0;
 
 const listeners = new Set<() => void>();
 
-/** 自動消去のタイマー。トーストが消える経路すべてで clearTimeout すること。 */
-const timers = new Map<number, ReturnType<typeof setTimeout>>();
+/**
+ * 自動消去のタイマー。トーストが消える経路すべてで clearTimeout すること。
+ *
+ * 残り時間を保持するのは 2 つの理由による。
+ * (1) ホバー／フォーカスしている間は止めて、離れたら続きから再開するため。
+ * (2) 上限を超えたときに「最も早く消えるもの」を捨てるため。
+ */
+type TimerState =
+  | { running: true; handle: ReturnType<typeof setTimeout>; expiresAt: number }
+  | { running: false; remainingMs: number };
+
+const timers = new Map<number, TimerState>();
 
 function notify(): void {
   for (const listener of listeners) listener();
 }
 
+function startTimer(id: number, ms: number): void {
+  timers.set(id, {
+    running: true,
+    handle: setTimeout(() => dismiss(id), ms),
+    expiresAt: Date.now() + ms,
+  });
+}
+
 function clearTimer(id: number): void {
   const timer = timers.get(id);
   if (timer === undefined) return;
-  clearTimeout(timer);
+  if (timer.running) clearTimeout(timer.handle);
   timers.delete(id);
+}
+
+/** 残り時間。タイマーを持たないものは押し出しの候補にしない。 */
+function remainingMs(id: number): number {
+  const timer = timers.get(id);
+  if (timer === undefined) return Number.POSITIVE_INFINITY;
+  return timer.running ? Math.max(0, timer.expiresAt - Date.now()) : timer.remainingMs;
 }
 
 function push(type: ToastType, message: string): void {
   const id = ++nextId;
   const next = [...toasts, { id, type, message }];
 
-  // 上限を超えた分は古いほうから捨てる。捨てるときにタイマーも止める。
-  // 止め忘れると、既に画面から消えた通知のタイマーが数秒後に発火する。
-  // その時点では id が配列に無いので見た目には何も起きず、テストでも
-  // 配列を見ているだけでは気づけない（だからタイマーの本数を検査している）。
+  // 押し出しの判定より先にタイマーを張る。残り時間で比較するため。
+  startTimer(id, DURATION_MS[type]);
+
   while (next.length > MAX_VISIBLE) {
-    const dropped = next.shift();
-    if (dropped !== undefined) clearTimer(dropped.id);
+    // 最も早く消えるものを捨てる。寿命が同じもの同士では最も古いものになるので、
+    // 「最古を押し出す」はこの規則に含まれる。単純に最古を捨てると、error に
+    // 8 秒を与えた意味が消える（4 秒の success 3 件に押し出されて読めない）。
+    //
+    // 末尾＝いま追加したものは候補から外す。寿命の短い新着が寿命の長い既存に
+    // 負けて即座に消えると、直前の操作への反応が出ない。
+    let victim = 0;
+    for (let i = 1; i < next.length - 1; i++) {
+      if (remainingMs(next[i].id) < remainingMs(next[victim].id)) victim = i;
+    }
+
+    // 捨てるときにタイマーも止める。止め忘れると、既に画面から消えた通知の
+    // タイマーが数秒後に発火する。その時点では id が配列に無いので見た目には
+    // 何も起きず、配列を見ているだけのテストでは気づけない（だから
+    // 動いているタイマーの本数を検査している）。
+    const [dropped] = next.splice(victim, 1);
+    clearTimer(dropped.id);
   }
 
   toasts = next;
-  timers.set(
-    id,
-    setTimeout(() => dismiss(id), DURATION_MS[type]),
-  );
   notify();
+}
+
+/**
+ * 自動消去を止める。触れているものが手の下で消えるのを防ぐ。
+ *
+ * 閉じるボタンにフォーカスしたまま消えると、フォーカスが body に落ちて
+ * タブ順がページ先頭に戻る。マウスでも、「×」に手を伸ばしている途中で
+ * 消えるとクリックが背後のページに落ちる。
+ */
+function pause(id: number): void {
+  const timer = timers.get(id);
+  if (timer === undefined || !timer.running) return;
+
+  clearTimeout(timer.handle);
+  timers.set(id, { running: false, remainingMs: Math.max(0, timer.expiresAt - Date.now()) });
+}
+
+/** 止めた続きから再開する。経過した分は戻さない（隅に居座り続けるため）。 */
+function resume(id: number): void {
+  const timer = timers.get(id);
+  if (timer === undefined || timer.running) return;
+
+  startTimer(id, timer.remainingMs);
 }
 
 function dismiss(id: number): void {
@@ -110,6 +168,18 @@ export const toast = {
 
   dismiss(id: number): void {
     dismiss(id);
+  },
+
+  /**
+   * 以下 2 つは ToastViewport がホバー／フォーカスの出入りで呼ぶ。
+   * 画面側から使うものではない。
+   */
+  pause(id: number): void {
+    pause(id);
+  },
+
+  resume(id: number): void {
+    resume(id);
   },
 };
 
