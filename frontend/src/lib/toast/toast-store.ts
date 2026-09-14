@@ -16,7 +16,8 @@ export type Toast = {
 };
 
 /**
- * 同時に表示する最大件数。4 件目が来たら一番古いものを押し出す。
+ * 同時に表示する最大件数。4 件目が来たら 1 件押し出す
+ * （どれを捨てるかは push() を参照。最古ではなく最も早く消えるもの）。
  *
  * 同じ文言の連打を 1 件に統合する方式は採らない。aria-live は「DOM のテキストが
  * 変化したこと」で読み上げるため、統合して置き換えると 2 回目以降が無音になる
@@ -77,11 +78,18 @@ function clearTimer(id: number): void {
   timers.delete(id);
 }
 
-/** 残り時間。タイマーを持たないものは押し出しの候補にしない。 */
+/**
+ * 押し出しの順位づけに使う残り時間。小さいものから捨てる。
+ *
+ * 一時停止中のものは候補にしない（∞ を返す）。止めているのは触れている
+ * 間だけで、そこで捨てると「手の下で消える」ことになり、pause を入れた
+ * 目的そのものを押し出しが打ち消す。止めた瞬間の残りが小さいと真っ先に
+ * 捨てられるので、実際に起きる。タイマーを持たないものも同じ扱い。
+ */
 function remainingMs(id: number): number {
   const timer = timers.get(id);
-  if (timer === undefined) return Number.POSITIVE_INFINITY;
-  return timer.running ? Math.max(0, timer.expiresAt - Date.now()) : timer.remainingMs;
+  if (timer === undefined || !timer.running) return Number.POSITIVE_INFINITY;
+  return Math.max(0, timer.expiresAt - Date.now());
 }
 
 function push(type: ToastType, message: string): void {

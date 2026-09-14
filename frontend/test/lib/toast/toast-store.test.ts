@@ -187,6 +187,21 @@ describe("toastStore", () => {
     ]);
   });
 
+  it("一時停止中のトーストは押し出しの候補にしない", () => {
+    // pause の目的は「触れているものが手の下で消えるのを防ぐ」こと。
+    // 残り時間だけで選ぶと、止めた瞬間の残りが小さいトーストが最初に
+    // 捨てられ、押し出しが pause を打ち消す。
+    toast.success("ぬま");
+    vi.advanceTimersByTime(3000); // 残り 1000。止めなければ真っ先に捨てられる
+    toast.pause(toastStore.get()[0].id);
+
+    toast.success("たき");
+    toast.success("そら");
+    toast.success("かぜ"); // 4 件目
+
+    expect(toastStore.get().map((item) => item.message)).toEqual(["ぬま", "そら", "かぜ"]);
+  });
+
   it("いま追加したトーストは押し出しの候補にしない", () => {
     // 残り時間だけで選ぶと、寿命の短い新着（success 4 秒）が寿命の長い既存
     // （error 8 秒）に負けて即座に消える。直前の操作への反応が出ないのは

@@ -132,7 +132,16 @@ React Context ＋ `useReducer` にしなかった理由は 2 つ。
 
 止める仕組みを 1 つ作れば、マウスとキーボードの両方に同じものを繋げる。ストアに `pause(id)` / `resume(id)` を足し、ビューポートが `mouseenter` / `mouseleave` / `focus` / `blur` の 4 つで呼ぶ。**再開時に経過した分は戻さない**（離れるたびに寿命が延びると隅に居座り続ける）。
 
-4 つのイベントで同じ判定関数を通すのが要点。イベントの種類で分岐すると、マウスとキーボードが同時に関わるとき（フォーカスしたままマウスを外す等）に片方の解除でもう片方を無視する。「いまこの要素に触れているか」を毎回見て決める。
+4 つのイベントが同じ判定関数を通るのが要点。片方のイベントだけで `pause` / `resume` を決めると、マウスとキーボードが同時に関わるとき（フォーカスしたままマウスを外す等）に片方の解除でもう片方を無視する。毎回 2 つの条件（ホバー・フォーカス）を見て決める。
+
+**ホバーの状態は `matches(":hover")` で読まず、イベントから受け取る。** `mouseleave` の中で `:hover` を読むと、ブラウザがホバー状態を境界イベントより先に更新するかどうかに依存する（タッチ端末の sticky hover では、タップした要素が次のタップまで `:hover` を保持する）。**読み違えたときの被害が非対称**なのが理由で、
+
+| 誤判定 | 結果 |
+|---|---|
+| 触れているのに `pause` しない | タイマーが進むだけ。次のイベントで自然に直る |
+| 離れたのに `resume` しない | **そのトーストが永久に消えない。** ストアに寿命の上限は無く、`×` を押す以外に戻す手段が無い |
+
+`mouseenter` / `mouseleave` はそれ自体が「入った」「出た」を確定させているので、そちらを信じる（`hovered` を `true` / `false` で渡す）。`focus` / `blur` ではホバーの状態が分からないので `:hover` を読むが、そこで読み違えても後から来る `mouseleave` が `hovered=false` で確定させるため戻れる。
 
 ### 9. 押し出すのは「最も早く消えるもの」（2026-09-14 改訂）
 
@@ -140,7 +149,11 @@ React Context ＋ `useReducer` にしなかった理由は 2 つ。
 
 残り時間が最も短いものを捨てる。寿命が同じもの同士では最も古いものになるので、これまでの「最古を押し出す」を包含する。
 
-**ただし、いま追加したものは候補から外す。** 寿命の短い新着（`success` 4 秒）が寿命の長い既存（`error` 8 秒）に負けて即座に消えると、直前の操作への反応が出ないままになり、この機能の目的そのものを損なう。
+候補から外すものが 2 つある。
+
+**(a) いま追加したもの。** 寿命の短い新着（`success` 4 秒）が寿命の長い既存（`error` 8 秒）に負けて即座に消えると、直前の操作への反応が出ないままになり、この機能の目的そのものを損なう。
+
+**(b) 一時停止中のもの（上記 8）。** 止めているのは触れている間だけで、そこで捨てると「手の下で消える」ことになり、**押し出しが `pause` を打ち消す**。しかも止めた瞬間の残り時間が小さいトーストほど真っ先に捨てられるので、実際に起きる。`remainingMs()` は停止中に `Number.POSITIVE_INFINITY` を返す（タイマーを持たないものと同じ扱い）。候補がすべて停止中でも、比較が `<` なので victim は最古に落ち着き、退化しない。
 
 ## 実装の構え
 
@@ -236,10 +249,10 @@ export function ToastViewport() {
         {toasts.map((t) => (
           <li
             key={t.id}
-            onMouseEnter={(e) => handleEngagement(e, t.id)}
-            onMouseLeave={(e) => handleEngagement(e, t.id)}
-            onFocus={(e) => handleEngagement(e, t.id)}
-            onBlur={(e) => handleEngagement(e, t.id)}
+            onMouseEnter={(e) => handleEngagement(e, t.id, true)}
+            onMouseLeave={(e) => handleEngagement(e, t.id, false)}
+            onFocus={(e) => handleEngagement(e, t.id, e.currentTarget.matches(":hover"))}
+            onBlur={(e) => handleEngagement(e, t.id, e.currentTarget.matches(":hover"))}
             className="pointer-events-auto ..."
           >...</li>
         ))}
@@ -248,10 +261,13 @@ export function ToastViewport() {
   );
 }
 
-// 上記 8。イベントの種類で分岐せず、毎回「いま触れているか」を見て決める。
-function handleEngagement(event: SyntheticEvent<HTMLLIElement>, id: number): void {
-  const element = event.currentTarget;
-  const engaged = element.matches(":hover") || element.contains(document.activeElement);
+// 上記 8。ホバーの状態はイベントから受け取り、:hover を読まない。
+function handleEngagement(
+  event: SyntheticEvent<HTMLLIElement>,
+  id: number,
+  hovered: boolean,
+): void {
+  const engaged = hovered || event.currentTarget.contains(document.activeElement);
 
   if (engaged) toast.pause(id);
   else toast.resume(id);
@@ -317,6 +333,8 @@ beforeEach(() => {
 11. **上限を超えたとき、最も早く消えるものを捨てる**（`error` が `success` 3 件に押し出されない）
 12. **いま追加したトーストは押し出しの候補にしない**
 
+13. **一時停止中のトーストは押し出しの候補にしない**
+
 11 と 12 は対になっている。11 だけを実装すると、寿命の短い新着（`success` 4 秒）が寿命の長い既存（`error` 8 秒）に負けて即座に消える。12 はその退化を止めるためのテストで、2 番（寿命が同じもの同士は最古が消える）とも両立する。
 
 **2 番は投入順と五十音順をわざと逆相関させる。** `"あ" → "い" → "う" → "え"` のように一致する文言を使うと、実装がうっかりソートしていてもテストが通る。`"ぬま" → "たき" → "そら" → "かぜ"` のように逆相関させて 4 件投入し、**残った 3 件が `["たき", "そら", "かぜ"]` と完全一致すること**を検証する（6-1 で「green なのに何も守っていない」並び順テストを 4 件作った前例がある）。
@@ -345,6 +363,7 @@ const SHOW_HEALTH_PANEL =
 - 1 件出て、4 秒（error は 8 秒）で消える
 - 連打して 4 件目で最古が押し出される
 - **トーストにマウスを乗せている間は消えない。外すと続きから消える**（上記 8）
+- **スマートフォンでトーストをタップしたあと、別の場所をタップすると消える**（タッチ端末の sticky hover で `:hover` が残り、止まったままにならないこと）
 - **閉じるボタンに Tab でフォーカスしたまま放置しても消えない**（同上）
 - 閉じるボタンで消える
 - トーストが出ている間も背後のリンク・ボタンが押せる（`pointer-events` の確認）

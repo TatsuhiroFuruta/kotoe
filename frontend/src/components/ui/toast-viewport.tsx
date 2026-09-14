@@ -44,15 +44,29 @@ function ToastIcon({ type }: { type: ToastType }) {
 /**
  * 触れている間は自動消去を止め、離れたら再開する。
  *
- * 4 つのイベント（mouseenter / mouseleave / focus / blur）で同じ判定をするのは、
+ * 4 つのイベント（mouseenter / mouseleave / focus / blur）が同じ関数を通るのは、
  * マウスとキーボードが同時に関わるときに片方の解除でもう片方を無視しないため。
  * 例：閉じるボタンにフォーカスしたままマウスを外すと mouseleave が来るが、
- * キーボードの人はまだそこに居る。イベントの種類ではなく「いまこの要素に
- * 触れているか」を毎回見て決めれば、その取りこぼしが起きない。
+ * キーボードの人はまだそこに居る。だから毎回 2 つの条件を見て決める。
+ *
+ * ホバーの状態を `matches(":hover")` で読まずに引数で受けるのが要点。
+ * mouseleave の中で `:hover` を読むと、ブラウザがホバー状態を境界イベントより
+ * 先に更新するかどうかに依存する（タッチ端末の sticky hover では、タップした
+ * 要素が次のタップまで `:hover` を保持する）。**ここを読み違えたときの被害が
+ * 非対称**で、pause し損ねるのは次のイベントで自然に直るが、resume し損ねると
+ * そのトーストが永久に消えない（ストアに寿命の上限は無く、× を押す以外に
+ * 戻す手段が無い）。mouseenter / mouseleave はそれ自体が「入った」「出た」を
+ * 確定させているので、そちらを信じる。
+ *
+ * focus / blur ではホバーの状態が分からないので `:hover` を読む。そちらで
+ * 読み違えても、後から来る mouseleave が hovered=false で確定させるため戻れる。
  */
-function handleEngagement(event: SyntheticEvent<HTMLLIElement>, id: number): void {
-  const element = event.currentTarget;
-  const engaged = element.matches(":hover") || element.contains(document.activeElement);
+function handleEngagement(
+  event: SyntheticEvent<HTMLLIElement>,
+  id: number,
+  hovered: boolean,
+): void {
+  const engaged = hovered || event.currentTarget.contains(document.activeElement);
 
   if (engaged) toast.pause(id);
   else toast.resume(id);
@@ -103,10 +117,10 @@ export function ToastViewport() {
         {toasts.map((item) => (
           <li
             key={item.id}
-            onMouseEnter={(event) => handleEngagement(event, item.id)}
-            onMouseLeave={(event) => handleEngagement(event, item.id)}
-            onFocus={(event) => handleEngagement(event, item.id)}
-            onBlur={(event) => handleEngagement(event, item.id)}
+            onMouseEnter={(event) => handleEngagement(event, item.id, true)}
+            onMouseLeave={(event) => handleEngagement(event, item.id, false)}
+            onFocus={(event) => handleEngagement(event, item.id, event.currentTarget.matches(":hover"))}
+            onBlur={(event) => handleEngagement(event, item.id, event.currentTarget.matches(":hover"))}
             className="animate-toast-in pointer-events-auto flex items-start gap-2.5 rounded-card border border-line bg-surface p-3 shadow-md"
           >
             <ToastIcon type={item.type} />
