@@ -88,14 +88,23 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   1. **IP をどう渡すか。** `next.config.ts` に直書きすると public リポジトリに個人の LAN IP が載り、
      Wi-Fi を変えるたびに書き換えになる。環境変数（例：`DEV_LAN_ORIGIN`）から読み、未設定なら
      何も足さない形が素直。`allowedDevOrigins` は**開発時にしか効かない**ので本番への影響は無い。
+     → 実装では **`DEV_ALLOWED_HOSTS`** という名前にした。`allowedDevOrigins` の突き合わせは
+     オリジンではなく**ホスト名**で行われるため（下のタスク参照）。
   2. **`NEXT_PUBLIC_API_BASE_URL` をどうするか。** 現在は `localhost:3000` 固定で、スマホから見た
      `localhost` はスマホ自身になるため **API を叩く画面は実機で確認できない**。7-2.5 のトーストは
      API を使わないので確認できたが、7-3 以降は一覧・詳細とも API に依存する。LAN IP を向ける
      切り替えが要るなら、**Rails 側の CORS 許可オリジン（2-2）にも同じ IP を足す**必要がある。
 - タスク：
-  - [ ] `allowedDevOrigins` を環境変数から組み立てる（未設定時は現状どおり）
-  - [ ] `NEXT_PUBLIC_API_BASE_URL` と Rails の CORS 許可オリジンを LAN IP に向けられるようにするか決める
-  - [ ] 手順を `frontend/AGENTS.md` に書く（症状が実装バグに見えるため、切り分け手順とセットで）
+  - [x] `allowedDevOrigins` を環境変数から組み立てる（未設定時は現状どおり）
+    - `DEV_ALLOWED_HOSTS`（カンマ区切り）。比較対象は**ホスト名**なので、オリジン形式や
+      `host:port` で書かれても `src/lib/dev/allowed-dev-hosts.ts` がホスト名へ正規化する。
+  - [x] `NEXT_PUBLIC_API_BASE_URL` と Rails の CORS 許可オリジンを LAN IP に向けられるようにするか決める
+    - 向けられるようにした。どちらも既に環境変数化されているためコード変更は不要で、
+      `.env.development` の値を差し替えるだけ。IP の代わりに `<Mac>.local` を使えば
+      DHCP で変わらないため書き換えが要らない（その場合だけ `RAILS_DEVELOPMENT_HOSTS` が必要）。
+  - [x] 手順を `frontend/AGENTS.md` に書く（症状が実装バグに見えるため、切り分け手順とセットで）
+- 実機確認（2026-09-21、Android の Chrome）：`.local` と IP の両方で、表示・ログイン・
+  トースト・リロードまで動作。`.local` は Android の Chrome でも解決できた。
 - 完了条件：同じ Wi-Fi のスマホから開発サーバーを開き、ボタン操作とトーストが動く。
   設定しなければ従来どおり動く（他の開発者・CI に影響しない）。
 
@@ -141,6 +150,25 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   - 許可オリジンの env 化（`CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_ORIGIN_REGEX`）と production 未設定時の fail-fast は実装済み（0-3・2-2）。**本番 Vercel オリジンの実値投入は 8-2a に委譲**（Vercel URL 確定後に Render の env へ設定するため、ここではチェックしない）。
   - [x] request spec（許可オリジンからの認証API呼び出しで JWT を受け取れる）
 - 完了条件：Next.js（別オリジン）から認証APIを叩けて JWT を受け取れる。
+
+### 🔵 2-3. CORS の許可オリジンを大文字小文字を区別せずに判定する
+- 目的：**設定値の綴り違いで、ログインだけが静かに失敗する状態をなくす。**
+- 依存：2-2
+- 背景（0-6 の実機確認で実際に踏んだ）：`lib/cors/allowed_origins.rb` の判定は
+  `@origins.include?(origin)` の完全一致で、大小を区別する。一方ブラウザは `Origin` の
+  スキームとホストを**小文字にして**送る。そのため `CORS_ALLOWED_ORIGINS` に大文字を含む
+  ホスト名（`scutil --get LocalHostName` の出力など）を書くと、許可したつもりのオリジンが
+  1つも一致しない。RFC 3986 でもスキームとホストは大小を区別しない。
+- **症状が部分的で気づきにくい**：単純リクエスト（`GET /api/health`）は Rails に届くので
+  ログに残るが、ブラウザがレスポンスを捨てる。preflight を伴う `POST /api/auth/sign_in` は
+  許可が得られず本リクエストが送られないため、**ログにすら残らない**。
+- タスク：
+  - [ ] `normalize` でスキームとホストを downcase する（パスを持たない値なので単純な
+        `downcase` で足りるか、URI でパースして組み直すかを決める）
+  - [ ] 正規表現（`CORS_ALLOWED_ORIGIN_REGEX`）側も同様に扱うか決める（`Regexp::IGNORECASE`）
+  - [ ] model spec：大文字混じりの設定値・大文字混じりの Origin の両方で許可されること
+- 完了条件：`CORS_ALLOWED_ORIGINS=http://MY-MAC.local:3001` と設定しても、ブラウザが送る
+  `http://my-mac.local:3001` が許可される。
 
 ---
 
