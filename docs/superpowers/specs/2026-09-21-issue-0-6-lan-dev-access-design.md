@@ -90,13 +90,22 @@ issue 本文の案は `DEV_LAN_ORIGIN` だが、比較対象がホスト名で�
 警告している「無反応＝実装バグに見える」状態に戻ってしまう。**dev 専用の設定なので、
 落として気づかせるほうが安い。**
 
-### 4. `next.config.ts` からの import は相対パスで書く
+### 4. `next.config.ts` からの import は相対パス・拡張子なしで書く
 
-コンテナの Node は v24.19.0 で `process.features.typescript === true` のため、Next は
-`transpileConfig`（`build/next-config-ts/transpile-config.js`）の分岐で **Node ネイティブの
-TypeScript 解決**を使い、`next.config.ts` をそのまま `import()` する。この経路では
-`tsconfig.json` の `paths` が効かないので、`@/lib/...` ではなく
-`./src/lib/dev/allowed-dev-hosts` と書く。
+**（2026-09-21 修正。当初は「Node のネイティブ TS 解決で読まれるから相対パスが要る」と
+書いていたが、誤りだった。`/code-review` の指摘を受けて実測し直した。）**
+
+`transpileConfig`（`build/next-config-ts/transpile-config.js`）がネイティブ解決を試すのは
+`__NEXT_NODE_NATIVE_TS_LOADER_ENABLED === "true"` のときだけで、これを立てるのは
+`--experimental-next-config-strip-types` を付けた場合に限られる（`next/dist/bin/next:98,136,154`）。
+`npm run dev` は素の `next dev` なので、**既定では SWC ＋ require フックの経路**で読まれ、
+そこでは `tsconfig.json` の `paths` も渡る（`@/` でも解決できる）。
+
+それでも相対パスにするのは、フラグを付けた経路との差を小さくしておくため。ただし
+**拡張子は省く**。ネイティブ解決は拡張子の省略を許さないので `.ts` を付ければそちらは
+解決できるようになるが、今度は `tsc` が `TS5097`（`allowImportingTsExtensions` が必要）で
+落ちる。opt-in でしか通らない経路のために tsconfig 全体を緩める価値は無い。
+フラグを付けた場合は、警告を出して既定の経路へフォールバックする。
 
 ### 5. スマホから Mac を指すのは `<mac>.local` を第一、IP を代替とする（両対応）
 
@@ -156,6 +165,11 @@ export function parseAllowedDevHosts(raw: string | undefined): string[]
 - カンマで分割 → trim → 空要素を捨てる
 - 各要素：`://` を含まなければ `http://` を前置し、`new URL(...).hostname` を返す
 - `new URL()` が投げたら、元の値を含むメッセージにして再送出する
+- **書かれたホストとパース結果が食い違ったら落とす**（2026-09-21 追加）。URL パーサは
+  全部が数字のホストを IPv4 として正規化するため、`192.168.1` は拒否されず
+  `192.168.0.1` に、`0x7f.1` は `127.0.0.1` に**書き換えられる**。前方一致のつもりで
+  書いた値が黙って別のホストになり、この関数が消そうとしている「設定したのに
+  ブロックされ続ける」に戻ってしまう。前方一致が要るならワイルドカードで書く
 
 ### `next.config.ts`
 

@@ -247,10 +247,10 @@ EOF
 ```ts
 import type { NextConfig } from "next";
 
-// `@/` エイリアスではなく相対パスで import すること。コンテナの Node は
-// process.features.typescript が有効なため、Next は next.config.ts を
-// Node のネイティブ TypeScript 解決で読み込む。この経路では tsconfig.json の
-// paths が効かず、`@/lib/...` は解決できない。
+// `@/` エイリアスではなく相対パスで import している。既定の経路（SWC + require
+// フック）では tsconfig の paths が渡るので `@/` でも解決できるが、
+// `--experimental-next-config-strip-types` を付けたときの Node のネイティブ TS 解決
+// では効かない。拡張子を省いてあるのは、`.ts` を付けると tsc が TS5097 で落ちるため。
 import { parseAllowedDevHosts } from "./src/lib/dev/allowed-dev-hosts";
 
 // スマホ実機から開発サーバーを開くときだけ設定する（手順は AGENTS.md）。
@@ -345,8 +345,8 @@ git commit -F - <<'EOF'
 feat: allowedDevOrigins を DEV_ALLOWED_HOSTS から組み立てる
 
 未設定ならキーごと省くため、従来の挙動は変わらない。import を相対パスに
-するのは、Node のネイティブ TypeScript 解決で next.config.ts が読まれる経路では
-tsconfig の paths が効かないため。
+するのは、--experimental-next-config-strip-types を付けたときに使われる Node の
+ネイティブ TS 解決では tsconfig の paths が効かないため。既定の経路では効く。
 
 Refs #107
 

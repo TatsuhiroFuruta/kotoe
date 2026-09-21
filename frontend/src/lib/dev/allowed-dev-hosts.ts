@@ -29,8 +29,9 @@ function toHostname(value: string): string {
   // "my-mac.local:" がスキームとして解釈され、hostname が空文字になる。
   const withScheme = value.includes("://") ? value : `http://${value}`;
 
+  let hostname: string;
   try {
-    return new URL(withScheme).hostname;
+    hostname = new URL(withScheme).hostname;
   } catch {
     throw new Error(
       `DEV_ALLOWED_HOSTS の値を解釈できません: ${JSON.stringify(value)}。` +
@@ -38,4 +39,28 @@ function toHostname(value: string): string {
         "オリジン（http://192.168.1.10:3001）の形で書いてください。",
     );
   }
+
+  // URL パーサは全部が数字のホストを IPv4 として「正規化」する。書き間違いや
+  // 前方一致のつもりで書いた値は、拒否されずに別のホストへ書き換えられる
+  // （"192.168.1" → "192.168.0.1"、"0x7f.1" → "127.0.0.1"）。黙って通すと
+  // 「設定したのにブロックされ続ける」に戻るので、書き換わったら落とす。
+  const written = hostWithoutPort(withScheme);
+  if (hostname !== written.toLowerCase()) {
+    throw new Error(
+      `DEV_ALLOWED_HOSTS の値がホスト名として素直に解釈されません: ` +
+        `${JSON.stringify(value)} は ${JSON.stringify(hostname)} と解釈されます。` +
+        "ホスト名を省略せずに書いてください（前方一致が要るなら 192.168.*.* のように書けます）。",
+    );
+  }
+
+  return hostname;
+}
+
+// スキーム付き URL から、ポートとパスを除いたホスト部分をそのまま切り出す。
+// URL パーサを通す前の「書かれたとおりの姿」が要るので、自前で切る。
+function hostWithoutPort(url: string): string {
+  const afterScheme = url.slice(url.indexOf("://") + "://".length);
+  const host = afterScheme.split(/[/?#]/)[0];
+
+  return host.replace(/:\d*$/, "");
 }

@@ -96,12 +96,16 @@ Next.js は `/_next/*` へのクロスオリジンアクセスを既定でブロ
 1. Mac 側で**ホスト名か IP を調べる**（コンテナ内では取れない。docker のブリッジ IP しか返らない）
 
    ```bash
-   scutil --get LocalHostName   # → <名前>.local で到達できる。DHCP で変わらないのでこちらを推奨
-   ipconfig getifaddr en0       # → IP。スマホが .local を解決できないときはこちら
+   scutil --get LocalHostName | tr "A-Z" "a-z"   # → <名前>.local。DHCP で変わらないのでこちらを推奨
+   ipconfig getifaddr en0                        # → IP。スマホが .local を解決できないときはこちら
    ```
 
-   `.local`（mDNS）は iOS / Safari なら標準で解決する。Android は端末とブラウザによる。
-   解決できないときは「サーバーが見つかりません」と出るだけなので、IP に切り替えればよい。
+   **必ず小文字にすること。** `scutil` は `MY-MAC` のような大文字を返すが、ブラウザは
+   `Origin` を小文字で送り、Rails の CORS 判定は完全一致（大小を区別する）。大文字のまま
+   `CORS_ALLOWED_ORIGINS` に書くと、**ログインだけが失敗する**（下の 2026-09-21 の観測）。
+
+   `.local`（mDNS）は iOS / Safari のほか、Android の Chrome でも解決できた（2026-09-21）。
+   解決できない端末では「サーバーが見つかりません」と出るだけなので、IP に切り替えればよい。
 
 2. 調べたホストを **3〜4 か所**に書く（`.env.development` は gitignore 済み。実値をコミットしない）
 
@@ -130,6 +134,7 @@ Next.js は `/_next/*` へのクロスオリジンアクセスを既定でブロ
 | 画面は出るがタップしても無反応 | Next のクロスオリジンブロック | dev ログに `⚠ Blocked cross-origin request to Next.js dev resource /_next/... from "<host>"` が出る。その `<host>` と `DEV_ALLOWED_HOSTS` が一致しているか見る |
 | API だけ 403（Rails の例外ページが返る） | Rails のホスト認証 | `RAILS_DEVELOPMENT_HOSTS` を足す。`config.hosts` は `.localhost` / `.test` と任意の IP しか許していない |
 | API が CORS エラー | 許可オリジン不足 | `CORS_ALLOWED_ORIGINS` に `http://<host>:3001` を足す |
+| **ログインだけ失敗し、Rails のログに POST が残らない** | 許可オリジンの大文字小文字 | `CORS_ALLOWED_ORIGINS` を小文字で書き直す（下の観測） |
 | サーバーが見つかりません | mDNS を解決できない端末 | IP に切り替える |
 | 設定したのに変わらない | `restart` で env が反映されていない | `docker compose up -d` で作り直す |
 | dev サーバーが起動しない | `DEV_ALLOWED_HOSTS` の値を解釈できない | ログにその値が出る。ホスト名かオリジンの形で書き直す |
@@ -156,3 +161,42 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 `host:3001` もホスト名へ正規化するので、隣の `NEXT_PUBLIC_API_BASE_URL` からコピペしても効く。
 `192.168.*.*` のようなワイルドカードも書ける（同じ LAN 上の任意のホストが発信元として
 許可される点は理解した上で使うこと）。解釈できない値を書くと dev サーバーの起動時に落ちる。
+
+**IP を途中まで書いてはいけない。** URL パーサは数値のホストを IPv4 として正規化するため、
+`192.168.1` は拒否されず `192.168.0.1` に書き換えられてしまう。前方一致が要るなら
+ワイルドカードで書くこと。書き換えが起きる値は起動時に落とすようにしてある。
+
+### 2026-09-21 の観測：大文字のホスト名で、ログインだけが失敗する
+
+0-6 の実機確認で踏んだ。**`scutil --get LocalHostName` が返す大文字のホスト名をそのまま
+`CORS_ALLOWED_ORIGINS` に書いた**ために起きた。
+
+- ブラウザは `Origin` のホストを**小文字**にして送る
+- `backend/lib/cors/allowed_origins.rb` の判定は `@origins.include?(origin)` の**完全一致**で、
+  大小を区別する
+- 結果、許可オリジンに載っているつもりのオリジンが**1つも一致しない**
+
+厄介なのは**症状が部分的**なこと。ページは開き、画面も動くのに、ログインだけが失敗する。
+
+| リクエスト | 何が起きるか | Rails のログ |
+|---|---|---|
+| `GET /api/health`（単純リクエスト） | Rails には届く。CORS ヘッダが無いのでブラウザが**レスポンスを捨てる** | **残る** |
+| `POST /api/auth/sign_in`（preflight あり） | preflight が許可されず、本リクエストが**送られない** | **残らない** |
+
+**「Rails のログに GET は残るのに POST が残らない」は、CORS 拒否のサイン**として使える。
+接続できていないなら GET も残らない。
+
+切り分けは `Origin` を付けた `curl` で、**`access-control-allow-origin` が返るかどうか**を見る
+（ステータスはどちらも 200 なので、ステータスでは判断できない）。
+
+```bash
+curl -s -D - -o /dev/null -X OPTIONS \
+  -H "Origin: http://my-mac.local:3001" -H "Access-Control-Request-Method: POST" \
+  http://my-mac.local:3000/api/auth/sign_in | grep -i access-control-allow-origin
+```
+
+**自分が env に書いた綴りをそのまま `curl` に貼ると、この不一致は再現しない**（env と同じ
+大文字で送ってしまうため）。ブラウザが送る形＝小文字で試すこと。
+
+IP で開いたときだけ動いたのも同じ理由で、数字には大小の別が無い。Rails 側で
+`downcase` して比較すれば防げるが、それは 0-6 の範囲外（別 issue）。

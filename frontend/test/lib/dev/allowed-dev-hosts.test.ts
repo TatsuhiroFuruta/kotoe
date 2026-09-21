@@ -55,4 +55,12 @@ describe("parseAllowedDevHosts", () => {
   it("解釈できない値は例外にする（メッセージに元の値を含む）", () => {
     expect(() => parseAllowedDevHosts("not a host")).toThrow(/not a host/);
   });
+
+  // URL パーサは全部が数字のホストを IPv4 として「正規化」する。"192.168.1" は
+  // 拒否されず "192.168.0.1" に書き換えられるので、前方一致のつもりで書いた値が
+  // 黙って別のホストになる。これはこの関数が消そうとしている失敗そのもの。
+  it("書き換えられてしまう数値ホストは例外にする", () => {
+    expect(() => parseAllowedDevHosts("192.168.1")).toThrow(/192\.168\.1/);
+    expect(() => parseAllowedDevHosts("0x7f.1")).toThrow(/0x7f\.1/);
+  });
 });

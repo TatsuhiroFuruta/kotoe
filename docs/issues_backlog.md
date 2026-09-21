@@ -93,9 +93,16 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
      API を使わないので確認できたが、7-3 以降は一覧・詳細とも API に依存する。LAN IP を向ける
      切り替えが要るなら、**Rails 側の CORS 許可オリジン（2-2）にも同じ IP を足す**必要がある。
 - タスク：
-  - [ ] `allowedDevOrigins` を環境変数から組み立てる（未設定時は現状どおり）
-  - [ ] `NEXT_PUBLIC_API_BASE_URL` と Rails の CORS 許可オリジンを LAN IP に向けられるようにするか決める
-  - [ ] 手順を `frontend/AGENTS.md` に書く（症状が実装バグに見えるため、切り分け手順とセットで）
+  - [x] `allowedDevOrigins` を環境変数から組み立てる（未設定時は現状どおり）
+    - `DEV_ALLOWED_HOSTS`（カンマ区切り）。比較対象は**ホスト名**なので、オリジン形式や
+      `host:port` で書かれても `src/lib/dev/allowed-dev-hosts.ts` がホスト名へ正規化する。
+  - [x] `NEXT_PUBLIC_API_BASE_URL` と Rails の CORS 許可オリジンを LAN IP に向けられるようにするか決める
+    - 向けられるようにした。どちらも既に環境変数化されているためコード変更は不要で、
+      `.env.development` の値を差し替えるだけ。IP の代わりに `<Mac>.local` を使えば
+      DHCP で変わらないため書き換えが要らない（その場合だけ `RAILS_DEVELOPMENT_HOSTS` が必要）。
+  - [x] 手順を `frontend/AGENTS.md` に書く（症状が実装バグに見えるため、切り分け手順とセットで）
+- 実機確認（2026-09-21、Android の Chrome）：`.local` と IP の両方で、表示・ログイン・
+  トースト・リロードまで動作。`.local` は Android の Chrome でも解決できた。
 - 完了条件：同じ Wi-Fi のスマホから開発サーバーを開き、ボタン操作とトーストが動く。
   設定しなければ従来どおり動く（他の開発者・CI に影響しない）。
 
