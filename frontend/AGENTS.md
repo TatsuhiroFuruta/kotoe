@@ -73,3 +73,86 @@ git worktree remove /path/to/scratch
 `experimental.turbopackFileSystemCacheForDev: false` も試したが、**防げる証拠は得られず**
 （当時観測できた stale はこのフラグを入れた状態で起きていた）、初回リクエストが 0.42 秒から 2.0 秒に
 延びるだけだったので採用していない。**機構が分からないまま設定で塞ごうとせず、上の対処で直すこと。**
+
+## スマホ実機から開発サーバーを開く（issue 0-6）
+
+モバイル幅を実機で確認するときの手順。**普段の開発では何も設定しない**（設定しなければ
+従来どおり動く）。
+
+### 何もしないとどうなるか
+
+Next.js は `/_next/*` へのクロスオリジンアクセスを既定でブロックする。HTML は SSR される
+ので画面は出るが、クライアント JS が動かずハイドレーションが完了しない。
+
+| 見え方 | 実際 |
+|---|---|
+| ボタンをタップしても無反応 | `onClick` が繋がっていない |
+| 「確認中…」のまま（エラー表示にもならない） | `useEffect` が走っていない |
+
+**どちらも実装が壊れているようにしか見えない。** 切り分けは下の「症状から原因へ」を見る。
+
+### 手順
+
+1. Mac 側で**ホスト名か IP を調べる**（コンテナ内では取れない。docker のブリッジ IP しか返らない）
+
+   ```bash
+   scutil --get LocalHostName   # → <名前>.local で到達できる。DHCP で変わらないのでこちらを推奨
+   ipconfig getifaddr en0       # → IP。スマホが .local を解決できないときはこちら
+   ```
+
+   `.local`（mDNS）は iOS / Safari なら標準で解決する。Android は端末とブラウザによる。
+   解決できないときは「サーバーが見つかりません」と出るだけなので、IP に切り替えればよい。
+
+2. 調べたホストを **3〜4 か所**に書く（`.env.development` は gitignore 済み。実値をコミットしない）
+
+   | ファイル | 変数 | 値の例 |
+   |---|---|---|
+   | `frontend/.env.development` | `DEV_ALLOWED_HOSTS` | `my-mac.local` |
+   | `frontend/.env.development` | `NEXT_PUBLIC_API_BASE_URL` | `http://my-mac.local:3000` |
+   | `.env.development` | `CORS_ALLOWED_ORIGINS` | `http://localhost:3001,http://my-mac.local:3001` |
+   | `.env.development` | `RAILS_DEVELOPMENT_HOSTS` | `my-mac.local`（**`.local` のときだけ**。IP なら不要） |
+
+3. 作り直す。**`restart` では `env_file` の変更が反映されない**
+
+   ```bash
+   docker compose up -d frontend backend
+   ```
+
+4. スマホで `http://my-mac.local:3001/` を開く
+
+確認が終わったら `NEXT_PUBLIC_API_BASE_URL` を `http://localhost:3000` に戻す
+（`DEV_ALLOWED_HOSTS` と `CORS_ALLOWED_ORIGINS` は残しても普段の開発に影響しない）。
+
+### 症状から原因へ
+
+| 症状 | 原因 | 直し方 |
+|---|---|---|
+| 画面は出るがタップしても無反応 | Next のクロスオリジンブロック | dev ログに `⚠ Blocked cross-origin request to Next.js dev resource /_next/... from "<host>"` が出る。その `<host>` と `DEV_ALLOWED_HOSTS` が一致しているか見る |
+| API だけ 403（Rails の例外ページが返る） | Rails のホスト認証 | `RAILS_DEVELOPMENT_HOSTS` を足す。`config.hosts` は `.localhost` / `.test` と任意の IP しか許していない |
+| API が CORS エラー | 許可オリジン不足 | `CORS_ALLOWED_ORIGINS` に `http://<host>:3001` を足す |
+| サーバーが見つかりません | mDNS を解決できない端末 | IP に切り替える |
+| 設定したのに変わらない | `restart` で env が反映されていない | `docker compose up -d` で作り直す |
+| dev サーバーが起動しない | `DEV_ALLOWED_HOSTS` の値を解釈できない | ログにその値が出る。ホスト名かオリジンの形で書き直す |
+
+### スマホを出さずに確認する
+
+ブロックの判定は `Origin` / `Referer` ヘッダだけを見るので、**`curl` で再現できる**。
+`/_next/` 配下の存在しないパスを叩き、**403 ならブロック中・404 なら許可済み**と読む
+（ブロックはルーティングより前に効くため）。
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "Origin: http://my-mac.local:3001" -H "Referer: http://my-mac.local:3001/" \
+  http://localhost:3001/_next/static/chunks/does-not-exist.js
+```
+
+**ヘッダを付けない `curl` では再現しない**（既定で `Origin` も `Referer` も送らないため 200 が返る）。
+7-2.5 の実機確認では、これで「問題なし」と誤判定した。
+
+### 値の書式
+
+`DEV_ALLOWED_HOSTS` は **ホスト名**で比較される（Next が `Origin` を URL パースして
+`hostname` だけを見る）。`src/lib/dev/allowed-dev-hosts.ts` が `http://host:3001` や
+`host:3001` もホスト名へ正規化するので、隣の `NEXT_PUBLIC_API_BASE_URL` からコピペしても効く。
+`192.168.*.*` のようなワイルドカードも書ける（同じ LAN 上の任意のホストが発信元として
+許可される点は理解した上で使うこと）。解釈できない値を書くと dev サーバーの起動時に落ちる。
