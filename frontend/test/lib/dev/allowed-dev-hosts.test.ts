@@ -62,5 +62,18 @@ describe("parseAllowedDevHosts", () => {
   it("書き換えられてしまう数値ホストは例外にする", () => {
     expect(() => parseAllowedDevHosts("192.168.1")).toThrow(/192\.168\.1/);
     expect(() => parseAllowedDevHosts("0x7f.1")).toThrow(/0x7f\.1/);
+    expect(() => parseAllowedDevHosts("0177.0.0.1")).toThrow(/0177\.0\.0\.1/);
+    expect(() => parseAllowedDevHosts("2130706433")).toThrow(/2130706433/);
+    expect(() => parseAllowedDevHosts("192.168.1.010")).toThrow(/192\.168\.1\.010/);
+  });
+
+  // Next 側の matchWildcardDomain は 1 セグメントだけの "*" / "**" を明示的に拒否する
+  // （ドメイン全体にマッチさせないため）。パーサは通してしまうので、ここで落とす。
+  // 通してしまうと「設定したのに一致しない」がこの 1 ケースだけ残る。
+  it("単独のワイルドカードは、Next 側で決して一致しないので例外にする", () => {
+    expect(() => parseAllowedDevHosts("*")).toThrow(/\*/);
+    expect(() => parseAllowedDevHosts("**")).toThrow(/\*/);
+    // セグメントが 2 つ以上あるものは通す（Next 側も解釈する）。
+    expect(parseAllowedDevHosts("*.local")).toEqual(["*.local"]);
   });
 });

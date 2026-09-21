@@ -53,6 +53,16 @@ function toHostname(value: string): string {
     );
   }
 
+  // Next 側の matchWildcardDomain（csrf-protection.js）は、1 セグメントだけの
+  // "*" / "**" を明示的に拒否する（ドメイン全体にマッチさせないため）。
+  // ここで通すと、何にも一致しない値が黙って許可リストに入る。
+  if (hostname === "*" || hostname === "**") {
+    throw new Error(
+      `DEV_ALLOWED_HOSTS の ${JSON.stringify(value)} は Next 側で決して一致しません。` +
+        "ワイルドカードは 192.168.*.* のように、セグメントを 2 つ以上にしてください。",
+    );
+  }
+
   return hostname;
 }
 

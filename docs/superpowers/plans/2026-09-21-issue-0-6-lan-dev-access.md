@@ -70,7 +70,7 @@
 症状は「設定する前」と区別が付かない（＝ボタンが無反応、`useEffect` が走らない）。
 この無言の失敗を消すのがこのタスクの目的。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `frontend/test/lib/dev/allowed-dev-hosts.test.ts`：
 
@@ -135,7 +135,7 @@ describe("parseAllowedDevHosts", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確かめる**
+- [x] **Step 2: テストを実行して失敗することを確かめる**
 
 ```bash
 docker compose exec frontend npx vitest run test/lib/dev/allowed-dev-hosts.test.ts
@@ -143,7 +143,7 @@ docker compose exec frontend npx vitest run test/lib/dev/allowed-dev-hosts.test.
 
 Expected: FAIL。`Failed to resolve import "@/lib/dev/allowed-dev-hosts"` が出る。
 
-- [ ] **Step 3: 実装する**
+- [x] **Step 3: 実装する**
 
 `frontend/src/lib/dev/allowed-dev-hosts.ts`：
 
@@ -191,7 +191,7 @@ function toHostname(value: string): string {
 }
 ```
 
-- [ ] **Step 4: テストを実行して通ることを確かめる**
+- [x] **Step 4: テストを実行して通ることを確かめる**
 
 ```bash
 docker compose exec frontend npx vitest run test/lib/dev/allowed-dev-hosts.test.ts
@@ -199,7 +199,15 @@ docker compose exec frontend npx vitest run test/lib/dev/allowed-dev-hosts.test.
 
 Expected: PASS（8 件）。
 
-- [ ] **Step 5: lint と既存テストを通す**
+> **実装後の追記（2026-09-21）**：上のコード片は Step 1〜4 時点のもので、**最終形ではない**。
+> `/code-review` の指摘を受けて 2 つのガードを足し、テストは 10 件になった。
+> ①「書かれたホストとパース結果が食い違う値」を落とす（`192.168.1` が黙って
+> `192.168.0.1` に書き換えられるため）②「`*` / `**` 単独」を落とす（Next 側が
+> 1 セグメントのワイルドカードを拒否するため、書いても何にも一致しない）。
+> 現物は `frontend/src/lib/dev/allowed-dev-hosts.ts` を、経緯は設計書の
+> 「2. `parseAllowedDevHosts(raw)` の仕様」を参照。
+
+- [x] **Step 5: lint と既存テストを通す**
 
 ```bash
 docker compose exec frontend npm run lint
@@ -208,7 +216,7 @@ docker compose exec frontend npm run test
 
 Expected: どちらもエラーなし。
 
-- [ ] **Step 6: コミット**
+- [x] **Step 6: コミット**
 
 ```bash
 git add frontend/src/lib/dev/allowed-dev-hosts.ts frontend/test/lib/dev/allowed-dev-hosts.test.ts
@@ -240,7 +248,7 @@ EOF
 **403 = ブロック中 / 404 = 許可済み**で判定できる（`/_next/` 配下の存在しないパスを叩く。
 ブロックはルーティングより前に効くため、許可されていれば通常の 404 になる）。
 
-- [ ] **Step 1: `next.config.ts` を書き換える**
+- [x] **Step 1: `next.config.ts` を書き換える**
 
 `frontend/next.config.ts`（全文）：
 
@@ -265,7 +273,7 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-- [ ] **Step 2: 未設定のままブロックが続くことを確認する（回帰）**
+- [x] **Step 2: 未設定のままブロックが続くことを確認する（回帰）**
 
 ```bash
 docker compose up -d frontend
@@ -282,7 +290,7 @@ curl -s -o /dev/null -w "cross-origin:%{http_code}\n" \
 Expected: `same-origin:404` / `cross-origin:403`。
 ブラウザで `http://localhost:3001/` を開き、従来どおり動くことも見る。
 
-- [ ] **Step 3: 一時的に `DEV_ALLOWED_HOSTS` を入れて、ブロックが解けることを確認する**
+- [x] **Step 3: 一時的に `DEV_ALLOWED_HOSTS` を入れて、ブロックが解けることを確認する**
 
 `frontend/.env.development` の末尾に 1 行足す（このファイルは gitignore 済み）。
 **Step 2 の curl と同じ値を使うこと**（ここでは例示用の `192.168.1.10`）。
@@ -298,7 +306,7 @@ curl -s -o /dev/null -w "cross-origin:%{http_code}\n" \
 
 Expected: `cross-origin:404`（ブロックが解けた）。403 のままなら値の形式か再起動を疑う。
 
-- [ ] **Step 4: 不正な値で起動が止まることを確認する**
+- [x] **Step 4: 不正な値で起動が止まることを確認する**
 
 Step 3 で足した行を一時的に `DEV_ALLOWED_HOSTS=not a host` に書き換えて作り直す。
 
@@ -316,7 +324,7 @@ Expected: dev サーバーが起動せず、ログに
 `npx next build --help` を叩くと実際にビルドが走り、dev サーバーと同居したコンテナが
 メモリ不足で落ちる（2026-09-21 に exit 137 で発生。`next.config.ts` が壊れたまま残った）。
 
-- [ ] **Step 5: 実験用の行を戻す**
+- [x] **Step 5: 実験用の行を戻す**
 
 ```bash
 # 末尾に足した DEV_ALLOWED_HOSTS の行をエディタで削除する（Step 4 の不正値も消える）
@@ -328,7 +336,7 @@ curl -s -o /dev/null -w "cross-origin:%{http_code}\n" \
 
 Expected: `cross-origin:403`（未設定時の挙動に戻った）。
 
-- [ ] **Step 6: lint と型検査を通す**
+- [x] **Step 6: lint と型検査を通す**
 
 ```bash
 docker compose exec frontend npm run lint
@@ -337,7 +345,7 @@ docker compose exec frontend npx tsc --noEmit
 
 Expected: どちらもエラーなし。
 
-- [ ] **Step 7: コミット**
+- [x] **Step 7: コミット**
 
 ```bash
 git add frontend/next.config.ts
@@ -371,7 +379,7 @@ EOF
 `backend/lib/cors/allowed_origins.rb` が読み、`RAILS_DEVELOPMENT_HOSTS` は Rails が
 development でのみ `config.hosts` に足す。どちらも `.env.development` に書くだけで効く。
 
-- [ ] **Step 1: `frontend/.env.example` に追記する**
+- [x] **Step 1: `frontend/.env.example` に追記する**
 
 末尾に足す：
 
@@ -390,7 +398,7 @@ development でのみ `config.hosts` に足す。どちらも `.env.development`
 # NEXT_PUBLIC_API_BASE_URL=http://my-mac.local:3000
 ```
 
-- [ ] **Step 2: ルートの `.env.example` に追記する**
+- [x] **Step 2: ルートの `.env.example` に追記する**
 
 `CORS_ALLOWED_ORIGINS=http://localhost:3001` の行のすぐ下に足す：
 
@@ -404,7 +412,7 @@ development でのみ `config.hosts` に足す。どちらも `.env.development`
 # RAILS_DEVELOPMENT_HOSTS=my-mac.local
 ```
 
-- [ ] **Step 3: `frontend/AGENTS.md` に手順の節を足す**
+- [x] **Step 3: `frontend/AGENTS.md` に手順の節を足す**
 
 末尾に足す：
 
@@ -492,7 +500,7 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 許可される点は理解した上で使うこと）。解釈できない値を書くと dev サーバーの起動時に落ちる。
 ````
 
-- [ ] **Step 4: 追記した内容が実態と合っているか確かめる**
+- [x] **Step 4: 追記した内容が実態と合っているか確かめる**
 
 ```bash
 grep -n "DEV_ALLOWED_HOSTS" frontend/.env.example
@@ -503,7 +511,7 @@ grep -rn "192\.168\.1\.[0-9]\+" frontend/.env.example .env.example frontend/AGEN
 Expected: 前の 2 つは追記が出る。3 つ目で出てよいのは例示用の `192.168.1.10` だけで、
 **自分の実 IP が出てはいけない**。
 
-- [ ] **Step 5: コミット**
+- [x] **Step 5: コミット**
 
 ```bash
 git add frontend/.env.example .env.example frontend/AGENTS.md
@@ -533,7 +541,7 @@ EOF
 **Step 1〜3 はユーザーのスマホが要る。** 実装者はここで手を止め、ユーザーに手順を渡して
 結果を聞くこと。勝手に「動いたはず」と書かない。
 
-- [ ] **Step 1: ユーザーに実機確認を依頼する**
+- [x] **Step 1: ユーザーに実機確認を依頼する**
 
 `frontend/AGENTS.md` に書いた手順どおり、ユーザーに次を依頼する。
 値（ホスト名・IP）は**ユーザーの環境のものを使い、会話やコミットに残さない**。
@@ -542,24 +550,24 @@ EOF
 2. `docker compose up -d frontend backend`
 3. スマホで `http://<ホスト>:3001/` を開く
 
-- [ ] **Step 2: 確認項目を伝えて、結果を聞く**
+- [x] **Step 2: 確認項目を伝えて、結果を聞く**
 
-- [ ] トップページが表示され、**ボタンのタップに反応する**（＝ハイドレーションが完了している）
-- [ ] ログインできる（＝API に届き、CORS も通っている）
-- [ ] ログイン後の画面を**リロード**しても状態が保たれる
-- [ ] トーストが出る
-- [ ] その間、`docker compose logs frontend` に `Blocked cross-origin request` が出ていない
+- [x] トップページが表示され、**ボタンのタップに反応する**（＝ハイドレーションが完了している）
+- [x] ログインできる（＝API に届き、CORS も通っている）
+- [x] ログイン後の画面を**リロード**しても状態が保たれる
+- [x] トーストが出る
+- [x] その間、`docker compose logs frontend` に `Blocked cross-origin request` が出ていない
 
 `.local` で API だけ 403 になった場合は `RAILS_DEVELOPMENT_HOSTS` の設定漏れ。
 mDNS が解決できない端末だった場合は IP に切り替え、**その結果を AGENTS.md に 1 行足す**
 （どの端末で解決できたか／できなかったかは次回の判断材料になる）。
 
-- [ ] **Step 3: 設定を戻して、従来どおり動くことを確かめる**
+- [x] **Step 3: 設定を戻して、従来どおり動くことを確かめる**
 
 `NEXT_PUBLIC_API_BASE_URL` を `http://localhost:3000` に戻し、`docker compose up -d frontend backend`。
 Mac のブラウザで `http://localhost:3001/` を開き、ログインできることを確認する。
 
-- [ ] **Step 4: backlog のチェックを埋める**
+- [x] **Step 4: backlog のチェックを埋める**
 
 `docs/issues_backlog.md` の 0-6 のタスクを次のとおり更新する（`[ ]` → `[x]`、2 つ目は決定内容を追記）：
 
@@ -573,7 +581,7 @@ Mac のブラウザで `http://localhost:3001/` を開き、ログインでき�
   - [x] 手順を `frontend/AGENTS.md` に書く（症状が実装バグに見えるため、切り分け手順とセットで）
 ```
 
-- [ ] **Step 5: 全テストと lint を最終確認する**
+- [x] **Step 5: 全テストと lint を最終確認する**
 
 ```bash
 docker compose exec frontend npm run test
@@ -591,7 +599,7 @@ Expected: すべて成功。`npm run build` は `allowedDevOrigins` が本番ビ
 docker compose exec frontend rm -rf .next && docker compose restart frontend
 ```
 
-- [ ] **Step 6: コミット**
+- [x] **Step 6: コミット**
 
 ```bash
 git add docs/issues_backlog.md frontend/AGENTS.md
@@ -604,7 +612,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
 ```
 
-- [ ] **Step 7: push 前に `/code-review` を通す**
+- [x] **Step 7: push 前に `/code-review` を通す**
 
 ```bash
 git diff main...HEAD --stat
@@ -632,8 +640,8 @@ PR 本文には次を書く（**実 IP・実ホスト名は書かない**）。
 
 ## 完了条件（設計書より）
 
-- [ ] 同じ Wi-Fi のスマホから開発サーバーを開き、**ログイン・API を叩く画面・トーストが動く**
-- [ ] env を設定しなければ従来どおり動く（他の開発者・CI・本番に影響しない）
-- [ ] 書式を間違えた env は起動時に落ちる（無言で効かない状態にならない）
-- [ ] `npm run test` と `npm run lint` が通る
-- [ ] 実 IP・実ホスト名がコミットされる文書に含まれていない
+- [x] 同じ Wi-Fi のスマホから開発サーバーを開き、**ログイン・API を叩く画面・トーストが動く**
+- [x] env を設定しなければ従来どおり動く（他の開発者・CI・本番に影響しない）
+- [x] 書式を間違えた env は起動時に落ちる（無言で効かない状態にならない）
+- [x] `npm run test` と `npm run lint` が通る
+- [x] 実 IP・実ホスト名がコミットされる文書に含まれていない
