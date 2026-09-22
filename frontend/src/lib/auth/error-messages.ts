@@ -4,7 +4,7 @@
 // バックは invalid_credentials / {"errors":{"email":["taken"]}} のように
 // コードだけを返し、日本語をここ 1 箇所に集約する。
 
-import { ApiError } from "@/lib/api";
+import { ApiError, ApiTimeoutError } from "@/lib/api";
 
 export type AuthFormErrors = {
   /** フォーム全体に出すエラー。フィールドに紐づかないもの */
@@ -29,7 +29,13 @@ const FIELD_MESSAGES: Record<string, Record<string, string>> = {
   email: {
     blank: "メールアドレスを入力してください",
     invalid: "メールアドレスの形式が正しくありません",
-    taken: "このメールアドレスは既に登録されています",
+    // ログインへの導線を文言に含める。重複登録だけでなく、**自分の登録が
+    // 成功していたことに気づけない**経路があるため。sign_up の応答を
+    // 待っている途中で timeout が発火すると、Rails 側は登録を終えているのに
+    // JWT が捨てられる。その人が再送すると、身に覚えのない taken を受け取る。
+    // 「既に登録されています」だけでは次の行動が分からず、ログインすれば
+    // 入れることが画面のどこにも出ない。
+    taken: "このメールアドレスは既に登録されています。ログインをお試しください",
   },
   password: {
     blank: "パスワードを入力してください",
@@ -38,6 +44,8 @@ const FIELD_MESSAGES: Record<string, Record<string, string>> = {
   },
 };
 
+const TIMEOUT_MESSAGE =
+  "サーバーの応答がありません。起動中の可能性があるので、少し待ってから再度お試しください";
 const NETWORK_MESSAGE = "サーバーに接続できませんでした。通信環境を確認してください";
 const SERVER_MESSAGE = "サーバーでエラーが発生しました。時間をおいて再度お試しください";
 const UNEXPECTED_MESSAGE = "認証に失敗しました。時間をおいて再度お試しください";
@@ -96,6 +104,14 @@ function toFieldErrors(errors: Record<string, unknown>): {
 }
 
 export function toAuthFormErrors(error: unknown): AuthFormErrors {
+  // タイムアウトを通信断と分ける。abort の reject 値は DOMException で
+  // TypeError ではないため、この分岐が無いと末尾に落ちて
+  // 「認証に失敗しました」になる。パスワードは正しいのに、訂正しようの
+  // ない誤診を出すことになる。
+  if (error instanceof ApiTimeoutError) {
+    return { formError: TIMEOUT_MESSAGE, fieldErrors: {} };
+  }
+
   if (error instanceof ApiError) {
     const body = error.body;
 

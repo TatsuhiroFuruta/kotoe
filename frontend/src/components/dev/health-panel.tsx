@@ -2,13 +2,20 @@
 
 import { useEffect, useState } from "react";
 
-import { apiFetch } from "@/lib/api";
+import { buttonClasses } from "@/components/ui/button";
+import { ApiTimeoutError, apiFetch } from "@/lib/api";
 import { toast } from "@/lib/toast/toast-store";
 import type { HealthResponse } from "@/types/api";
 
 type HealthState =
   | { kind: "loading" }
   | { kind: "success"; health: HealthResponse }
+  /**
+   * 上限まで応答が無かった。プレビューでは Render のコールドスタートが主因。
+   * 秒数を文言に埋めずここで運ぶのは、api.ts の既定値を変えたときに
+   * この画面だけが嘘をつかないようにするため。
+   */
+  | { kind: "timeout"; timeoutMs: number }
   | { kind: "failure" };
 
 /**
@@ -28,7 +35,17 @@ export function HealthPanel() {
   useEffect(() => {
     apiFetch<HealthResponse>("/api/health")
       .then((health) => setState({ kind: "success", health }))
-      .catch(() => setState({ kind: "failure" }));
+      // タイムアウトを failure に混ぜない。Vercel のプレビューで Render が
+      // スリープしていると必ずここに来るが、下の failure の文言は CORS と
+      // NEXT_PUBLIC_API_BASE_URL を疑わせる。設定は正しいのに設定を疑わせる
+      // ことになり、このパネルが防ぐはずの誤診をこのパネル自身が起こす。
+      .catch((error: unknown) =>
+        setState(
+          error instanceof ApiTimeoutError
+            ? { kind: "timeout", timeoutMs: error.timeoutMs }
+            : { kind: "failure" },
+        ),
+      );
   }, []);
 
   return (
@@ -44,6 +61,19 @@ export function HealthPanel() {
           <dt className="text-ink-muted">データベース</dt>
           <dd className="font-mono">{state.health.database}</dd>
         </dl>
+      )}
+
+      {/*
+        応答が無かっただけの場合は、設定を疑わせない。プレビューは本番の
+        Render を向いており、スリープ中は必ず 15 秒でここに来る。設定は正しい
+        ので、下の failure の文言を出すと切り分けを丸ごと空振りさせる。
+      */}
+      {state.kind === "timeout" && (
+        <p className="text-sm text-ink-muted">
+          Rails API が {state.timeoutMs / 1000} 秒以内に応答しませんでした。Render
+          の無料プランはスリープするため、コールドスタート中（約 1 分）はこの表示になります。
+          少し待ってからリロードしてください。
+        </p>
       )}
 
       {/*
@@ -72,14 +102,14 @@ export function HealthPanel() {
         <button
           type="button"
           onClick={() => toast.success("下書きを保存しました")}
-          className="rounded-card border border-line px-3 py-1.5 text-sm text-ink-muted hover:text-ink"
+          className={`${buttonClasses({ variant: "secondary", size: "sm" })} text-sm`}
         >
           成功トースト
         </button>
         <button
           type="button"
           onClick={() => toast.error("画像の生成に失敗しました")}
-          className="rounded-card border border-line px-3 py-1.5 text-sm text-ink-muted hover:text-ink"
+          className={`${buttonClasses({ variant: "secondary", size: "sm" })} text-sm`}
         >
           エラートースト
         </button>

@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
+import { buttonClasses } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
 
 /**
@@ -39,11 +40,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (auth.status === "unreachable") {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
-        <p className="text-ink-muted">サーバーに接続できませんでした。</p>
+        <p className="text-ink-muted">サーバーの応答がありません。</p>
         <button
           type="button"
           onClick={auth.retryRestore}
-          className="rounded-card bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-strong"
+          className={`${buttonClasses()} text-sm`}
         >
           再試行
         </button>

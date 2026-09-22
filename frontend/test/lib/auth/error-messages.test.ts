@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "@/lib/api";
+import { ApiError, ApiTimeoutError } from "@/lib/api";
 import { toAuthFormErrors } from "@/lib/auth/error-messages";
 
 afterEach(() => {
@@ -20,7 +20,7 @@ describe("toAuthFormErrors", () => {
 
     expect(result.formError).toBeNull();
     expect(result.fieldErrors).toEqual({
-      email: "このメールアドレスは既に登録されています",
+      email: "このメールアドレスは既に登録されています。ログインをお試しください",
     });
   });
 
@@ -40,6 +40,18 @@ describe("toAuthFormErrors", () => {
 
     expect(result.formError).toContain("base");
     expect(result.formError).toContain("invalid");
+    expect(result.fieldErrors).toEqual({});
+  });
+
+  it("タイムアウトを通信断とは別の文言に翻訳する", () => {
+    // Render のコールドスタート（約 60 秒）でここに来るのが最多になる。
+    // そのとき回線は正常なので「通信環境を確認してください」は誤診になる。
+    // ユーザーにできる正しい行動は「少し待って、もう一度」。
+    const result = toAuthFormErrors(new ApiTimeoutError(15_000));
+
+    expect(result.formError).toBe(
+      "サーバーの応答がありません。起動中の可能性があるので、少し待ってから再度お試しください",
+    );
     expect(result.fieldErrors).toEqual({});
   });
 
