@@ -259,9 +259,18 @@ font-size を持たせなければ衝突自体が起きない。ヘッダーは�
 | 時間内に応答があれば従来どおり（timeout が誤発火しない） | 全リクエストへの回帰 |
 
 `error-messages.ts` の `ApiTimeoutError` → 文言の対応も、既存の
-`test/lib/auth/error-messages.test.ts` に 1 件足す。**文言の全文は照合しない**
-（文言の推敲のたびにテストが落ちるだけで、守っているものが無い）。
-`formError` が `null` でないこと、通信断の文言と**異なる**ことを検査する。
+`test/lib/auth/error-messages.test.ts` に 1 件足す。**文言は全文で照合する**。
+このファイルの既存 6 件がすべてそうしており、1 件だけ方針の違うテストを混ぜると、
+読む側がどちらが正なのか判断できなくなるため。
+
+**timeout のテストに fake timers は使えない**（2026-09-22 実測）。`vi.useFakeTimers()` は
+`AbortSignal.timeout` を制御しない（jsdom の `setTimeout` ではなく Node 側のネイティブ
+実装が動いているため、`advanceTimersByTimeAsync(15_000)` を通しても中断されない）。
+したがって、
+
+- 実際に時間を経過させる検査は `timeoutMs` を小さな値（20ms）に上書きして**実時間**で行う
+- 既定値が 15 秒であることは `vi.spyOn(AbortSignal, "timeout")` の引数で検査する
+  （15 秒待つテストは書かない）
 
 **`buttonClasses()` にはテストを書かない。** 返り値のクラス文字列を照合するテストは
 実装をそのまま写経したものになり、6-1 で学んだ「green なのに何も守っていない」型に
