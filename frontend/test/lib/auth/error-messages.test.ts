@@ -20,7 +20,7 @@ describe("toAuthFormErrors", () => {
 
     expect(result.formError).toBeNull();
     expect(result.fieldErrors).toEqual({
-      email: "このメールアドレスは既に登録されています",
+      email: "このメールアドレスは既に登録されています。ログインをお試しください",
     });
   });
 
