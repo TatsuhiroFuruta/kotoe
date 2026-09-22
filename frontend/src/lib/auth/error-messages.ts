@@ -4,7 +4,7 @@
 // バックは invalid_credentials / {"errors":{"email":["taken"]}} のように
 // コードだけを返し、日本語をここ 1 箇所に集約する。
 
-import { ApiError } from "@/lib/api";
+import { ApiError, ApiTimeoutError } from "@/lib/api";
 
 export type AuthFormErrors = {
   /** フォーム全体に出すエラー。フィールドに紐づかないもの */
@@ -38,6 +38,8 @@ const FIELD_MESSAGES: Record<string, Record<string, string>> = {
   },
 };
 
+const TIMEOUT_MESSAGE =
+  "サーバーの応答がありません。起動中の可能性があるので、少し待ってから再度お試しください";
 const NETWORK_MESSAGE = "サーバーに接続できませんでした。通信環境を確認してください";
 const SERVER_MESSAGE = "サーバーでエラーが発生しました。時間をおいて再度お試しください";
 const UNEXPECTED_MESSAGE = "認証に失敗しました。時間をおいて再度お試しください";
@@ -96,6 +98,14 @@ function toFieldErrors(errors: Record<string, unknown>): {
 }
 
 export function toAuthFormErrors(error: unknown): AuthFormErrors {
+  // タイムアウトを通信断と分ける。abort の reject 値は DOMException で
+  // TypeError ではないため、この分岐が無いと末尾に落ちて
+  // 「認証に失敗しました」になる。パスワードは正しいのに、訂正しようの
+  // ない誤診を出すことになる。
+  if (error instanceof ApiTimeoutError) {
+    return { formError: TIMEOUT_MESSAGE, fieldErrors: {} };
+  }
+
   if (error instanceof ApiError) {
     const body = error.body;
 
