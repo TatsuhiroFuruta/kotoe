@@ -10,8 +10,12 @@ import type { HealthResponse } from "@/types/api";
 type HealthState =
   | { kind: "loading" }
   | { kind: "success"; health: HealthResponse }
-  /** 15 秒で応答が無かった。プレビューでは Render のコールドスタートが主因 */
-  | { kind: "timeout" }
+  /**
+   * 上限まで応答が無かった。プレビューでは Render のコールドスタートが主因。
+   * 秒数を文言に埋めずここで運ぶのは、api.ts の既定値を変えたときに
+   * この画面だけが嘘をつかないようにするため。
+   */
+  | { kind: "timeout"; timeoutMs: number }
   | { kind: "failure" };
 
 /**
@@ -36,7 +40,11 @@ export function HealthPanel() {
       // NEXT_PUBLIC_API_BASE_URL を疑わせる。設定は正しいのに設定を疑わせる
       // ことになり、このパネルが防ぐはずの誤診をこのパネル自身が起こす。
       .catch((error: unknown) =>
-        setState({ kind: error instanceof ApiTimeoutError ? "timeout" : "failure" }),
+        setState(
+          error instanceof ApiTimeoutError
+            ? { kind: "timeout", timeoutMs: error.timeoutMs }
+            : { kind: "failure" },
+        ),
       );
   }, []);
 
@@ -62,8 +70,9 @@ export function HealthPanel() {
       */}
       {state.kind === "timeout" && (
         <p className="text-sm text-ink-muted">
-          Rails API が 15 秒以内に応答しませんでした。Render の無料プランはスリープするため、
-          コールドスタート中（約 1 分）はこの表示になります。少し待ってからリロードしてください。
+          Rails API が {state.timeoutMs / 1000} 秒以内に応答しませんでした。Render
+          の無料プランはスリープするため、コールドスタート中（約 1 分）はこの表示になります。
+          少し待ってからリロードしてください。
         </p>
       )}
 

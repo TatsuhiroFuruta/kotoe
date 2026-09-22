@@ -8,8 +8,12 @@
  * なる。クラスを配るだけなら、その問題がそもそも発生しない。
  */
 
-type ButtonVariant = "primary" | "secondary";
-type ButtonSize = "sm" | "md" | "lg";
+// エクスポートするのは、呼び出し側が値を変数で持つことがあるため。
+// 7-3a のソートトグルのように `active ? "primary" : "secondary"` を
+// 変数に入れると string へ広がるので、型注釈を書けないと `as const` を
+// 呼び出し側に強いることになる。
+export type ButtonVariant = "primary" | "secondary";
+export type ButtonSize = "sm" | "md" | "lg";
 
 /**
  * disabled:opacity-60 は <Link> には効かないが無害なので共通に置く。

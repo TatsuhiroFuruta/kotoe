@@ -856,7 +856,7 @@ gh pr create --title "7-2.7. フロントエンドの前提整備（timeout・�
 - backend を pause した状態で 15 秒後にヘッダーが `unreachable` に変わる
 - その状態のログインフォームが「サーバーの応答がありません。起動中の…」を出す
 - backend を戻して「再試行」でログイン状態に復帰する
-- `npm test`（76 件）／ `npm run lint` ／ `npx tsc --noEmit` が green
+- `npm test`（77 件）／ `npm run lint` ／ `npx tsc --noEmit` が green
 
 ## 依存
 

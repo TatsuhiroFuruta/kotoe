@@ -97,6 +97,22 @@ const signal = requestInit.signal
 `requestInit.signal` は `RequestInit` の定義上 `AbortSignal | null | undefined` なので、
 真偽値で分岐してよい（`null` を `AbortSignal.any` に渡すと落ちる）。
 
+**ブラウザの下限が上がることを承知で入れる。** フォールバックは書かない。
+
+| API | 必要なバージョン | いつ実行されるか |
+|---|---|---|
+| `AbortSignal.timeout` | Safari 16 / Chrome 103（2022 年） | **全リクエスト** |
+| `AbortSignal.any` | Safari 17.4 / Chrome 116（2024 年） | 呼び出し側が `signal` を渡したときだけ |
+
+この issue の時点で `signal` を渡す呼び出し側は**1 つも無い**ので、実際に効く下限は
+`AbortSignal.timeout` の側（2022 年）である。`AbortSignal.any` が実行され始めるのは
+7-3b のポーリングからになる。Kotoe はスマートフォン中心の想定で、2026 年時点の
+iOS はいずれも Safari 17.4 以降なので、フォールバックを書く価値が無いと判断した。
+
+未対応のブラウザでは `apiRequest` が `TypeError` ではない例外で落ち、
+`error-messages.ts` の末尾に落ちて「認証に失敗しました」になる。**もし古い端末での
+不具合報告が来たら、まずここを疑うこと。**
+
 ### 決定 3：タイムアウトは専用のエラークラスにする
 
 ```ts
@@ -117,10 +133,30 @@ export class ApiTimeoutError extends Error {
 呼び出し側のキャンセルは失敗ではなく、文言を出す相手でもない。ポーリングの
 アンマウントのたびにトーストが出ては困る。
 
-判定は `error instanceof Error && error.name === "TimeoutError"` で行う。
-`error instanceof DOMException` と書くと、`DOMException` をグローバルに持たない
-実行環境で `ReferenceError` になる。`DOMException` は `Error` を継承している
+判定は次の形で行う。
+
+```ts
+if (timeoutSignal.aborted && error instanceof Error && error.name === "TimeoutError")
+```
+
+**`name` の一致だけを見てはいけない。** 呼び出し側が自前の `AbortSignal.timeout(n)` を
+`signal` に渡している場合、その中断も `name` は `"TimeoutError"` になる。名前だけで
+判定すると、**呼び出し側の意図的な打ち切りを利用者向けの失敗に化けさせ**、しかも
+`ApiTimeoutError.timeoutMs` には無関係な既定値（15000）が入る。7-3b のポーリングは
+まさに自前のタイムアウトを渡す側なので、ここを取り違えると「画面を閉じるたびに
+エラー文言が出る」に戻る。`timeoutSignal.aborted` を併せて見れば、どちらが発火したのかを
+取り違えない（呼び出し側が先に中断したとき、こちらの signal は `aborted === false` の
+ままであることを実測で確認済み）。
+
+`error instanceof DOMException` と書かないのは、`DOMException` をグローバルに持たない
+実行環境で `ReferenceError` になるため。`DOMException` は `Error` を継承している
 （実測で確認済み）ので、上の形なら環境に依存せず同じ結果になる。
+
+なお `error.name === "TimeoutError"` の項は、`timeoutSignal.aborted` があれば
+ほぼ冗長である（外してもテストは全件通る）。残すのは、応答が届いてから
+`throw new ApiError` に至るまでの数ミリ秒の間に timeout が発火した場合に、
+`ApiError` が `ApiTimeoutError` に化けるのを防ぐため。この窓を突くテストは
+構成が不自然になるので書かない。
 
 変換は `apiRequest` の**最も外側**に置く。`fetch` だけを包むと、`parseBody()` が
 レスポンス本文を読んでいる最中の中断を拾えない（`signal` はボディのストリーム読み取りも
@@ -156,8 +192,8 @@ export class ApiTimeoutError extends Error {
 `src/components/ui/button.ts`（JSX を含まないので `.tsx` にしない）。
 
 ```ts
-type ButtonVariant = "primary" | "secondary";
-type ButtonSize = "sm" | "md" | "lg";
+export type ButtonVariant = "primary" | "secondary";
+export type ButtonSize = "sm" | "md" | "lg";
 
 export function buttonClasses(options?: {
   variant?: ButtonVariant;
@@ -208,13 +244,53 @@ font-size を持たせなければ衝突自体が起きない。ヘッダーは�
 `transition-colors` は**足さない**。現在どこにも無く、入れると全ボタンの挙動が変わる。
 見た目の変更はこの issue の目的ではない。
 
+`ButtonVariant` / `ButtonSize` は**エクスポートする**。7-3a のソートトグルのように
+`active ? "primary" : "secondary"` を変数に入れると `string` へ広がるため、型注釈を
+書けないと呼び出し側が `as const` を書く羽目になる。
+
+### 決定 7：認証系 POST の timeout も 15 秒のままにし、回復経路を文言で示す
+
+`POST /api/auth/sign_up` が 15 秒で中断されたとき、**Rails 側は登録を完了しているのに
+JWT が捨てられる**ことがありうる。その人が再送すると 422 `taken` が返り、身に覚えのない
+「既に登録されています」を受け取る。timeout を入れる前には存在しなかった失敗である。
+
+**それでも 15 秒は変えない。** 認証系だけ 30 秒にすると、コールドスタート中にログインした
+人の送信ボタンが「送信中…」のまま 30 秒無反応になり、決定 1 が減らそうとしている状態
+そのものを作る。
+
+代わりに `email: taken` の文言へ回復経路を入れる。
+
+| | 文言 |
+|---|---|
+| 変更前 | このメールアドレスは既に登録されています |
+| 変更後 | このメールアドレスは既に登録されています。**ログインをお試しください** |
+
+本来の重複登録でも正しい案内になるので、経路を見分ける必要がない。
+
+**この判断への反論も記録しておく**（後続で再検討できるように）：コールドスタートが
+約 60 秒なら 15 秒では 1 回も成功しないので、「30 秒無反応」と「15 秒の失敗 ×4 回」を
+比べれば前者のほうが成功率は高い。この反論を採らなかったのは、決定 1 と同じ
+「押せるものを早く返す」思想を通したためで、技術的に否定したわけではない。
+`signUp` / `signIn` に `timeoutMs` を渡す選択肢は残してあるので、**7-5（アップロード）で
+値を決めるときに一緒に見直してよい**。
+
+### 決定 8：`HealthPanel` はタイムアウトを失敗と区別する
+
+`HealthPanel` の失敗時の文言は「CORS の許可オリジンと `NEXT_PUBLIC_API_BASE_URL` が
+主な原因です」と設定を疑わせる。ところが Vercel のプレビューは**本番の Render を向いて
+おり**、スリープ中は必ず 15 秒でここに来る。設定は正しいのに設定を疑わせることになり、
+**このパネルが防ぐために書かれた誤診を、パネル自身が起こす**。
+
+`timeout` を独立した状態にして文言を分ける。秒数は `ApiTimeoutError.timeoutMs` から
+受け取って表示する（文言に焼き込むと、既定値を変えたときにこの画面だけが嘘になる）。
+
 ## 実装の構え
 
 ### 変更する順序
 
 1. `buttonClasses()` を足し、11 箇所を置き換える（`api.ts` に触らないので独立して読める）
 2. `api.ts` に `ApiTimeoutError` と timeout を足す
-3. `error-messages.ts` に文言を足す
+3. `error-messages.ts` にタイムアウトの文言と分岐を足し、`taken` の文言に導線を足す
 4. `site-header.tsx` / `require-auth.tsx` の `unreachable` 文言を直す
 5. `test/lib/api.test.ts` に timeout の検証を足す
 
@@ -305,15 +381,15 @@ reject することは実測で確認した（スタブではなく本物の宙�
 
 | ファイル | 変更 |
 |---|---|
-| `frontend/src/components/ui/button.ts` | **新規**。`buttonClasses()` |
+| `frontend/src/components/ui/button.ts` | **新規**。`buttonClasses()` と 2 つの型 |
 | `frontend/src/lib/api.ts` | `ApiTimeoutError`、`timeoutMs`、`AbortSignal` の合成 |
-| `frontend/src/lib/auth/error-messages.ts` | タイムアウトの文言と分岐 |
+| `frontend/src/lib/auth/error-messages.ts` | タイムアウトの文言と分岐、`taken` の文言（決定 7） |
 | `frontend/src/components/layout/site-header.tsx` | ボタン 4 箇所、`unreachable` の文言 |
 | `frontend/src/lib/auth/require-auth.tsx` | ボタン 1 箇所、`unreachable` の文言 |
 | `frontend/src/app/page.tsx` | ボタン 2 箇所 |
 | `frontend/src/app/(auth)/login/page.tsx` | ボタン 1 箇所 |
 | `frontend/src/app/(auth)/signup/page.tsx` | ボタン 1 箇所 |
-| `frontend/src/components/dev/health-panel.tsx` | ボタン 2 箇所 |
+| `frontend/src/components/dev/health-panel.tsx` | ボタン 2 箇所、`timeout` 状態の分離（決定 8） |
 | `frontend/test/lib/api.test.ts` | timeout の検証 4 件 |
 | `frontend/test/lib/auth/error-messages.test.ts` | 文言の分岐 1 件 |
 

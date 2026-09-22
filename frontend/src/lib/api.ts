@@ -49,7 +49,17 @@ export type ApiRequestInit = RequestInit & {
    */
   skipAuth?: boolean;
 
-  /** 応答を待つ上限（ミリ秒）。既定は DEFAULT_TIMEOUT_MS。 */
+  /**
+   * 応答を待つ上限（ミリ秒）。既定は DEFAULT_TIMEOUT_MS。
+   *
+   * **この時間は本文の送信時間も含む。** AbortSignal は送信側のストリームも
+   * 中断するので、低速回線から大きな FormData を送ると、アップロードが順調に
+   * 進んでいても既定の 15 秒で打ち切られる。7-5 のお題投稿など画像を送る
+   * 呼び出しは、ここに明示的な値を渡すこと。
+   *
+   * 無効化用の番兵は無い（0 は即座に中断し、Infinity は [EnforceRange] の
+   * 変換で落ちる）。待ちたいなら具体的な値を渡す。
+   */
   timeoutMs?: number;
 };
 
