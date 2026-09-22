@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiFetch, apiRequest } from "@/lib/api";
+import { ApiError, ApiTimeoutError, apiFetch, apiRequest } from "@/lib/api";
 import { tokenStore } from "@/lib/auth/token-store";
 
 /**
@@ -205,5 +205,77 @@ describe("apiRequest", () => {
 
     expect(data.id).toBe(1);
     expect(response.headers.get("Authorization")).toBe("Bearer jwt-abc");
+  });
+});
+
+/**
+ * 応答を返さない fetch のスタブ。signal を尊重し、中断されたら本物の fetch と
+ * 同じく signal.reason で reject する。
+ *
+ * 既存の stubFetch は signal を無視して即座に解決するので、timeout の検査には
+ * 使えない（タイマーが発火する前に応答が返ってしまう）。
+ */
+function stubHangingFetch() {
+  const fetchMock = vi.fn<typeof fetch>(
+    (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("apiRequest の timeout", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // vi.useFakeTimers() は AbortSignal.timeout を制御できない（Node 側の
+  // ネイティブ実装が動くため）。15 秒待つテストは書けないので、既定値が
+  // 渡されていることだけを引数で検査する。
+  it("既定で 15 秒を AbortSignal.timeout に渡す", async () => {
+    const spy = vi.spyOn(AbortSignal, "timeout");
+    stubFetch(jsonResponse({ posts: [] }));
+
+    await apiFetch("/api/posts");
+
+    expect(spy).toHaveBeenCalledWith(15_000);
+  });
+
+  // 実際に時間を経過させる検査は、小さな timeoutMs に上書きして実時間で行う。
+  it("応答が返らなければ timeoutMs で ApiTimeoutError を投げる", async () => {
+    stubHangingFetch();
+
+    await expect(apiFetch("/api/posts", { timeoutMs: 20 })).rejects.toMatchObject({
+      name: "ApiTimeoutError",
+      timeoutMs: 20,
+    });
+  });
+
+  // 合成の片方向。呼び出し側の signal だけを fetch へ渡す実装にすると、
+  // signal を渡したリクエストだけが無限に待つようになる。
+  it("呼び出し側が signal を渡していても timeout は効く", async () => {
+    stubHangingFetch();
+    const controller = new AbortController();
+
+    await expect(
+      apiFetch("/api/posts", { timeoutMs: 20, signal: controller.signal }),
+    ).rejects.toBeInstanceOf(ApiTimeoutError);
+  });
+
+  // 合成のもう片方向。呼び出し側のキャンセルは失敗ではないので、
+  // ApiTimeoutError に変換してはいけない（7-3b のポーリングがアンマウントの
+  // たびにエラー文言を出すことになる）。
+  it("呼び出し側が中断したときは AbortError がそのまま流れる", async () => {
+    stubHangingFetch();
+    const controller = new AbortController();
+
+    const promise = apiFetch("/api/posts", { timeoutMs: 5_000, signal: controller.signal });
+    controller.abort();
+
+    await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+    await expect(promise).rejects.not.toBeInstanceOf(ApiTimeoutError);
   });
 });
