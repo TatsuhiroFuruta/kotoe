@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { HealthPanel } from "@/components/dev/health-panel";
+import { buttonClasses } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
 
 /**
@@ -50,13 +51,13 @@ export default function Home() {
           <div className="mt-8 flex items-center justify-center gap-3">
             <Link
               href="/signup"
-              className="rounded-card bg-accent px-5 py-2.5 font-medium text-white hover:bg-accent-strong"
+              className={buttonClasses({ size: "lg" })}
             >
               新規登録
             </Link>
             <Link
               href="/login"
-              className="rounded-card border border-line px-5 py-2.5 font-medium text-ink-muted hover:text-ink"
+              className={buttonClasses({ variant: "secondary", size: "lg" })}
             >
               ログイン
             </Link>

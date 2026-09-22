@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { buttonClasses } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { toast } from "@/lib/toast/toast-store";
 import type { HealthResponse } from "@/types/api";
@@ -72,14 +73,14 @@ export function HealthPanel() {
         <button
           type="button"
           onClick={() => toast.success("下書きを保存しました")}
-          className="rounded-card border border-line px-3 py-1.5 text-sm text-ink-muted hover:text-ink"
+          className={`${buttonClasses({ variant: "secondary", size: "sm" })} text-sm`}
         >
           成功トースト
         </button>
         <button
           type="button"
           onClick={() => toast.error("画像の生成に失敗しました")}
-          className="rounded-card border border-line px-3 py-1.5 text-sm text-ink-muted hover:text-ink"
+          className={`${buttonClasses({ variant: "secondary", size: "sm" })} text-sm`}
         >
           エラートースト
         </button>

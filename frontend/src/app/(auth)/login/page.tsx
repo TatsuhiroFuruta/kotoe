@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
+import { buttonClasses } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
 import { useAuth } from "@/lib/auth/auth-context";
 import { toAuthFormErrors, type AuthFormErrors } from "@/lib/auth/error-messages";
@@ -92,7 +93,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-2 rounded-card bg-accent px-4 py-2 font-medium text-white hover:bg-accent-strong disabled:opacity-60"
+          className={`mt-2 ${buttonClasses()}`}
         >
           {submitting ? "送信中…" : "ログイン"}
         </button>

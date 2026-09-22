@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { buttonClasses } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
 
 export function SiteHeader() {
@@ -51,7 +52,7 @@ export function SiteHeader() {
               </Link>
               <Link
                 href="/signup"
-                className="rounded-card bg-accent px-3 py-1.5 font-medium text-white hover:bg-accent-strong"
+                className={buttonClasses({ size: "sm" })}
               >
                 新規登録
               </Link>
@@ -65,7 +66,7 @@ export function SiteHeader() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="rounded-card border border-line px-3 py-1.5 text-ink-muted hover:text-ink"
+                className={buttonClasses({ variant: "secondary", size: "sm" })}
               >
                 ログアウト
               </button>
@@ -83,7 +84,7 @@ export function SiteHeader() {
               <button
                 type="button"
                 onClick={auth.retryRestore}
-                className="rounded-card border border-line px-3 py-1.5 text-ink-muted hover:text-ink"
+                className={buttonClasses({ variant: "secondary", size: "sm" })}
               >
                 再試行
               </button>
@@ -98,7 +99,7 @@ export function SiteHeader() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="rounded-card border border-line px-3 py-1.5 text-ink-muted hover:text-ink"
+                className={buttonClasses({ variant: "secondary", size: "sm" })}
               >
                 ログアウト
               </button>
