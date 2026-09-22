@@ -763,19 +763,31 @@ MSG
 - Consumes: Task 1・2・3 のすべて
 - Produces: PR
 
-- [ ] **Step 1: 起動して、止める**
+- [ ] **Step 1: 起動して、backend を「宙吊り」にする**
 
 ```bash
 docker compose up -d
-docker compose stop backend
+docker compose pause backend
 ```
+
+**`stop` ではなく `pause` を使うこと（2026-09-22 実測で判明）。** `stop` は
+listen ソケットごと消えるので接続が即座に拒否され、`fetch` は TypeError で
+**すぐに**失敗する。それは従来からある通信断の経路であって、**timeout の経路を
+1 ミリ秒も通らない**。`pause` は cgroup でプロセスを凍結するだけなので listen
+ソケットが残り、カーネルが TCP 接続を受けたまま応答が返らない ——
+Render のコールドスタートと同じ形になる。
+
+実測での裏取り：`pause` した backend に対して `AbortSignal.any([AbortSignal.timeout(15000), controller.signal])`
+付きの `fetch` を投げると、**15.0 秒後に `name: "TimeoutError"`** で reject した。
+スタブではなく本物の宙吊り接続でも、ユニットテストが前提にしている形と
+同じになる。
 
 - [ ] **Step 2: ログイン済みの状態で 15 秒の挙動を見る**
 
 前提：ブラウザの localStorage に有効なトークンが入っていること
 （`kotoe.auth.token`）。**トークンが無いと `/api/me` を投げないので、この確認は
-成立しない。** 入っていなければ、先に backend を起動してログインしてから
-`docker compose stop backend` し直す。
+成立しない。** 入っていなければ、先に `docker compose unpause backend` して
+ログインしてから `docker compose pause backend` し直す。
 
 `http://localhost:3001/` をリロードし、次を確認する：
 
@@ -787,7 +799,7 @@ docker compose stop backend
 
 - [ ] **Step 3: ログインフォームの文言を見る**
 
-backend を止めたまま `http://localhost:3001/login` を開き、適当な値で送信する。
+backend を pause したまま `http://localhost:3001/login` を開き、適当な値で送信する。
 
 Expected: 15 秒後に「**サーバーの応答がありません。起動中の可能性があるので、
 少し待ってから再度お試しください**」が出る。「認証に失敗しました」や
@@ -796,7 +808,7 @@ Expected: 15 秒後に「**サーバーの応答がありません。起動中�
 - [ ] **Step 4: 復帰を確認する**
 
 ```bash
-docker compose start backend
+docker compose unpause backend
 ```
 
 ヘッダーの「再試行」を押し、ユーザー名が表示される状態に戻ること。
@@ -841,7 +853,7 @@ gh pr create --title "7-2.7. フロントエンドの前提整備（timeout・�
 
 ## 確認したこと
 
-- backend を止めた状態で 15 秒後にヘッダーが `unreachable` に変わる
+- backend を pause した状態で 15 秒後にヘッダーが `unreachable` に変わる
 - その状態のログインフォームが「サーバーの応答がありません。起動中の…」を出す
 - backend を戻して「再試行」でログイン状態に復帰する
 - `npm test`（76 件）／ `npm run lint` ／ `npx tsc --noEmit` が green
