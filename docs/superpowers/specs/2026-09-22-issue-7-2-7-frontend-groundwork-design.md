@@ -1,6 +1,6 @@
 # issue 7-2.7 フロントエンドの前提整備（timeout・ボタンの共通化） 設計
 
-- 対象 issue：`docs/issues_backlog.md` 7-2.7（GitHub #24「7-3」を 3 つに割った 1 つ目）
+- 対象 issue：`docs/issues_backlog.md` 7-2.7（GitHub #113。#24「7-3」を割った 1 つ目）
 - 依存：7-1（`apiRequest`）、7-2（デザイントークンと共通レイアウト）
 - 作成日：2026-09-22
 - 前提：`frontend/AGENTS.md`（Next 16.2.10 の API は型定義とコンパイル済み実装を直接読む）
