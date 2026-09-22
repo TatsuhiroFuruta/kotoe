@@ -227,6 +227,14 @@ function stubHangingFetch() {
 }
 
 describe("apiRequest の timeout", () => {
+  // 上の describe と同じ前処理を置く。今は最後のテストがトークンを残さないので
+  // 無くても通るが、そこに依存すると、上にトークンを残すテストが 1 つ増えた
+  // だけでこちらのリクエストに Authorization が漏れる。
+  beforeEach(() => {
+    window.localStorage.clear();
+    tokenStore.clear();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -276,6 +284,22 @@ describe("apiRequest の timeout", () => {
     controller.abort();
 
     await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+    await expect(promise).rejects.not.toBeInstanceOf(ApiTimeoutError);
+  });
+
+  // 呼び出し側が自前の AbortSignal.timeout を渡すと、その中断も name は
+  // "TimeoutError" になる。name だけで判定すると、呼び出し側の意図的な
+  // 打ち切りを利用者向けの失敗に化けさせ、しかも timeoutMs には無関係な
+  // 値（ここでは 5000）が入る。
+  it("呼び出し側が渡した AbortSignal.timeout の中断は変換しない", async () => {
+    stubHangingFetch();
+
+    const promise = apiFetch("/api/posts", {
+      timeoutMs: 5_000,
+      signal: AbortSignal.timeout(20),
+    });
+
+    await expect(promise).rejects.toMatchObject({ name: "TimeoutError" });
     await expect(promise).rejects.not.toBeInstanceOf(ApiTimeoutError);
   });
 });

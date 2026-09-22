@@ -143,8 +143,15 @@ export async function apiRequest<T>(
 
     return { data: data as T, response };
   } catch (error) {
-    // 中断のうち TimeoutError だけを変換する。呼び出し側のキャンセル
-    // （AbortError）は失敗ではなく、文言を出す相手でもない。
+    // 変換するのは「ここで張った timeout が発火したとき」だけ。呼び出し側の
+    // キャンセルは失敗ではなく、文言を出す相手でもない。
+    //
+    // name の一致だけを見てはいけない。呼び出し側が自前の
+    // AbortSignal.timeout(n) を signal に渡している場合（7-3b のポーリングが
+    // まさにそう）、その中断も name は "TimeoutError" になる。name だけで
+    // 判定すると、呼び出し側の意図的な打ち切りを利用者向けの失敗に化けさせ、
+    // しかも timeoutMs には無関係な既定値が入る。timeoutSignal.aborted を
+    // 併せて見ると、どちらが発火したのかを取り違えない。
     //
     // instanceof DOMException と書かないのは、DOMException をグローバルに
     // 持たない実行環境で ReferenceError になるため。DOMException は Error を
@@ -153,7 +160,7 @@ export async function apiRequest<T>(
     // try が parseBody まで包んでいるのは、signal がボディのストリーム読み取りも
     // 中断するため。fetch だけを包むと、本文を読んでいる最中の中断を拾えない。
     // ApiError はここを素通りする。
-    if (error instanceof Error && error.name === "TimeoutError") {
+    if (timeoutSignal.aborted && error instanceof Error && error.name === "TimeoutError") {
       throw new ApiTimeoutError(timeoutMs);
     }
     throw error;
