@@ -157,10 +157,10 @@ export function postsHref(query: Partial<PostsQuery>): string
 export function postsApiPath(query: PostsQuery): string
 ```
 
-- `sort`：`"popular"` のときだけ popular、それ以外（不正値・配列・未指定）は recent
+- `sort`：`"popular"` のときだけ popular、それ以外（不正値・未指定）は recent
 - `page`：`/^\d+$/` に一致し 1 以上の値だけを採用、それ以外は 1。上限はサーバー（`MAX_PAGE`）に任せる
 - `q`：前後の空白を落とす。配列なら先頭を使う
-- 配列が来るのは `?sort=a&sort=b` のとき（Next の `searchParams` の型が `string | string[]`）
+- 配列が来るのは `?sort=a&sort=b` のとき（Next の `searchParams` の型が `string | string[]`）。**3 つとも先頭の値で判定する**
 
 画面の URL と API のパスを同じモジュールで作るのは、並び替えの値を片方だけ変えて
 「画面は人気順と表示しているのに新着順が返る」ずれを防ぐため。
@@ -220,8 +220,8 @@ export function cloudinaryUrl(publicId: string, options: { width: number; aspect
 CLAUDE.md の方針どおり、純粋な関数にだけ Vitest を書く。コンポーネントのテストは書かない（E2E は 8-1）。
 
 - `test/lib/posts/posts-query.test.ts`
-  - `sort`：不正値・配列・未指定 → recent、`"popular"` → popular
-  - `page`：`"0"` / `"-1"` / `"abc"` / `"2.5"` / `""` / 配列 → 1、`"3"` → 3
+  - `sort`：不正値・未指定 → recent、`"popular"` → popular、配列は先頭で判定
+  - `page`：`"0"` / `"-1"` / `"abc"` / `"2.5"` / `""` / `"1e3"` → 1、`"3"` → 3、配列は先頭で判定
   - `q`：前後の空白・空文字・配列
   - `postsHref`：既定値を省く（`{}` → `/posts`）、`&` `#` `?` を含む検索語をエンコードする
   - **往復**：`parsePostsQuery(postsHref(x) のクエリ)` が `x` に戻る
