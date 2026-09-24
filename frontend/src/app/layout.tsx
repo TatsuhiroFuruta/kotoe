@@ -19,7 +19,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kotoe（言絵）",
+  // 各ページが title を持つと「お題を探す | Kotoe（言絵）」になる。
+  // title を持たないページ（トップ・ログインなど）は default のまま。
+  title: {
+    default: "Kotoe（言絵）",
+    template: "%s | Kotoe（言絵）",
+  },
   description: "画像を言葉だけで描写し、その言葉から AI が再現した画像の再現度を競う Web アプリ",
 };
 
