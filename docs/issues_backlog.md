@@ -697,6 +697,14 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 
 ### 🟢 7-3a. お題一覧・検索（/posts）
 - 依存：7-1, 3-2, **7-2.7**
+- 設計書：`docs/superpowers/specs/2026-09-23-issue-7-3a-posts-index-design.md`
+- **7-3a で決めたこと（7-3b 以降が乗る前提）**：
+  - 一覧の取得は**クライアント**（`useEffect` ＋ `apiFetch`）。`page.tsx` は `searchParams` を
+    `parsePostsQuery()` で正規化して渡すだけ。状態は URL だけに持つ（`postsHref()` で組み立てる）
+  - 画像は **`<img>` ＋ `cloudinaryUrl()`**。`next/image` は使わない（Cloudinary と Vercel の
+    無料枠を二重に消費し、カスタムローダーは変換数が約 8 倍になるため）。幅は 1 画像 1 サイズ
+  - 通信エラーの文言は `src/lib/request-error-messages.ts`（`toRequestErrorMessage()`）
+  - 型 `PostSummary` / `PaginationMeta` / `PostsIndexResponse` は `src/types/api.ts`
 - タスク：検索バー、新着／人気の並び替え、カードグリッド（元画像サムネイル・タイトル・投稿者・
   挑戦数・いいね合計）、ページネーション（**12 件／頁**固定）、0 件の空状態。
 - Cloudinary の URL をフロントで組み立てるのはこの issue が最初。`image_public_id` から
@@ -740,6 +748,13 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   操作をする」画面ができるので、描写文を書いている最中に失効すると操作が静かに失敗する。
   7-2.6 が未着手のうちは、少なくとも**失敗が無言にならない**ようにしておくこと。
 - **描写文の改行**：`whitespace-pre-wrap` で反映する（上の XSS の 1 を参照）。
+- **7-3a からの申し送り**：
+  - **カードを `<Link href={`/posts/${post.id}`}>` で包む**（`PostCard` にコメントで場所がある）。
+    7-3a は `/posts/[id]` が存在しないのでリンクにしていない
+  - 画像は `cloudinaryUrl(publicId, { width, aspect })` を使う。ダウンロード URL
+    （`f_png` + `fl_attachment`）は 7-3b で足す（4-3 からの申し送り）
+  - **`components/dev/health-panel.tsx` のトースト確認用ボタンを削除する**。7-3b が
+    トーストの最初の実利用になるため（7-2.5 からの持ち越し）
 - 完了条件：お題を開いて描写し、生成（即公開）して結果が表示されるコアループが動く。
 
 ### 🟢 7-4. 挑戦詳細・比較ビュー（/attempts/[id]）
@@ -852,7 +867,8 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
     `cors.rb` も `credentials: true` を設定していない。BFF に変えたときだけ必要になる。
 - **なぜ 7-5 完了後か**：それまで CSP のポリシーが確定しないため。先に入れると
   7-3a・7-3b・7-4・7-5 のたびに CSP を直すことになる。
-  - `img-src` に Cloudinary が要る → **7-3a**（お題画像の表示）で確定
+  - `img-src` に Cloudinary が要る → **7-3a で確定：`https://res.cloudinary.com`**
+    （`src/lib/cloudinary.ts` がオリジンを固定している）
   - `connect-src` の実際の使われ方（ポーリング含む） → **7-3b** で確定
   - 画像アップロードの経路 → **7-5** で確定
 - タスク：
