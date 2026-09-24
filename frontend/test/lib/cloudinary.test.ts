@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { cloudinaryUrl } from "@/lib/cloudinary";
+import { cloudinaryUrl, cloudinaryUrlOrNull } from "@/lib/cloudinary";
 
 const OPTIONS = { width: 640, aspect: "4:3" } as const;
 
@@ -57,5 +57,34 @@ describe("cloudinaryUrl", () => {
     vi.stubEnv("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME", "");
 
     expect(() => cloudinaryUrl("a/b", OPTIONS)).toThrow("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME");
+  });
+});
+
+describe("cloudinaryUrlOrNull", () => {
+  it("組み立てられるときは cloudinaryUrl と同じ URL を返す", () => {
+    expect(cloudinaryUrlOrNull("a/b", OPTIONS)).toBe(cloudinaryUrl("a/b", OPTIONS));
+  });
+
+  it.each(["", "a/../b"])(
+    "組み立てられない public_id %j では例外にせず null を返し、原因を console.error に残す",
+    (publicId) => {
+      // 描画中に例外が出ると、error boundary が無いのでヘッダーごとアプリが落ちる。
+      // 1 件の不正なデータで残りの 11 件まで見られなくしない。
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      expect(cloudinaryUrlOrNull(publicId, OPTIONS)).toBeNull();
+      expect(consoleError).toHaveBeenCalled();
+
+      consoleError.mockRestore();
+    },
+  );
+
+  it("cloud name が未設定でも null を返す（本番ビルドは next.config が先に止める）", () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME", "");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(cloudinaryUrlOrNull("a/b", OPTIONS)).toBeNull();
+
+    consoleError.mockRestore();
   });
 });

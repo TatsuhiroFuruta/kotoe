@@ -55,3 +55,26 @@ export function cloudinaryUrl(
 
   return `${ORIGIN}/${encodeURIComponent(cloudName)}/image/upload/${transformation}/${path}`;
 }
+
+/**
+ * 描画中に使う版。組み立てられないときは例外にせず null を返す。
+ *
+ * cloudinaryUrl() の例外を描画中に投げると、error boundary が無いのでヘッダーごと
+ * アプリ全体が落ちる。お題 1 件の public_id が壊れているだけで、残りの 11 件まで
+ * 見られなくなる。画面側は null のときプレースホルダを描く。
+ *
+ * cloudinaryUrl() 自体は例外のままにしておく。黙って壊れた URL を配らないという
+ * 性質は変えず、「落とすか・伏せるか」の判断だけを呼び出し側に移す。原因は
+ * console.error に残す（握り潰すと、画像が出ない理由がどこにも残らない）。
+ */
+export function cloudinaryUrlOrNull(
+  publicId: string,
+  options: { width: number; aspect: CloudinaryAspect },
+): string | null {
+  try {
+    return cloudinaryUrl(publicId, options);
+  } catch (error) {
+    console.error("画像の URL を組み立てられませんでした", error);
+    return null;
+  }
+}

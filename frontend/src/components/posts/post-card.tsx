@@ -1,4 +1,4 @@
-import { cloudinaryUrl } from "@/lib/cloudinary";
+import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
 import type { PostSummary } from "@/types/api";
 
 // カードは最大 3 列・幅 320px 程度。Retina でも 640px の 1 本で足りる。
@@ -8,20 +8,29 @@ const THUMBNAIL_WIDTH = 640;
 export function PostCard({ post }: { post: PostSummary }) {
   // 7-3b：この <article> を <Link href={`/posts/${post.id}`}> で包む。
   // /posts/[id] が実在しないうちにリンクにすると、main を追跡している本番で 404 になる。
+  const src = cloudinaryUrlOrNull(post.image_public_id, { width: THUMBNAIL_WIDTH, aspect: "4:3" });
+
   return (
     <article className="overflow-hidden rounded-card border border-line bg-surface">
       {/*
         next/image ではなく <img>。変換は cloudinaryUrl() が Cloudinary 側で済ませており、
         next/image を通すと Vercel の最適化枠まで消費する（設計書「決定 4」）。
         alt のタイトルは公開 UGC だが、属性値も React がエスケープする。
+
+        URL を組み立てられないときは同じ寸法の空枠を出す。描画中に例外を投げると
+        アプリ全体が落ち、1 件の不正なデータで一覧ごと見られなくなるため。
       */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={cloudinaryUrl(post.image_public_id, { width: THUMBNAIL_WIDTH, aspect: "4:3" })}
-        alt={post.title}
-        loading="lazy"
-        className="aspect-4/3 w-full bg-line object-cover"
-      />
+      {src === null ? (
+        <div role="img" aria-label={post.title} className="aspect-4/3 w-full bg-line" />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={post.title}
+          loading="lazy"
+          className="aspect-4/3 w-full bg-line object-cover"
+        />
+      )}
       <div className="p-4">
         {/*
           公開 UGC。{value} のまま置く（React が自動でエスケープする）。
