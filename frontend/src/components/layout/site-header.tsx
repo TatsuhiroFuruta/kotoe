@@ -24,17 +24,26 @@ export function SiteHeader() {
   return (
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight text-ink">
-          Kotoe
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link href="/" className="text-lg font-semibold tracking-tight text-ink">
+            Kotoe
+          </Link>
 
-        {/*
-          中央のリンクは、そのルートを作る issue がここに足す。
-          7-3: 「探す」→ /posts ／ 7-5:「お題を投稿」→ /posts/new ／
-          7-6: アバター → /mypage ／ 7-7:「ランキング」→ /rankings。
-          main は Vercel の本番を追跡するので、存在しないルートへのリンクは置かない
-          （置いた瞬間に本番で 404 になる）。
-        */}
+          {/*
+            ナビのリンクは、そのルートを作る issue がここに足す。
+            7-5:「お題を投稿」→ /posts/new ／ 7-6: アバター → /mypage ／
+            7-7:「ランキング」→ /rankings。
+            main は Vercel の本番を追跡するので、存在しないルートへのリンクは置かない
+            （置いた瞬間に本番で 404 になる）。
+
+            「探す」は認証状態に関係なく出す。一覧は誰でも見られる。
+          */}
+          <nav aria-label="メイン" className="flex items-center gap-4 text-sm">
+            <Link href="/posts" className="text-ink-muted hover:text-ink">
+              探す
+            </Link>
+          </nav>
+        </div>
 
         <nav className="flex items-center gap-3 text-sm">
           {/*

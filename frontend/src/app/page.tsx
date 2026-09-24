@@ -44,25 +44,28 @@ export default function Home() {
         </p>
 
         {/*
-          CTA もナビと同じ方針で、実在するルートだけを出す。「お題を探す」→ /posts は
-          7-3 が、「お題を投稿」→ /posts/new は 7-5 がここに足す。
+          CTA もナビと同じ方針で、実在するルートだけを出す。
+          「お題を投稿」→ /posts/new は 7-5 がここに足す。
+
+          「お題を探す」は認証状態に関係なく出す（一覧は誰でも見られる）。
+          これが主役なので primary にし、新規登録・ログインは secondary に下げる。
+          primary が 2 つ並ぶと、どちらを押せばよいのかが分からなくなるため。
         */}
-        {auth.status === "unauthenticated" && (
-          <div className="mt-8 flex items-center justify-center gap-3">
-            <Link
-              href="/signup"
-              className={buttonClasses({ size: "lg" })}
-            >
-              新規登録
-            </Link>
-            <Link
-              href="/login"
-              className={buttonClasses({ variant: "secondary", size: "lg" })}
-            >
-              ログイン
-            </Link>
-          </div>
-        )}
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Link href="/posts" className={buttonClasses({ size: "lg" })}>
+            お題を探す
+          </Link>
+          {auth.status === "unauthenticated" && (
+            <>
+              <Link href="/signup" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                新規登録
+              </Link>
+              <Link href="/login" className={buttonClasses({ variant: "secondary", size: "lg" })}>
+                ログイン
+              </Link>
+            </>
+          )}
+        </div>
       </div>
 
       {SHOW_HEALTH_PANEL && <HealthPanel />}
