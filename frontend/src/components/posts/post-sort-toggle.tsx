@@ -22,7 +22,8 @@ export function PostSortToggle({ query }: { query: PostsQuery }) {
           <Link
             key={sort}
             href={postsHref({ q: query.q, sort })}
-            aria-current={active ? "page" : undefined}
+            // "page" ではなく "true"。並び順は「今いるページ」ではなく、選ばれている選択肢のため。
+            aria-current={active ? "true" : undefined}
             className={`${buttonClasses({ variant: active ? "primary" : "secondary", size: "sm" })} text-sm`}
           >
             {label}

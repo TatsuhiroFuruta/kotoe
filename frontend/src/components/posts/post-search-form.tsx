@@ -1,7 +1,7 @@
 import Form from "next/form";
 
 import { buttonClasses } from "@/components/ui/button";
-import type { PostsQuery } from "@/lib/posts/posts-query";
+import { postsHref, type PostsQuery } from "@/lib/posts/posts-query";
 
 /**
  * 送信で検索する（入力に合わせた自動検索はしない。設計書「決定 3」）。
@@ -19,11 +19,13 @@ export function PostSearchForm({ query }: { query: PostsQuery }) {
         お題をタイトルで検索
       </label>
       {/*
-        key に q を渡す。defaultValue は初回しか効かないので、「検索をクリア」や
-        戻るボタンで q が変わったときに入力欄を作り直して URL と揃える。
+        key に URL 全体を渡す。defaultValue は初回しか効かないので、URL が変わるたびに
+        入力欄を作り直して、表示中の結果と同じ q に揃える。q だけを key にすると、
+        打ったまま送信していない語が並び替え・ページ送りのあとも残り、
+        「その語で並び替えた」ように見える（結果は URL の古い q のもの）。
       */}
       <input
-        key={query.q}
+        key={postsHref(query)}
         id="posts-search"
         name="q"
         type="search"

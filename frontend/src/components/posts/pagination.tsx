@@ -29,7 +29,8 @@ export function Pagination({ query, totalPages }: { query: PostsQuery; totalPage
         </span>
       )}
 
-      <span className="text-sm text-ink-muted" aria-current="page">
+      {/* 「2 / 5」は記号だけだと読み上げで意味が伝わらないので、文で名前を付ける。 */}
+      <span className="text-sm text-ink-muted" aria-label={`${totalPages} ページ中 ${page} ページ目`}>
         {page} / {totalPages}
       </span>
 

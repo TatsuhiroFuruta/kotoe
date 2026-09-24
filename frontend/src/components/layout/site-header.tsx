@@ -45,7 +45,8 @@ export function SiteHeader() {
           </nav>
         </div>
 
-        <nav className="flex items-center gap-3 text-sm">
+        {/* 左の「メイン」と並ぶ 2 つ目のナビ。ランドマークの一覧で区別できるよう名前を付ける */}
+        <nav aria-label="アカウント" className="flex items-center gap-3 text-sm">
           {/*
             loading のあいだはスケルトンを出す。SSR と初回クライアント描画は
             どちらも loading なので、ここで描くものが食い違うことはない。
