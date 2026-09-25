@@ -36,3 +36,40 @@ export type AuthErrorBody = {
 export type ValidationErrorBody = {
   errors: Record<string, string[]>;
 };
+
+/** 他人に見せるユーザーの表現（UserSerializer.public_profile）。email を含まない。 */
+export type PublicUser = {
+  id: number;
+  name: string;
+};
+
+/**
+ * お題 1 件（PostSerializer）。一覧・詳細・作成の応答で共通。
+ * attempts_count / likes_count は公開済みの挑戦だけを数えた値。
+ */
+export type PostSummary = {
+  id: number;
+  title: string;
+  /** Cloudinary の public_id。表示には必ず cloudinaryUrl() を通す */
+  image_public_id: string;
+  user: PublicUser;
+  attempts_count: number;
+  likes_count: number;
+  /** リクエストした本人がお気に入り済みか。未ログインなら常に false。一覧では描画しない */
+  favorited: boolean;
+  /** ISO 8601（UTC） */
+  created_at: string;
+};
+
+/** kaminari のページ情報（PaginationSerializer）。1 ページの件数はサーバーが 12 に固定している。 */
+export type PaginationMeta = {
+  current_page: number;
+  total_pages: number;
+  total_count: number;
+};
+
+/** GET /api/posts */
+export type PostsIndexResponse = {
+  posts: PostSummary[];
+  meta: PaginationMeta;
+};

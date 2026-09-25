@@ -5,6 +5,7 @@
 // コードだけを返し、日本語をここ 1 箇所に集約する。
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
+import { NETWORK_MESSAGE, SERVER_MESSAGE, TIMEOUT_MESSAGE } from "@/lib/request-error-messages";
 
 export type AuthFormErrors = {
   /** フォーム全体に出すエラー。フィールドに紐づかないもの */
@@ -44,10 +45,7 @@ const FIELD_MESSAGES: Record<string, Record<string, string>> = {
   },
 };
 
-const TIMEOUT_MESSAGE =
-  "サーバーの応答がありません。起動中の可能性があるので、少し待ってから再度お試しください";
-const NETWORK_MESSAGE = "サーバーに接続できませんでした。通信環境を確認してください";
-const SERVER_MESSAGE = "サーバーでエラーが発生しました。時間をおいて再度お試しください";
+// 通信そのものの失敗の文言は lib/request-error-messages.ts にある（一覧と共有するため）。
 const UNEXPECTED_MESSAGE = "認証に失敗しました。時間をおいて再度お試しください";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

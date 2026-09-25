@@ -9,6 +9,9 @@ import type { NextConfig } from "next";
 // その経路ではどちらの書き方でも解決に失敗し、警告を出して既定の経路へ
 // フォールバックする（`.ts` を付ければネイティブ側は解決できるが、今度は
 // tsc が TS5097 で落ちるので付けていない）。
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
+
+import { assertRequiredPublicEnv } from "./src/lib/build/required-public-env";
 import { parseAllowedDevHosts } from "./src/lib/dev/allowed-dev-hosts";
 
 // スマホ実機から開発サーバーを開くときだけ設定する（手順は AGENTS.md）。
@@ -16,8 +19,12 @@ import { parseAllowedDevHosts } from "./src/lib/dev/allowed-dev-hosts";
 // dev サーバー専用の設定で、本番ビルドには影響しない。
 const allowedDevHosts = parseAllowedDevHosts(process.env.DEV_ALLOWED_HOSTS);
 
-const nextConfig: NextConfig = {
-  ...(allowedDevHosts.length > 0 ? { allowedDevOrigins: allowedDevHosts } : {}),
-};
+// 関数で書くのは phase を受け取るため。必須の NEXT_PUBLIC_* の検査は本番ビルドだけで行い、
+// dev サーバーでは行わない（未設定でも、一覧を開くまでは他の画面の作業ができるように）。
+export default function nextConfig(phase: string): NextConfig {
+  if (phase === PHASE_PRODUCTION_BUILD) assertRequiredPublicEnv(process.env);
 
-export default nextConfig;
+  return {
+    ...(allowedDevHosts.length > 0 ? { allowedDevOrigins: allowedDevHosts } : {}),
+  };
+}

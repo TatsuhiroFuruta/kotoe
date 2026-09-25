@@ -23,20 +23,39 @@ export function SiteHeader() {
 
   return (
     <header className="border-b border-line bg-surface">
-      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight text-ink">
-          Kotoe
-        </Link>
+      {/*
+        高さを固定せず（min-h-14）、収まらなければ右側を次の行へ折り返す。
+        375px 幅の中身は 343px しかなく、unreachable の右側（文言＋ボタン 2 つ）は
+        それだけで約 366px ある。h-14 固定の 1 行だと、はみ出した分がページ全体の
+        横スクロールになっていた（7-3a で左に「探す」を足して起きやすくなった）。
+      */}
+      <div className="mx-auto flex min-h-14 w-full max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2">
+        <div className="flex shrink-0 items-center gap-6">
+          <Link href="/" className="text-lg font-semibold tracking-tight text-ink">
+            Kotoe
+          </Link>
 
-        {/*
-          中央のリンクは、そのルートを作る issue がここに足す。
-          7-3: 「探す」→ /posts ／ 7-5:「お題を投稿」→ /posts/new ／
-          7-6: アバター → /mypage ／ 7-7:「ランキング」→ /rankings。
-          main は Vercel の本番を追跡するので、存在しないルートへのリンクは置かない
-          （置いた瞬間に本番で 404 になる）。
-        */}
+          {/*
+            ナビのリンクは、そのルートを作る issue がここに足す。
+            7-5:「お題を投稿」→ /posts/new ／ 7-6: アバター → /mypage ／
+            7-7:「ランキング」→ /rankings。
+            main は Vercel の本番を追跡するので、存在しないルートへのリンクは置かない
+            （置いた瞬間に本番で 404 になる）。
 
-        <nav className="flex items-center gap-3 text-sm">
+            「探す」は認証状態に関係なく出す。一覧は誰でも見られる。
+          */}
+          <nav aria-label="メイン" className="flex items-center gap-4 text-sm">
+            <Link href="/posts" className="text-ink-muted hover:text-ink">
+              探す
+            </Link>
+          </nav>
+        </div>
+
+        {/* 左の「メイン」と並ぶ 2 つ目のナビ。ランドマークの一覧で区別できるよう名前を付ける */}
+        <nav
+          aria-label="アカウント"
+          className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 text-sm"
+        >
           {/*
             loading のあいだはスケルトンを出す。SSR と初回クライアント描画は
             どちらも loading なので、ここで描くものが食い違うことはない。
@@ -61,8 +80,14 @@ export function SiteHeader() {
 
           {auth.status === "authenticated" && (
             <>
-              {/* 公開 UGC。React が自動でエスケープするので、そのまま置いてよい */}
-              <span className="text-ink-muted">{auth.user.name}</span>
+              {/*
+                公開 UGC。React が自動でエスケープするので、そのまま置いてよい。
+                name には長さの上限が無い（presence だけ）。空白を含まない長い名前でも
+                1 行に収まるよう幅を切り、全文は title で読めるようにする。
+              */}
+              <span className="max-w-40 truncate text-ink-muted" title={auth.user.name}>
+                {auth.user.name}
+              </span>
               <button
                 type="button"
                 onClick={handleSignOut}
