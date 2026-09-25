@@ -10,6 +10,10 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  // console.error の差し替えを戻す。テストの末尾で mockRestore() を呼ぶ書き方だと、
+  // 途中の expect が失敗した時点でそこまで到達せず、後続のテストまで
+  // console.error が黙ったままになる。afterEach は失敗しても必ず走る。
+  vi.restoreAllMocks();
 });
 
 describe("cloudinaryUrl", () => {
@@ -74,17 +78,13 @@ describe("cloudinaryUrlOrNull", () => {
 
       expect(cloudinaryUrlOrNull(publicId, OPTIONS)).toBeNull();
       expect(consoleError).toHaveBeenCalled();
-
-      consoleError.mockRestore();
     },
   );
 
   it("cloud name が未設定でも null を返す（本番ビルドは next.config が先に止める）", () => {
     vi.stubEnv("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME", "");
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(cloudinaryUrlOrNull("a/b", OPTIONS)).toBeNull();
-
-    consoleError.mockRestore();
   });
 });
