@@ -44,7 +44,17 @@ export function AttemptList({
     <section aria-labelledby={ATTEMPTS_HEADING_ID} className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-baseline gap-3">
-          <h2 id={ATTEMPTS_HEADING_ID} className="text-lg font-semibold text-ink">
+          {/*
+            tabIndex={-1}：並び替え・ページ送りの断片（attemptsSectionHref）で Next がここへ
+            focus() を呼ぶ。見出しは既定ではフォーカスできないので、無いと押したリンク
+            （再取得中はアンマウントされる）と一緒にフォーカスが body へ落ち、キーボードと
+            読み上げの利用者は現在地を失う。Tab の巡回には入らない（-1）。
+          */}
+          <h2
+            id={ATTEMPTS_HEADING_ID}
+            tabIndex={-1}
+            className="text-lg font-semibold text-ink"
+          >
             みんなの挑戦
           </h2>
           {state.kind === "ready" && state.meta.total_count > 0 && (
