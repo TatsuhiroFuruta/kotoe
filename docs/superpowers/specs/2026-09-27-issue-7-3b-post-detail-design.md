@@ -100,16 +100,24 @@ DOM の順序は常に 1・2・3 位にし、横並びの配置は `col-start` �
 ### 決定 4：元画像は切り抜かない
 
 お題の元画像は**描写の対象そのもの**なので、4:3 に切り抜くと描写すべき部分が見えなくなる。
-`cloudinaryUrl()` の `aspect` を省略可能にし、省略時は `c_limit`（幅の上限だけ・縦横比は元のまま・拡大しない）にする。
+`cloudinaryUrl()` の `aspect` を省略可能にし、省略時は `c_fit`（幅×幅の正方形に縦横比を保って収める。
+小さい画像は拡大、大きい画像は縮小する）にする。
 
 ```ts
-cloudinaryUrl(publicId, { width: 1280 })            // → c_limit,w_1280,f_auto,q_auto
+cloudinaryUrl(publicId, { width: 1280 })            // → c_fit,w_1280,h_1280,f_auto,q_auto
 cloudinaryUrl(publicId, { width: 640, aspect: "1:1" }) // → c_fill,ar_1:1,w_640,f_auto,q_auto（従来どおり）
 ```
 
 - ヒーローは幅 1280 の 1 本（本文の最大幅 `max-w-5xl` ≒ 1024px を Retina で少し下回るが、
   変換数と転送量を抑える。7-3a の決定 4 の「1 画像 1 サイズ」）
-- 縦長の画像で画面を占有しすぎないよう、表示側で `max-h-[70vh]`・`object-contain` にする
+- **表示の枠は画像ごとの縦横比にする**（`w-auto h-auto max-w-full max-h-[70vh] mx-auto`）。横幅は本文の幅まで、
+  高さは 70vh までに縮めて中央に置く。お題ごとにヒーローの高さは変わる
+- 経緯（2026-09-27、ユーザー確認済み）：最初は `c_limit`（拡大しない）で実装したが、開発データの 64px の画像が
+  切手大になった。そこで枠を本文の幅に固定（`w-full` ＋ `object-contain`）したところ、横長（約 1.7:1 より横長）
+  以外の画像では左右に枠の背景がグレーの帯として出た。4:3・正方形・縦長の写真で必ず出るので、拡大は
+  Cloudinary の `c_fit` に任せ、枠は画像の形に合わせる形に落ち着いた。高さにも上限（`h_1280`）が付くので、
+  縦に極端に長い画像を実寸のまま転送することもない
+- 枠を固定して余白を地の色にする案は不採用。縦長の画像が枠の中で小さくなり、描写の対象を最大限大きく見せられない
 - 一覧のサムネイルは 4:3 の切り抜きのまま（一覧はグリッドを揃えることが優先で、全体は詳細で見られる）
 
 生成画像は 1024×1024 の正方形（4-3）なので、表彰台とみんなの挑戦はどちらも `{ width: 640, aspect: "1:1" }` に揃える。
@@ -300,7 +308,7 @@ CLAUDE.md の方針どおり、純粋な関数にだけ Vitest を書く。コ�
   - `postDetailHref`：既定値を省く（`postDetailHref(9)` → `/posts/9`）
   - **往復**：`parsePostDetailQuery(postDetailHref(9, x) のクエリ)` が `x` に戻る
   - `postDetailApiPath`：`sort: "likes"` がクエリに**乗る**こと、`recent` のとき `sort` を送らないこと
-- `test/lib/cloudinary.test.ts` に追加：`aspect` を省くと `c_limit,w_<幅>` になり `ar_` を含まない
+- `test/lib/cloudinary.test.ts` に追加：`aspect` を省くと `c_fit,w_<幅>,h_<幅>` になり `ar_` を含まない
 - `test/lib/posts/posts-query.test.ts`：ページ判定を切り出した後も変更せずに通ること（回帰確認）
 
 並び順（いいね順の正しさ）は API 側の責務で、6-1 の request spec が守っている。
