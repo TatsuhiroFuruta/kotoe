@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  attemptsSectionHref,
   parsePostDetailQuery,
   parsePostId,
   postDetailApiPath,
@@ -75,6 +76,23 @@ describe("postDetailHref", () => {
     { sort: "likes", page: 12 },
   ])("組み立てた URL を読み直すと同じ条件に戻る（%o）", (query) => {
     expect(parsePostDetailQuery(paramsOf(postDetailHref(9, query)))).toEqual(query);
+  });
+});
+
+describe("attemptsSectionHref", () => {
+  it("みんなの挑戦の見出しへの断片を付ける（並び替え・ページ送りで先頭のヒーローまで戻されないように）", () => {
+    expect(attemptsSectionHref(9, { sort: "likes", page: 2 })).toBe(
+      "/posts/9?sort=likes&page=2#attempts-heading",
+    );
+  });
+
+  it("既定値は postDetailHref と同じく省く", () => {
+    expect(attemptsSectionHref(9, {})).toBe("/posts/9#attempts-heading");
+  });
+
+  it("断片を付けても searchParams は同じ条件に戻る", () => {
+    const query: PostDetailQuery = { sort: "likes", page: 3 };
+    expect(parsePostDetailQuery(paramsOf(attemptsSectionHref(9, query)))).toEqual(query);
   });
 });
 

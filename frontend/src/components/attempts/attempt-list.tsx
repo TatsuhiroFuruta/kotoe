@@ -5,7 +5,8 @@ import { buttonClasses } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
 import { SortToggle } from "@/components/ui/sort-toggle";
 import {
-  postDetailHref,
+  ATTEMPTS_HEADING_ID,
+  attemptsSectionHref,
   type AttemptsSort,
   type PostDetailQuery,
 } from "@/lib/posts/post-detail-query";
@@ -40,21 +41,24 @@ export function AttemptList({
   onRetry: () => void;
 }) {
   return (
-    <section aria-labelledby="attempts-heading" className="flex flex-col gap-4">
+    <section aria-labelledby={ATTEMPTS_HEADING_ID} className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-baseline gap-3">
-          <h2 id="attempts-heading" className="text-lg font-semibold text-ink">
+          <h2 id={ATTEMPTS_HEADING_ID} className="text-lg font-semibold text-ink">
             みんなの挑戦
           </h2>
           {state.kind === "ready" && state.meta.total_count > 0 && (
             <p className="text-sm text-ink-muted">全 {state.meta.total_count} 件</p>
           )}
         </div>
-        {/* 並び替えたら 1 ページ目に戻す（page を渡さない）。 */}
+        {/*
+          並び替えたら 1 ページ目に戻す（page を渡さない）。URL は見出しへの断片付き
+          （attemptsSectionHref。先頭のヒーローまで戻されないように）。
+        */}
         <SortToggle
           options={SORT_OPTIONS.map(({ sort, label }) => ({
             label,
-            href: postDetailHref(postId, { sort }),
+            href: attemptsSectionHref(postId, { sort }),
             active: query.sort === sort,
           }))}
         />
@@ -118,7 +122,7 @@ function AttemptResults({
     return (
       <EmptyState message="このページには挑戦がありません">
         <Link
-          href={postDetailHref(postId, { sort: query.sort })}
+          href={attemptsSectionHref(postId, { sort: query.sort })}
           className="text-accent hover:text-accent-strong"
         >
           1 ページ目へ
@@ -144,7 +148,7 @@ function AttemptResults({
       <Pagination
         page={query.page}
         totalPages={meta.total_pages}
-        hrefFor={(page) => postDetailHref(postId, { ...query, page })}
+        hrefFor={(page) => attemptsSectionHref(postId, { ...query, page })}
       />
     </>
   );

@@ -48,6 +48,20 @@ export function postDetailHref(id: number, query: Partial<PostDetailQuery> = {})
   return `/posts/${id}${toSearch({ ...DEFAULT_QUERY, ...query })}`;
 }
 
+/** みんなの挑戦の見出し（AttemptList）の id。断片の行き先。 */
+export const ATTEMPTS_HEADING_ID = "attempts-heading";
+
+/**
+ * みんなの挑戦の並び替え・ページ送り用の URL。見出しへの断片を付ける。
+ *
+ * 断片が無いと、Next はクエリの変わったページの先頭へスクロールするので、
+ * 押すたびに高さ 70vh のヒーローと表彰台（7-3c 以降は描写フォームも）の上まで
+ * 戻されてしまう。見出しは再取得中もアンマウントされないので、行き先として使える。
+ */
+export function attemptsSectionHref(id: number, query: Partial<PostDetailQuery>): string {
+  return `${postDetailHref(id, query)}#${ATTEMPTS_HEADING_ID}`;
+}
+
 /** API のパス。画面の URL と同じ規則で組み立てる。 */
 export function postDetailApiPath(id: number, query: PostDetailQuery): string {
   return `/api/posts/${id}${toSearch(query)}`;
