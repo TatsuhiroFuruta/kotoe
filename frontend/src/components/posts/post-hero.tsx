@@ -11,11 +11,11 @@ const HERO_WIDTH = 1280;
  *
  * 元画像は aspect を渡さず切り抜かない（7-3b 設計書「決定 4」）。描写の対象そのものなので、
  * 一覧のサムネイルのように 4:3 に切ると描写すべき部分が見えなくなる。
- * 縦長の画像が画面を埋め尽くさないよう、高さは 70vh までに抑えて object-contain で収める。
  *
- * 表示幅は本文の幅に合わせる（w-full）。c_limit は元より大きくしないので、アップロードに
- * 最小寸法の制限が無い以上、小さい画像（開発データの 64px など）は元の寸法のままだと
- * 切手大になって描写の対象として見えない。拡大はブラウザ側で行うので転送量は増えない。
+ * 表示の枠は画像そのものの縦横比にする（w-auto h-auto）。横幅は本文の幅まで、高さは 70vh
+ * までに縮めて中央に置く。枠を本文の幅に固定して object-contain で収めると、横長の画像以外
+ * （4:3・正方形・縦長の写真）では左右に枠の背景が帯になって見えるため。
+ * 小さい画像も c_fit が 1280 の枠まで拡大して配信するので、切手大にはならない。
  */
 export function PostHero({
   post,
@@ -41,7 +41,7 @@ export function PostHero({
         <img
           src={src}
           alt={post.title}
-          className="max-h-[70vh] w-full rounded-card bg-line object-contain"
+          className="mx-auto block h-auto max-h-[70vh] w-auto max-w-full rounded-card"
         />
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

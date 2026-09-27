@@ -29,10 +29,11 @@ describe("cloudinaryUrl", () => {
     );
   });
 
-  it("aspect を省くと切り抜かず、幅の上限だけを付ける（c_limit）", () => {
+  it("aspect を省くと切り抜かず、幅×幅の正方形に縦横比を保って収める（c_fit）", () => {
     // お題の元画像は描写の対象そのもの。4:3 に切り抜くと描写すべき部分が見えなくなる。
+    // 高さも上限を持たせるのは、縦に極端に長い画像を実寸のまま転送しないため。
     expect(cloudinaryUrl("a/b", { width: 1280 })).toBe(
-      "https://res.cloudinary.com/demo/image/upload/c_limit,w_1280,f_auto,q_auto/a/b",
+      "https://res.cloudinary.com/demo/image/upload/c_fit,w_1280,h_1280,f_auto,q_auto/a/b",
     );
   });
 
@@ -78,7 +79,7 @@ describe("cloudinaryUrlOrNull", () => {
 
   it("aspect を省いた指定もそのまま cloudinaryUrl に渡す", () => {
     expect(cloudinaryUrlOrNull("a/b", { width: 1280 })).toBe(
-      "https://res.cloudinary.com/demo/image/upload/c_limit,w_1280,f_auto,q_auto/a/b",
+      "https://res.cloudinary.com/demo/image/upload/c_fit,w_1280,h_1280,f_auto,q_auto/a/b",
     );
   });
 
