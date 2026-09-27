@@ -3,17 +3,22 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { Pagination } from "@/components/posts/pagination";
 import { PostCard } from "@/components/posts/post-card";
 import { PostSearchForm } from "@/components/posts/post-search-form";
-import { PostSortToggle } from "@/components/posts/post-sort-toggle";
 import { buttonClasses } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
+import { SortToggle } from "@/components/ui/sort-toggle";
 import { apiFetch } from "@/lib/api";
-import { postsApiPath, postsHref, type PostsQuery } from "@/lib/posts/posts-query";
+import { postsApiPath, postsHref, type PostsQuery, type PostsSort } from "@/lib/posts/posts-query";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import type { PostsIndexResponse } from "@/types/api";
 
 const SKELETON_COUNT = 12; // サーバーの 1 ページの件数と同じ。レイアウトが跳ねないように
+
+const SORT_OPTIONS: { sort: PostsSort; label: string }[] = [
+  { sort: "recent", label: "新着順" },
+  { sort: "popular", label: "人気順" },
+];
 
 type Outcome =
   | { kind: "success"; data: PostsIndexResponse }
@@ -61,7 +66,14 @@ export function PostList({ query }: { query: PostsQuery }) {
     <div className="mt-6 flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PostSearchForm query={query} />
-        <PostSortToggle query={query} />
+        {/* 並び替えたら 1 ページ目に戻す（page を渡さない）。検索語は引き継ぐ。 */}
+        <SortToggle
+          options={SORT_OPTIONS.map(({ sort, label }) => ({
+            label,
+            href: postsHref({ q: query.q, sort }),
+            active: query.sort === sort,
+          }))}
+        />
       </div>
 
       {outcome === null && <PostGridSkeleton />}
@@ -145,7 +157,11 @@ function PostResults({ query, data }: { query: PostsQuery; data: PostsIndexRespo
           </li>
         ))}
       </ul>
-      <Pagination query={query} totalPages={meta.total_pages} />
+      <Pagination
+        page={query.page}
+        totalPages={meta.total_pages}
+        hrefFor={(page) => postsHref({ ...query, page })}
+      />
     </>
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 
 import { PostList } from "@/components/posts/post-list";
-import { parsePostsQuery, type RawSearchParams } from "@/lib/posts/posts-query";
+import { parsePostsQuery } from "@/lib/posts/posts-query";
+import type { RawSearchParams } from "@/lib/search-params";
 
 export const metadata: Metadata = {
   title: "お題を探す",

@@ -22,10 +22,16 @@ const ORIGIN = "https://res.cloudinary.com";
  */
 export type CloudinaryAspect = "4:3" | "1:1";
 
-export function cloudinaryUrl(
-  publicId: string,
-  { width, aspect }: { width: number; aspect: CloudinaryAspect },
-): string {
+/**
+ * aspect を省くと切り抜かない（c_fit：幅×幅の正方形に縦横比を保って収める。小さい画像は
+ * 拡大、大きい画像は縮小される）。お題の元画像は描写の対象そのものなので、詳細のヒーローでは
+ * 切り抜かない（7-3b 設計書「決定 4」）。高さにも同じ上限を付けるのは、縦に極端に長い画像を
+ * 実寸のまま転送しないため。
+ * 一覧のサムネイルや生成画像のようにグリッドを揃えたい場所だけ aspect を渡す。
+ */
+export type CloudinaryOptions = { width: number; aspect?: CloudinaryAspect };
+
+export function cloudinaryUrl(publicId: string, { width, aspect }: CloudinaryOptions): string {
   // 関数の中で読む（モジュールの先頭で読まない）。Next は
   // process.env.NEXT_PUBLIC_* という字面をビルド時に値へ置き換えるので
   // どちらでも本番は動くが、中で読めばテストが vi.stubEnv で差し替えられる。
@@ -51,7 +57,9 @@ export function cloudinaryUrl(
   const path = segments.map(encodeURIComponent).join("/");
 
   // f_auto で配信形式（AVIF / WebP など）をブラウザに合わせ、q_auto で画質を自動にする。
-  const transformation = `c_fill,ar_${aspect},w_${width},f_auto,q_auto`;
+  const size =
+    aspect === undefined ? `c_fit,w_${width},h_${width}` : `c_fill,ar_${aspect},w_${width}`;
+  const transformation = `${size},f_auto,q_auto`;
 
   return `${ORIGIN}/${encodeURIComponent(cloudName)}/image/upload/${transformation}/${path}`;
 }
@@ -69,7 +77,7 @@ export function cloudinaryUrl(
  */
 export function cloudinaryUrlOrNull(
   publicId: string,
-  options: { width: number; aspect: CloudinaryAspect },
+  options: CloudinaryOptions,
 ): string | null {
   try {
     return cloudinaryUrl(publicId, options);
