@@ -73,3 +73,45 @@ export type PostsIndexResponse = {
   posts: PostSummary[];
   meta: PaginationMeta;
 };
+
+/** 挑戦の状態。published と failed が終端（4-2）。 */
+export type AttemptStatus = "draft" | "generating" | "published" | "failed";
+
+/**
+ * 挑戦 1 件（AttemptSerializer）。お題詳細の一覧・表彰台と、挑戦 API で共通。
+ * お題詳細に出るのは published だけ（Attempt.listing_for）。
+ */
+export type Attempt = {
+  id: number;
+  description: string;
+  /** published 以外は null。表示には必ず cloudinaryUrl() を通す */
+  generated_image_public_id: string | null;
+  status: AttemptStatus;
+  /** failed のときだけ値が入る。7-3c でリテラル型に絞る */
+  failure_reason: string | null;
+  /** 8-4（CLIP）まで常に null。描画しない */
+  similarity_score: number | null;
+  user: PublicUser;
+  likes_count: number;
+  /** リクエストした本人がいいね済みか。7-4 まで描画しない */
+  liked: boolean;
+  /** ISO 8601（UTC） */
+  created_at: string;
+};
+
+/**
+ * GET /api/posts/:id。
+ * meta は attempts のページングだけを指す。best_attempts はページングを持たず、
+ * sort・page によらず常にいいね上位 3 件（6-1）。同じ挑戦が両方に現れうる。
+ */
+export type PostDetailResponse = {
+  post: PostSummary;
+  best_attempts: Attempt[];
+  attempts: Attempt[];
+  meta: PaginationMeta;
+};
+
+/** POST / DELETE /api/posts/:id/favorite。どちらも冪等で、更新後の favorited を含む。 */
+export type FavoriteResponse = {
+  post: PostSummary;
+};
