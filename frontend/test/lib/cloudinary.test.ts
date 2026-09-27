@@ -29,6 +29,13 @@ describe("cloudinaryUrl", () => {
     );
   });
 
+  it("aspect を省くと切り抜かず、幅の上限だけを付ける（c_limit）", () => {
+    // お題の元画像は描写の対象そのもの。4:3 に切り抜くと描写すべき部分が見えなくなる。
+    expect(cloudinaryUrl("a/b", { width: 1280 })).toBe(
+      "https://res.cloudinary.com/demo/image/upload/c_limit,w_1280,f_auto,q_auto/a/b",
+    );
+  });
+
   it("public_id の / はパスの区切りとして残し、各セグメントの ? # % はエンコードする", () => {
     // ? や # がそのまま残ると、そこから後ろがクエリ／フラグメントになって
     // Cloudinary に届く public_id が変わる。
@@ -67,6 +74,12 @@ describe("cloudinaryUrl", () => {
 describe("cloudinaryUrlOrNull", () => {
   it("組み立てられるときは cloudinaryUrl と同じ URL を返す", () => {
     expect(cloudinaryUrlOrNull("a/b", OPTIONS)).toBe(cloudinaryUrl("a/b", OPTIONS));
+  });
+
+  it("aspect を省いた指定もそのまま cloudinaryUrl に渡す", () => {
+    expect(cloudinaryUrlOrNull("a/b", { width: 1280 })).toBe(
+      "https://res.cloudinary.com/demo/image/upload/c_limit,w_1280,f_auto,q_auto/a/b",
+    );
   });
 
   it.each(["", "a/../b"])(
