@@ -52,9 +52,14 @@ describe("parsePostDetailQuery", () => {
     });
   });
 
+  // ページ番号の受け付け方の網羅は search-params.test.ts（parsePositiveInt）にある。
+  // ここでは parsePostDetailQuery がそれを正しくつないでいることだけを、通す側と丸める側の 1 例ずつで見る。
+  it("正の整数の文字列はそのまま使う", () => {
+    expect(parsePostDetailQuery({ page: "3" }).page).toBe(3);
+  });
+
   it("正の整数でない page は 1 ページ目に丸める", () => {
     expect(parsePostDetailQuery({ page: "abc" }).page).toBe(1);
-    expect(parsePostDetailQuery({ page: "3" }).page).toBe(3);
   });
 });
 
