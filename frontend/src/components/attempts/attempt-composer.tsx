@@ -42,7 +42,11 @@ type Phase =
   | { kind: "failed"; attempt: Attempt }
   | { kind: "stalled"; attemptId: number; reason: "timed_out" | "not_found" };
 
-type SaveResult = { ok: true; attemptId: number } | { ok: false };
+/**
+ * 保存の結果。失敗のうち「下書きがもう generating 以降になっていた」（PATCH の
+ * attempt_not_draft）ときは、その挑戦を確かめに行く（joinAttemptId）。
+ */
+type SaveResult = { ok: true; attemptId: number } | { ok: false; joinAttemptId: number | null };
 
 const PLACEHOLDER = "色・形・配置・雰囲気など、見えるものを言葉で書いてみましょう";
 
@@ -116,6 +120,10 @@ export function AttemptComposer({
   useAttemptPolling(phase.kind === "polling" ? phase : null, handlePollOutcome);
 
   const busy = phase.kind === "saving" || phase.kind === "starting" || phase.kind === "polling";
+  // 打ち切り（まだ生成しているかもしれない）の間も押せなくする。下書きは捨ててあるので、
+  // 押すと新しい下書きで二度目の生成になり、枠を二重に使う。やり直すときはパネルの
+  // 「新しく描写する」を明示的に押してもらう。
+  const blocked = busy || (phase.kind === "stalled" && phase.reason === "timed_out");
   const isSaved = draftId !== null && text === savedText;
   const overLimit = text.length > DESCRIPTION_MAX_LENGTH;
   const panelState = panelStateOf(phase);
@@ -165,53 +173,76 @@ export function AttemptComposer({
       setSavedText(sending);
       return { ok: true, attemptId: attempt.id };
     } catch (error: unknown) {
-      showSaveError(error, isUpdate);
-      return { ok: false };
+      return { ok: false, joinAttemptId: showSaveError(error, draftId) };
     }
   }
 
-  function showSaveError(error: unknown, isUpdate: boolean) {
+  /**
+   * 保存の失敗を表示する。下書きが既に generating 以降だった（attempt_not_draft）ときは、
+   * 表示せずにその id を返す。呼び出し側は確認のポーリングに入る。
+   * 別タブで生成した・応答が不明だった生成が実は起動していた、のどちらでも、
+   * 進んでいる生成を追うのが正しい（「下書きが無くなった」と言って捨てると、
+   * 次に押したとき新しい下書きで二度目の生成になり、枠を二重に使う）。
+   */
+  function showSaveError(error: unknown, updatingId: number | null): number | null {
+    const isUpdate = updatingId !== null;
+
     // 失効。文面は残す（入力欄は常に表示）。ボタン領域はログイン導線に変わる。
     if (isUnauthorized(error)) {
       toast.error(SESSION_EXPIRED_MESSAGE);
       focusTextareaAfterRender();
-      return;
+      return null;
     }
 
     const field = descriptionFieldError(error);
     if (field !== null) {
       setFieldError(field);
       focusTextareaAfterRender();
-      return;
+      return null;
     }
 
-    // 別タブで生成・削除された、またはお題が削除された下書き。次の保存は新しい下書きになる。
-    if (
-      isUpdate &&
-      error instanceof ApiError &&
-      (error.status === 404 || apiErrorCode(error) === "attempt_not_draft")
-    ) {
+    if (isUpdate && apiErrorCode(error) === "attempt_not_draft") {
+      forgetDraft();
+      return updatingId;
+    }
+
+    // 別タブで削除された、またはお題が削除された下書き。次の保存は新しい下書きになる。
+    if (isUpdate && error instanceof ApiError && error.status === 404) {
       forgetDraft();
       setFieldError(DRAFT_GONE_MESSAGE);
       focusTextareaAfterRender();
-      return;
+      return null;
     }
 
     if (!isUpdate && error instanceof ApiError && error.status === 404) {
       setFormError(POST_GONE_MESSAGE);
-      return;
+      return null;
     }
 
     setFormError(fallbackErrorMessage(error));
+    return null;
+  }
+
+  /** 保存に失敗したあとの行き先。進んでいる生成があれば確かめに行き、無ければ入力に戻す。 */
+  function settleAfterSaveFailure(joinAttemptId: number | null) {
+    setPhase(
+      joinAttemptId === null
+        ? { kind: "idle" }
+        : { kind: "polling", attemptId: joinAttemptId, immediate: true },
+    );
   }
 
   async function handleSave() {
     clearMessages();
     setPhase({ kind: "saving" });
     const result = await persistDraft();
+    if (!result.ok) {
+      settleAfterSaveFailure(result.joinAttemptId);
+      return;
+    }
     setPhase({ kind: "idle" });
     // 押しても画面が変わらない操作なので、成功をトーストで伝える（7-2.5）。
-    if (result.ok) toast.success(DRAFT_SAVED_MESSAGE);
+    toast.success(DRAFT_SAVED_MESSAGE);
   }
 
   /**
@@ -226,7 +257,7 @@ export function AttemptComposer({
     if (attemptId === null || text !== savedText) {
       const result = await persistDraft();
       if (!result.ok) {
-        setPhase({ kind: "idle" });
+        settleAfterSaveFailure(result.joinAttemptId);
         return;
       }
       attemptId = result.attemptId;
@@ -309,7 +340,8 @@ export function AttemptComposer({
 
   function startOver() {
     setPhase({ kind: "idle" });
-    textareaRef.current?.focus();
+    // 押した「新しく描写する」はパネルごと消えるので、描画の確定後に入力欄へ移す。
+    focusTextareaAfterRender();
   }
 
   function recheck() {
@@ -396,7 +428,7 @@ export function AttemptComposer({
             type="button"
             onClick={handleSave}
             // loading の間は押せない（ログイン中か確定していない）。unreachable は押せる。
-            disabled={busy || auth.status === "loading" || isSaved}
+            disabled={blocked || auth.status === "loading" || isSaved}
             className={buttonClasses({ variant: "secondary" })}
           >
             {phase.kind === "saving" ? "保存中…" : isSaved ? "保存済み" : "保存"}
@@ -404,7 +436,7 @@ export function AttemptComposer({
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={busy || auth.status === "loading"}
+            disabled={blocked || auth.status === "loading"}
             className={buttonClasses({ variant: "primary" })}
           >
             {phase.kind === "starting"

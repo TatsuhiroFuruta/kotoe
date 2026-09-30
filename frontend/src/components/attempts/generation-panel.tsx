@@ -67,6 +67,11 @@ export function GenerationPanel({
               もう一度確認
             </button>
           </div>
+          {/*
+            やり直しは明示的な操作にする。打ち切りの間は「画像を生成」を押せない
+            （押すと新しい下書きで二度目の生成になり、枠を二重に使うため）。
+          */}
+          <StartOverButton onClick={onStartOver} />
         </div>
       )}
 
