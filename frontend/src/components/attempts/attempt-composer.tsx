@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   GenerationPanel,
@@ -105,6 +105,8 @@ export function AttemptComposer({
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // 入力欄へのフォーカス要求。値そのものに意味は無く、増えるたびに下の effect が走る。
+  const [focusRequest, setFocusRequest] = useState(0);
   const baseId = useId();
   const headingId = `${baseId}-heading`;
   const textareaId = `${baseId}-description`;
@@ -127,6 +129,24 @@ export function AttemptComposer({
     setDraftId(null);
     setSavedText(null);
   }
+
+  /**
+   * 入力欄へフォーカスを戻す。描画の確定後（effect）に行うのは、エラーの id が
+   * aria-describedby に載ってからにするため（載る前に移すと、スクリーンリーダーが
+   * エラーを読まない）。requestAnimationFrame で移す形は、実測でフォーカスが移らなかった
+   * （2026-09-30）ので使わない。
+   *
+   * 使うのは 2 つの場面。入力欄のエラーは live region に出ないので、フォーカスを移して
+   * 読ませる。失効ではボタン領域がログイン導線に置き換わり、押したボタンが消えて
+   * フォーカスが body に落ちる（キーボード利用者がページの先頭へ戻される）。
+   */
+  function focusTextareaAfterRender() {
+    setFocusRequest((count) => count + 1);
+  }
+
+  useEffect(() => {
+    if (focusRequest > 0) textareaRef.current?.focus();
+  }, [focusRequest]);
 
   /**
    * 下書きの作成（POST）か更新（PATCH）。savedText には、応答時点の text ではなく
@@ -154,12 +174,14 @@ export function AttemptComposer({
     // 失効。文面は残す（入力欄は常に表示）。ボタン領域はログイン導線に変わる。
     if (isUnauthorized(error)) {
       toast.error(SESSION_EXPIRED_MESSAGE);
+      focusTextareaAfterRender();
       return;
     }
 
     const field = descriptionFieldError(error);
     if (field !== null) {
       setFieldError(field);
+      focusTextareaAfterRender();
       return;
     }
 
@@ -171,6 +193,7 @@ export function AttemptComposer({
     ) {
       forgetDraft();
       setFieldError(DRAFT_GONE_MESSAGE);
+      focusTextareaAfterRender();
       return;
     }
 
@@ -223,6 +246,7 @@ export function AttemptComposer({
     if (isUnauthorized(error)) {
       toast.error(SESSION_EXPIRED_MESSAGE);
       setPhase({ kind: "idle" });
+      focusTextareaAfterRender();
       return;
     }
 
