@@ -15,6 +15,7 @@ import {
   descriptionFieldError,
   DRAFT_GONE_MESSAGE,
   DRAFT_SAVED_MESSAGE,
+  EDIT_NOT_SAVED_MESSAGE,
   fallbackErrorMessage,
   GENERATE_TARGET_GONE_MESSAGE,
   GENERATION_NOT_STARTED_MESSAGE,
@@ -119,11 +120,14 @@ export function AttemptComposer({
 
   useAttemptPolling(phase.kind === "polling" ? phase : null, handlePollOutcome);
 
-  const busy = phase.kind === "saving" || phase.kind === "starting" || phase.kind === "polling";
   // 打ち切り（まだ生成しているかもしれない）の間も押せなくする。下書きは捨ててあるので、
   // 押すと新しい下書きで二度目の生成になり、枠を二重に使う。やり直すときはパネルの
   // 「新しく描写する」を明示的に押してもらう。
-  const blocked = busy || (phase.kind === "stalled" && phase.reason === "timed_out");
+  const blocked =
+    phase.kind === "saving" ||
+    phase.kind === "starting" ||
+    phase.kind === "polling" ||
+    (phase.kind === "stalled" && phase.reason === "timed_out");
   const isSaved = draftId !== null && text === savedText;
   const overLimit = text.length > DESCRIPTION_MAX_LENGTH;
   const panelState = panelStateOf(phase);
@@ -203,10 +207,13 @@ export function AttemptComposer({
 
     if (isUpdate && apiErrorCode(error) === "attempt_not_draft") {
       forgetDraft();
+      // 書き直した文面は保存されていない。黙って合流すると、古い文面の結果を
+      // 自分の新しい文面の結果だと思わせてしまう。文面は入力欄に残っている。
+      setFormError(EDIT_NOT_SAVED_MESSAGE);
       return updatingId;
     }
 
-    // 別タブで削除された、またはお題が削除された下書き。次の保存は新しい下書きになる。
+    // 別タブで削除された、またはお題が削除された下書き（PATCH はお題の削除でも 404）。
     if (isUpdate && error instanceof ApiError && error.status === 404) {
       forgetDraft();
       setFieldError(DRAFT_GONE_MESSAGE);
@@ -333,7 +340,11 @@ export function AttemptComposer({
       return;
     }
 
-    // draft：確かめた結果、起動していなかった。下書きはそのまま使える。
+    // draft：確かめた結果、起動していなかった。下書きはそのまま使える。打ち切りを経て
+    // 「もう一度確認」から来た場合は下書きを捨ててあるので、ここで持ち直す（捨てたままだと
+    // 次に押したとき下書きが重複する）。文面はサーバーに保存されているものを正とする。
+    setDraftId(attempt.id);
+    setSavedText(attempt.description);
     setFormError(GENERATION_NOT_STARTED_MESSAGE);
     setPhase({ kind: "idle" });
   }

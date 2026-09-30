@@ -58,6 +58,10 @@ export function GenerationPanel({
         // 枠は消費済みで、生成は失敗していないかもしれない。「失敗」とは言わない。
         <div className="flex flex-col gap-3">
           <p className="text-ink">まだ生成しています。完成するとみんなの挑戦に表示されます</p>
+          {/* 「新しく描写する」から生成し直すと、進んでいるかもしれない生成とは別に枠を使う。 */}
+          <p className="text-sm text-ink-muted">
+            新しく描写して生成すると、今日の生成回数をもう 1 回使います
+          </p>
           <div>
             <button
               type="button"

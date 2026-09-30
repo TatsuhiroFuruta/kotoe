@@ -14,9 +14,16 @@ import type { FailureReason } from "@/types/api";
 export const DESCRIPTION_MAX_LENGTH = 1_000;
 
 export const DRAFT_SAVED_MESSAGE = "下書きを保存しました";
-/** 保存（PATCH）の 404。生成済み（attempt_not_draft）のときは、これを出さずに確かめに行く。 */
+/**
+ * 保存（PATCH）の 404。下書きの削除だけでなく、お題の削除でも返る（4-4）。
+ * お題が残っていれば次の保存は新しい下書きになり、消えていれば POST が 404 で説明する。
+ */
 export const DRAFT_GONE_MESSAGE =
-  "この下書きは削除されています。もう一度保存すると新しい下書きになります";
+  "この下書きは削除されたか、お題が削除されています。お題が残っていれば、もう一度保存すると新しい下書きになります";
+
+/** 保存（PATCH）の attempt_not_draft。下書きは既に生成済みで、その結果を確かめに行く。 */
+export const EDIT_NOT_SAVED_MESSAGE =
+  "この下書きは既に生成が始まっていたため、書き直した内容は保存されていません。始まっていた生成の結果を表示します";
 export const POST_GONE_MESSAGE = "このお題は削除されました";
 export const GENERATE_TARGET_GONE_MESSAGE = "この下書きは削除されたか、お題が削除されています";
 /**
