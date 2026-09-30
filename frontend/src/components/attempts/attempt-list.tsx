@@ -142,7 +142,7 @@ function AttemptResults({
   }
 
   if (attempts.length === 0) {
-    // 描写への導線は 7-3c（描写フォームがこのセクションの上に入る）。
+    // 描写フォームはこのセクションのすぐ上にある（7-3c）。ここに別の導線は置かない。
     return <EmptyState message="まだ挑戦がありません" />;
   }
 

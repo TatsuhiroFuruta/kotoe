@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { AttemptComposer } from "@/components/attempts/attempt-composer";
 import { AttemptList, type AttemptListState } from "@/components/attempts/attempt-list";
 import { BestAttempts } from "@/components/attempts/best-attempts";
 import { PostHero } from "@/components/posts/post-hero";
@@ -110,9 +111,11 @@ export function PostDetail({ postId, query }: { postId: number; query: PostDetai
       />
       <BestAttempts attempts={current.best_attempts} />
       {/*
-        7-3c：描写フォームはここに入る。current が確定した後はこの位置が再取得で
-        アンマウントされないので、書きかけの文面と生成中のポーリングが保たれる。
+        current が確定した後は、この位置が再取得でアンマウントされない（決定 2）。
+        書きかけの文面と生成中のポーリングは並び替え・ページ送りをまたいで保たれる。
+        公開されたら詳細を取り直して、表彰台とみんなの挑戦に反映する（7-3c 決定 6）。
       */}
+      <AttemptComposer postId={postId} onPublished={retry} />
       <AttemptList postId={postId} query={query} state={listState} onRetry={retry} />
     </div>
   );
