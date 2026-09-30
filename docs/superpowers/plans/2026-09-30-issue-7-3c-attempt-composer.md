@@ -1865,7 +1865,7 @@ docker compose exec -T backend bin/rails runner 'a = Attempt.kept.draft.where("d
 docker compose exec -T backend bin/rails runner 'a = Attempt.kept.generating.where("description LIKE ?", "[7-3c確認]%").order(:id).last; a.update!(status: :published, generated_image_public_id: a.post.image_public_id); puts a.id'
 ```
 
-16. [ ] **応答不明（通信断 → 確かめる → 起動していなかった）**：DevTools → Network → 右クリックの「Block request URL」で `*/generate` をブロック → 生成 → フォームの上に「生成を開始できませんでした。もう一度お試しください」→ ブロックを外して「画像を生成」→ 公開まで進む
+16. [ ] **応答不明（通信断 → 確かめる → 起動していなかった）**：DevTools → Network → 右クリックの「Block request URL」で `*/generate` をブロック → 生成 → フォームの上に「生成の開始を確認できませんでした。もう一度「画像を生成」を押してください」→ ブロックを外して「画像を生成」→ 公開まで進む
 17. [ ] **認証の出し分け**：ログアウト → 入力欄は出ていて、ボタンの位置に「ログインして描写する」→ 押すと `/login?next=%2Fposts%2F<id>` → ログイン後にお題へ戻る。**ログイン済みでお題を直接ロード・リロード**しても「保存」「画像を生成」が出る（メモリの教訓）。`docker compose pause backend` でリロード → `unreachable` の状態で「保存」を押すと、約 15 秒後にフォームの上に通信エラー → `unpause`
 18. [ ] **レイアウト**：スマホ幅（375px）で横スクロールが出ず、「画像を生成」が「保存」の上にある。縦長・横長のお題画像（7-3b の手順で 16:9・3:4 を作ったお題があればそれ）でフォームの位置が崩れない
 19. [ ] **キーボード**：Tab だけで入力 → 保存 → 生成 → ダウンロード → 新しく描写する、まで操作できる。VoiceOver（任意）で「生成中です」「画像が完成しました」が読み上げられる
@@ -2059,4 +2059,11 @@ PR に付いた Vercel のプレビュー URL を開き、`/posts` と、（プ�
 
 ## 実装時の差分
 
-（実装中に計画から外れたことがあれば、ここに追記する）
+- `StartOverButton` を `<div>` で包んだ（flex-col の中でボタンが横幅いっぱいに伸びるため）
+- 最終レビューと `/code-review high` の指摘で次を足した（上の Task のコードは当初の計画のまま残してある。現物は `attempt-composer.tsx` を正とする）
+  - 入力欄のエラー・失効・「もう一度確認」・「新しく描写する」の後に、描画の確定後（effect）で入力欄へフォーカスを移す（`focusTextareaAfterRender`）。`requestAnimationFrame` では実測で移らなかった
+  - 入力し直したら入力欄のエラーを消す
+  - 202 と打ち切り・見つからないの時点で `draftId` を捨てる。打ち切りの間は 2 つのボタンを押せなくし、パネルに「新しく描写する」を置く
+  - 保存（PATCH）の `attempt_not_draft` は、エラーを出さずにその挑戦の確認ポーリングに合流する（`SaveResult` に `joinAttemptId`）。`DRAFT_GONE_MESSAGE` は 404 だけに使い、文言を「削除されています」に絞った
+  - `GENERATION_NOT_STARTED_MESSAGE` を「生成の開始を確認できませんでした。もう一度「画像を生成」を押してください」に変えた
+- 手動 16 は DevTools のリクエストブロックの代わりにページの `fetch` を差し替えて `/generate` を `TypeError` にした。手動 18 は幅 375px の iframe で確かめた（ウィンドウのリサイズが効かなかったため）
