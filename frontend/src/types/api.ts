@@ -78,6 +78,18 @@ export type PostsIndexResponse = {
 export type AttemptStatus = "draft" | "generating" | "published" | "failed";
 
 /**
+ * 生成が失敗した理由（Attempt::FAILURE_REASONS）。文言はフロントの辞書
+ * （lib/attempts/attempt-messages.ts）が持つ。未知の値が来ても表示は辞書側が丸める。
+ */
+export type FailureReason =
+  | "content_policy"
+  | "rate_limited"
+  | "api_error"
+  | "upload_failed"
+  | "internal_error"
+  | "generation_disabled";
+
+/**
  * 挑戦 1 件（AttemptSerializer）。お題詳細の一覧・表彰台と、挑戦 API で共通。
  * お題詳細に出るのは published だけ（Attempt.listing_for）。
  */
@@ -87,8 +99,8 @@ export type Attempt = {
   /** published 以外は null。表示には必ず cloudinaryUrl() を通す */
   generated_image_public_id: string | null;
   status: AttemptStatus;
-  /** failed のときだけ値が入る。7-3c でリテラル型に絞る */
-  failure_reason: string | null;
+  /** failed のときだけ値が入る */
+  failure_reason: FailureReason | null;
   /** 8-4（CLIP）まで常に null。描画しない */
   similarity_score: number | null;
   user: PublicUser;
@@ -114,4 +126,25 @@ export type PostDetailResponse = {
 /** POST / DELETE /api/posts/:id/favorite。どちらも冪等で、更新後の favorited を含む。 */
 export type FavoriteResponse = {
   post: PostSummary;
+};
+
+/** POST /api/posts/:id/attempts・PATCH /api/attempts/:id・POST /api/attempts/:id/generate */
+export type AttemptResponse = {
+  attempt: Attempt;
+};
+
+/** GET /api/attempts/:id。published 以外は本人にしか見えず、それ以外は 404 */
+export type AttemptShowResponse = {
+  attempt: Attempt;
+  post: PostSummary;
+};
+
+/**
+ * 生成を起動できなかったときのボディ（422 / 503）。limit は個人の上限のときだけ、
+ * resets_at（JST の翌 0 時を UTC の ISO 8601 で）は上限のときだけ付く。
+ */
+export type GenerationErrorBody = {
+  error: string;
+  limit?: number;
+  resets_at?: string;
 };
