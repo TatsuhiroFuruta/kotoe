@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { cloudinaryUrl, cloudinaryUrlOrNull } from "@/lib/cloudinary";
+import {
+  cloudinaryDownloadUrl,
+  cloudinaryDownloadUrlOrNull,
+  cloudinaryUrl,
+  cloudinaryUrlOrNull,
+} from "@/lib/cloudinary";
 
 const OPTIONS = { width: 640, aspect: "4:3" } as const;
 
@@ -100,5 +105,70 @@ describe("cloudinaryUrlOrNull", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(cloudinaryUrlOrNull("a/b", OPTIONS)).toBeNull();
+  });
+});
+
+describe("cloudinaryDownloadUrl", () => {
+  const DOWNLOAD = { filename: "kotoe-attempt-12" } as const;
+
+  it("原寸の PNG を添付ファイルとして返す URL を組み立てる", () => {
+    // 生成画像は WebP で保存している（4-3）。.webp のまま落とすと macOS のプレビューで
+    // 開けない環境があるので f_png、ブラウザに表示させず保存させるので fl_attachment。
+    expect(cloudinaryDownloadUrl("kotoe/production/attempts/abc", DOWNLOAD)).toBe(
+      "https://res.cloudinary.com/demo/image/upload/f_png,fl_attachment:kotoe-attempt-12/kotoe/production/attempts/abc",
+    );
+  });
+
+  it("縮小・切り抜きの変換を含めない（ダウンロードは原寸）", () => {
+    const transformation = new URL(cloudinaryDownloadUrl("a/b", DOWNLOAD)).pathname.split("/")[4];
+
+    expect(transformation).toBe("f_png,fl_attachment:kotoe-attempt-12");
+  });
+
+  it.each(["", "a,b", "a/b", "a:b", "a b", "..", "日本語", "a.png"])(
+    "保存名 %j は受け付けない（変換文字列の区切りを混ぜさせない）",
+    (filename) => {
+      expect(() => cloudinaryDownloadUrl("a/b", { filename })).toThrow();
+    },
+  );
+
+  it.each(["", "/a", "a//b", "a/../b"])(
+    "public_id %j は cloudinaryUrl と同じく受け付けない",
+    (publicId) => {
+      expect(() => cloudinaryDownloadUrl(publicId, DOWNLOAD)).toThrow();
+    },
+  );
+
+  it("public_id にどんな文字列が来てもオリジンは res.cloudinary.com に固定される", () => {
+    // href に入る値なので、javascript: や別オリジンになってはいけない（CLAUDE.md の XSS）。
+    for (const publicId of ["javascript:alert(1)", "data:text/html,x", "@evil.example"]) {
+      expect(new URL(cloudinaryDownloadUrl(publicId, DOWNLOAD)).origin).toBe(
+        "https://res.cloudinary.com",
+      );
+    }
+  });
+
+  it("cloud name が未設定なら例外を投げる", () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME", "");
+
+    expect(() => cloudinaryDownloadUrl("a/b", DOWNLOAD)).toThrow(
+      "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME",
+    );
+  });
+});
+
+describe("cloudinaryDownloadUrlOrNull", () => {
+  it("組み立てられるときは cloudinaryDownloadUrl と同じ URL を返す", () => {
+    expect(cloudinaryDownloadUrlOrNull("a/b", { filename: "x" })).toBe(
+      cloudinaryDownloadUrl("a/b", { filename: "x" }),
+    );
+  });
+
+  it("組み立てられないときは null を返し、原因を console.error に残す", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(cloudinaryDownloadUrlOrNull("a/../b", { filename: "x" })).toBeNull();
+    expect(cloudinaryDownloadUrlOrNull("a/b", { filename: "a,b" })).toBeNull();
+    expect(consoleError).toHaveBeenCalledTimes(2);
   });
 });

@@ -7,8 +7,8 @@
  * 幅ごとの srcset で変換数が約 8 倍になる。Cloudinary の無料枠は超過すると
  * 翌月まで全画像が止まるので、変換は 1 画像 1 サイズに抑える（設計書「決定 4」）。
  *
- * ダウンロード用の URL（WebP で保存しているため f_png + fl_attachment が要る。
- * 4-3 からの申し送り）は、使う issue（7-3b / 7-4）で足す。
+ * ダウンロード用の URL は cloudinaryDownloadUrl()（7-3c）。オリジンの固定と public_id の
+ * 検証は内部の deliveryUrl() を共有する（同じ検証を 2 箇所に書かない）。
  */
 
 // 固定する。img の src に入る値なので、public_id がどんな文字列でも
@@ -31,17 +31,17 @@ export type CloudinaryAspect = "4:3" | "1:1";
  */
 export type CloudinaryOptions = { width: number; aspect?: CloudinaryAspect };
 
-export function cloudinaryUrl(publicId: string, { width, aspect }: CloudinaryOptions): string {
+/**
+ * 配信 URL の組み立てと、その前提の検証。表示用・ダウンロード用の両方がここを通る。
+ * caller はエラーメッセージに出す呼び出し元の名前（どちらの関数で落ちたかを残すため）。
+ */
+function deliveryUrl(publicId: string, transformation: string, caller: string): string {
   // 関数の中で読む（モジュールの先頭で読まない）。Next は
   // process.env.NEXT_PUBLIC_* という字面をビルド時に値へ置き換えるので
   // どちらでも本番は動くが、中で読めばテストが vi.stubEnv で差し替えられる。
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
   if (!cloudName) {
     throw new Error("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME が設定されていません");
-  }
-
-  if (!Number.isInteger(width) || width <= 0) {
-    throw new Error(`cloudinaryUrl: 幅は正の整数で指定してください（${width}）`);
   }
 
   // public_id は kotoe/<env>/posts/<id> のように / を含む。/ はパスの区切りとして
@@ -52,16 +52,23 @@ export function cloudinaryUrl(publicId: string, { width, aspect }: CloudinaryOpt
   // 現れないので、来たらデータの異常として落とす。
   const segments = publicId.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
-    throw new Error("cloudinaryUrl: public_id の形式が不正です");
+    throw new Error(`${caller}: public_id の形式が不正です`);
   }
   const path = segments.map(encodeURIComponent).join("/");
+
+  return `${ORIGIN}/${encodeURIComponent(cloudName)}/image/upload/${transformation}/${path}`;
+}
+
+export function cloudinaryUrl(publicId: string, { width, aspect }: CloudinaryOptions): string {
+  if (!Number.isInteger(width) || width <= 0) {
+    throw new Error(`cloudinaryUrl: 幅は正の整数で指定してください（${width}）`);
+  }
 
   // f_auto で配信形式（AVIF / WebP など）をブラウザに合わせ、q_auto で画質を自動にする。
   const size =
     aspect === undefined ? `c_fit,w_${width},h_${width}` : `c_fill,ar_${aspect},w_${width}`;
-  const transformation = `${size},f_auto,q_auto`;
 
-  return `${ORIGIN}/${encodeURIComponent(cloudName)}/image/upload/${transformation}/${path}`;
+  return deliveryUrl(publicId, `${size},f_auto,q_auto`, "cloudinaryUrl");
 }
 
 /**
@@ -83,6 +90,41 @@ export function cloudinaryUrlOrNull(
     return cloudinaryUrl(publicId, options);
   } catch (error) {
     console.error("画像の URL を組み立てられませんでした", error);
+    return null;
+  }
+}
+
+/**
+ * 保存名に使ってよい文字。fl_attachment:<名前> は変換文字列の一部なので、区切り
+ * （, / :）や空白が混ざると別の変換として解釈される。呼び出し側は kotoe-attempt-<id> を渡す。
+ */
+const FILENAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * 生成画像のダウンロード URL（4-3 からの申し送り）。
+ *
+ * - f_png：保存形式の WebP を PNG にする（.webp は macOS のプレビューで開けない環境がある）
+ * - fl_attachment：Content-Disposition: attachment で返させる。<a download> は別オリジンでは
+ *   効かないので、保存させるにはこれが要る
+ * - 縮小しない（原寸 1024px）。表示用と変換が違うので派生画像は別になるが、押された回数しか作られない
+ */
+export function cloudinaryDownloadUrl(publicId: string, { filename }: { filename: string }): string {
+  if (!FILENAME_PATTERN.test(filename)) {
+    throw new Error(`cloudinaryDownloadUrl: 保存名は英数字・-・_ で指定してください（${filename}）`);
+  }
+
+  return deliveryUrl(publicId, `f_png,fl_attachment:${filename}`, "cloudinaryDownloadUrl");
+}
+
+/** 描画中に使う版。cloudinaryUrlOrNull() と同じ理由で、例外を null に丸めて原因を残す。 */
+export function cloudinaryDownloadUrlOrNull(
+  publicId: string,
+  options: { filename: string },
+): string | null {
+  try {
+    return cloudinaryDownloadUrl(publicId, options);
+  } catch (error) {
+    console.error("ダウンロード用の URL を組み立てられませんでした", error);
     return null;
   }
 }
