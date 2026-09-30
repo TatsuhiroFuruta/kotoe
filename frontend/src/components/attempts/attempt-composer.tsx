@@ -236,6 +236,9 @@ export function AttemptComposer({
       const { attempt } = await apiFetch<AttemptResponse>(`/api/attempts/${attemptId}/generate`, {
         method: "POST",
       });
+      // 受け付けられた時点で、この挑戦はもう下書きではない（generating）。持ち続けると
+      // 「保存済み」と表示し、直して押すと PATCH が attempt_not_draft になる。
+      forgetDraft();
       setPhase({ kind: "polling", attemptId: attempt.id, immediate: false });
     } catch (error: unknown) {
       showGenerateError(error, attemptId);
@@ -277,6 +280,10 @@ export function AttemptComposer({
 
   function handlePollOutcome(outcome: PollOutcome, attemptId: number) {
     if (outcome.kind === "not_found" || outcome.kind === "timed_out") {
+      // どちらも「下書きとしてはもう使えない」側に倒す。応答不明の確認が通信エラーの
+      // まま打ち切られた場合は実は draft のこともあるが、そのとき次の保存で下書きが
+      // 1 つ増えるだけで済む（generating の挑戦を PATCH して迷わせるより軽い）。
+      forgetDraft();
       setPhase({ kind: "stalled", attemptId, reason: outcome.kind });
       return;
     }
@@ -308,6 +315,8 @@ export function AttemptComposer({
   function recheck() {
     if (phase.kind !== "stalled") return;
     setPhase({ kind: "polling", attemptId: phase.attemptId, immediate: true });
+    // 押した「もう一度確認」はパネルの切り替えで消え、フォーカスが body に落ちる。
+    focusTextareaAfterRender();
   }
 
   const describedBy = [fieldError !== null ? fieldErrorId : null, counterId]
@@ -337,7 +346,11 @@ export function AttemptComposer({
           id={textareaId}
           ref={textareaRef}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value);
+            // 直している最中に、もう当てはまらないエラーと aria-invalid を残さない。
+            if (fieldError !== null) setFieldError(null);
+          }}
           rows={6}
           placeholder={PLACEHOLDER}
           aria-invalid={fieldError === null ? undefined : true}

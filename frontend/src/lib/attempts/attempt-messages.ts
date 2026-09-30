@@ -18,7 +18,14 @@ export const DRAFT_GONE_MESSAGE =
   "この下書きは生成済みか削除されています。もう一度保存すると新しい下書きになります";
 export const POST_GONE_MESSAGE = "このお題は削除されました";
 export const GENERATE_TARGET_GONE_MESSAGE = "この下書きは削除されたか、お題が削除されています";
-export const GENERATION_NOT_STARTED_MESSAGE = "生成を開始できませんでした。もう一度お試しください";
+/**
+ * 応答が不明だった生成を確かめたら、まだ draft だったとき。「開始できませんでした」と
+ * 断定しない。Render のコールドスタートでは、処理待ちの generate より先に確認の GET が
+ * 返ることがある。もう一度押せば、起動済みなら attempt_not_draft → 確認に合流し、
+ * 未起動なら起動する（サーバーのロックで二重には起動しない）。
+ */
+export const GENERATION_NOT_STARTED_MESSAGE =
+  "生成の開始を確認できませんでした。もう一度「画像を生成」を押してください";
 
 /** 失敗パネルに必ず添える。枠は enqueue 時に消費し、失敗しても戻らない（ドメインの重要ルール）。 */
 export const QUOTA_USED_NOTE = "この生成で今日の生成回数を 1 回使いました";
