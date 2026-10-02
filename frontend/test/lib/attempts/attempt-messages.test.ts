@@ -145,6 +145,16 @@ describe("descriptionFieldError", () => {
     ).toContain("too_short");
   });
 
+  it("Object.prototype のキー名を辞書の値と取り違えない", () => {
+    // `code in DESCRIPTION_MESSAGES` と書くと toString が関数として返り、入力欄の下に
+    // 関数の中身の文字列が出る。failureReasonMessage と同じ理由で hasOwnKey を使っている。
+    const message = descriptionFieldError(
+      new ApiError(422, { errors: { description: ["toString"] } }),
+    );
+
+    expect(message).toBe("描写の内容を確認してください（toString）");
+  });
+
   it.each([
     ["description 以外のフィールド", new ApiError(422, { errors: { base: ["x"] } })],
     ["errors の無い 422", new ApiError(422, { error: "attempt_not_draft" })],
