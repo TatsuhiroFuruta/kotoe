@@ -49,11 +49,18 @@ describe("failureReasonMessage", () => {
     expect(failureReasonMessage("new_reason")).toContain("new_reason");
   });
 
-  it("Object.prototype のキー名を辞書の値と取り違えない", () => {
-    // `reason in FAILURE_MESSAGES` と書くと toString が関数として返り、画面に関数の文字列が出る。
-    expect(failureReasonMessage("toString")).toContain("toString");
-    expect(failureReasonMessage("toString")).toContain("生成できませんでした");
-  });
+  // 辞書を素朴に引くと、Object.prototype から継承したキーで文字列以外が返る。toString や
+  // constructor なら関数（React は描画せず、空の失敗パネルになる）、__proto__ ならオブジェクト
+  // （React の描画が例外で落ちる）。どれも「未知のコード」として扱われること。
+  it.each(["toString", "constructor", "__proto__"])(
+    "Object.prototype のキー名 %s を辞書の値と取り違えない",
+    (reason) => {
+      const message = failureReasonMessage(reason);
+
+      expect(typeof message).toBe("string");
+      expect(message).toContain(reason);
+    },
+  );
 
   it("null でも文を返す", () => {
     expect(failureReasonMessage(null)).toContain("生成できませんでした");
@@ -145,15 +152,19 @@ describe("descriptionFieldError", () => {
     ).toContain("too_short");
   });
 
-  it("Object.prototype のキー名を辞書の値と取り違えない", () => {
-    // `code in DESCRIPTION_MESSAGES` と書くと toString が関数として返り、入力欄の下に
-    // 関数の中身の文字列が出る。failureReasonMessage と同じ理由で hasOwnKey を使っている。
-    const message = descriptionFieldError(
-      new ApiError(422, { errors: { description: ["toString"] } }),
-    );
+  // failureReasonMessage と同じ理由。文字列以外が返ると、入力欄の下のエラー欄が空になる
+  // （関数）か、描画が例外で落ちる（__proto__ のオブジェクト）。
+  it.each(["toString", "constructor", "__proto__"])(
+    "Object.prototype のキー名 %s を辞書の値と取り違えない",
+    (code) => {
+      const message = descriptionFieldError(
+        new ApiError(422, { errors: { description: [code] } }),
+      );
 
-    expect(message).toBe("描写の内容を確認してください（toString）");
-  });
+      expect(typeof message).toBe("string");
+      expect(message).toContain(code);
+    },
+  );
 
   it.each([
     ["description 以外のフィールド", new ApiError(422, { errors: { base: ["x"] } })],
