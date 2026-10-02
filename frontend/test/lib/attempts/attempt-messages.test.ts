@@ -15,6 +15,12 @@ const NOW = Date.parse("2026-09-30T10:00:00Z");
 const HOUR = 60 * 60 * 1000;
 const at = (offsetMs: number) => new Date(NOW + offsetMs).toISOString();
 
+/**
+ * Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値（関数やオブジェクト）が
+ * 返るので、どの翻訳関数でも「未知のコード」として扱われることを確かめる。
+ */
+const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -49,18 +55,13 @@ describe("failureReasonMessage", () => {
     expect(failureReasonMessage("new_reason")).toContain("new_reason");
   });
 
-  // 辞書を素朴に引くと、Object.prototype から継承したキーで文字列以外が返る。toString や
-  // constructor なら関数（React は描画せず、空の失敗パネルになる）、__proto__ ならオブジェクト
-  // （React の描画が例外で落ちる）。どれも「未知のコード」として扱われること。
-  it.each(["toString", "constructor", "__proto__"])(
-    "Object.prototype のキー名 %s を辞書の値と取り違えない",
-    (reason) => {
-      const message = failureReasonMessage(reason);
+  it.each(PROTOTYPE_KEYS)("Object.prototype のキー名 %s は未知のコードとして扱う", (reason) => {
+    const message = failureReasonMessage(reason);
 
-      expect(typeof message).toBe("string");
-      expect(message).toContain(reason);
-    },
-  );
+    expect(typeof message).toBe("string");
+    expect(message).toContain("生成できませんでした");
+    expect(message).toContain(reason);
+  });
 
   it("null でも文を返す", () => {
     expect(failureReasonMessage(null)).toContain("生成できませんでした");
@@ -152,19 +153,13 @@ describe("descriptionFieldError", () => {
     ).toContain("too_short");
   });
 
-  // failureReasonMessage と同じ理由。文字列以外が返ると、入力欄の下のエラー欄が空になる
-  // （関数）か、描画が例外で落ちる（__proto__ のオブジェクト）。
-  it.each(["toString", "constructor", "__proto__"])(
-    "Object.prototype のキー名 %s を辞書の値と取り違えない",
-    (code) => {
-      const message = descriptionFieldError(
-        new ApiError(422, { errors: { description: [code] } }),
-      );
+  it.each(PROTOTYPE_KEYS)("Object.prototype のキー名 %s は未知のコードとして扱う", (code) => {
+    const message = descriptionFieldError(new ApiError(422, { errors: { description: [code] } }));
 
-      expect(typeof message).toBe("string");
-      expect(message).toContain(code);
-    },
-  );
+    expect(typeof message).toBe("string");
+    expect(message).toContain("描写の内容を確認してください");
+    expect(message).toContain(code);
+  });
 
   it.each([
     ["description 以外のフィールド", new ApiError(422, { errors: { base: ["x"] } })],
