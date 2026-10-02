@@ -61,8 +61,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 辞書に自前のキーとしてあるか。`key in record` は Object.prototype のキー（toString など）
- * にも true を返し、関数が文言として画面に出てしまう。
+ * 辞書に自前のキーとしてあるか。`key in record` や `record[key]` は、Object.prototype から
+ * 継承したキー（toString・constructor・__proto__ など）にも値を返し、文言ではない値
+ * （関数やオブジェクト）を文言として扱ってしまう。これらのキーは未知のコードとして扱う。
  */
 function hasOwnKey<T extends object>(record: T, key: string): key is Extract<keyof T, string> {
   return Object.prototype.hasOwnProperty.call(record, key);

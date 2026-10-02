@@ -15,6 +15,12 @@ const NOW = Date.parse("2026-09-30T10:00:00Z");
 const HOUR = 60 * 60 * 1000;
 const at = (offsetMs: number) => new Date(NOW + offsetMs).toISOString();
 
+/**
+ * Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値（関数やオブジェクト）が
+ * 返るので、どの翻訳関数でも「未知のコード」として扱われることを確かめる。
+ */
+const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -49,10 +55,12 @@ describe("failureReasonMessage", () => {
     expect(failureReasonMessage("new_reason")).toContain("new_reason");
   });
 
-  it("Object.prototype のキー名を辞書の値と取り違えない", () => {
-    // `reason in FAILURE_MESSAGES` と書くと toString が関数として返り、画面に関数の文字列が出る。
-    expect(failureReasonMessage("toString")).toContain("toString");
-    expect(failureReasonMessage("toString")).toContain("生成できませんでした");
+  it.each(PROTOTYPE_KEYS)("Object.prototype のキー名 %s は未知のコードとして扱う", (reason) => {
+    const message = failureReasonMessage(reason);
+
+    expect(typeof message).toBe("string");
+    expect(message).toContain("生成できませんでした");
+    expect(message).toContain(reason);
   });
 
   it("null でも文を返す", () => {
@@ -143,6 +151,14 @@ describe("descriptionFieldError", () => {
     expect(
       descriptionFieldError(new ApiError(422, { errors: { description: ["too_short"] } })),
     ).toContain("too_short");
+  });
+
+  it.each(PROTOTYPE_KEYS)("Object.prototype のキー名 %s は未知のコードとして扱う", (code) => {
+    const message = descriptionFieldError(new ApiError(422, { errors: { description: [code] } }));
+
+    expect(typeof message).toBe("string");
+    expect(message).toContain("描写の内容を確認してください");
+    expect(message).toContain(code);
   });
 
   it.each([
