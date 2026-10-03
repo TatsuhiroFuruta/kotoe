@@ -116,7 +116,7 @@ backlog の申し送りは「カードを `<Link>` で包み、いいねボタ�
 | 401 | `SESSION_EXPIRED_MESSAGE`（`api.ts` がトークンを捨てるので、ボタンは「ログインしていいね」に変わる） |
 | 404 | 「この挑戦は削除されました」 |
 | 422 `cannot_like_own_attempt` | 「自分の挑戦にはいいねできません」（ボタンを出さないので通常は起きない。別タブで別アカウントに切り替えたとき用） |
-| その他 | `toRequestErrorMessage(error)` |
+| その他 | `fallbackErrorMessage(error)`（7-3c の規約。4xx はコードを含めて出し、5xx・timeout・通信断は通信エラーの文言） |
 
 ### 決定 6：「リンクをコピー」ボタンを置く
 
@@ -225,7 +225,7 @@ CLAUDE.md の方針どおり、純粋な関数にだけ Vitest を書く。コ�
   - `attemptDetailHref(12)` → `/attempts/12`
 - `test/lib/attempts/attempt-messages.test.ts` に追加
   - `toLikeErrorMessage`：401 / 404 / 422 `cannot_like_own_attempt` / 422 で別のコード・ボディが JSON でない 422
-    （→ `toRequestErrorMessage` と同じ文言）/ 500 / `ApiTimeoutError` / `TypeError`
+    （→ `fallbackErrorMessage` と同じ文言）/ 500 / `ApiTimeoutError` / `TypeError`
 
 ## 手動確認（ローカル）
 
