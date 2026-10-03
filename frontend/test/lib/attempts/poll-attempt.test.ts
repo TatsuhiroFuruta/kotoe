@@ -200,20 +200,30 @@ describe("shouldConfirmGeneration", () => {
     ["timeout", new ApiTimeoutError(15_000)],
     ["通信断", new TypeError("Failed to fetch")],
     ["500", new ApiError(500, null)],
+    ["502（プロキシ）", new ApiError(502, "<html>")],
     ["コードの無い 503（プロキシのエラーページ）", new ApiError(503, "<html>")],
+    ["504（プロキシ）", new ApiError(504, "<html>")],
     ["attempt_not_draft（もう generating になっている）", new ApiError(422, { error: "attempt_not_draft" })],
   ])("%s は応答が不明なので状態を確かめる", (_label, error) => {
     expect(shouldConfirmGeneration(error)).toBe(true);
   });
 
   it.each([
+    // サーバーが「起動しなかった」とコードで答えているもの。
     ["個人の上限", new ApiError(422, { error: "generation_limit_reached" })],
     ["全体の上限", new ApiError(503, { error: "service_generation_limit_reached" })],
     ["キルスイッチ", new ApiError(503, { error: "generation_disabled" })],
+    // 422 の attempt_not_draft 以外の 4xx。AttemptsController#generate が返す 4xx は
+    // 422・404・401 だけで、400・403・409 は返さない。それらも含めて、4xx は既定で確かめない。
     ["404", new ApiError(404, null)],
     ["401", new ApiError(401, { error: "unauthorized" })],
+    ["400", new ApiError(400, null)],
+    ["403", new ApiError(403, null)],
+    ["422 以外の attempt_not_draft", new ApiError(409, { error: "attempt_not_draft" })],
+    ["未知のコードの 422", new ApiError(422, { error: "some_new_code" })],
+    // ApiError でも通信の失敗でもない例外。確かめずに、フォームの上に文で出す。
     ["想定外の例外", new Error("bug")],
-  ])("%s は確かめない（起動していないことが確定している）", (_label, error) => {
+  ])("%s は確かめない", (_label, error) => {
     expect(shouldConfirmGeneration(error)).toBe(false);
   });
 });
