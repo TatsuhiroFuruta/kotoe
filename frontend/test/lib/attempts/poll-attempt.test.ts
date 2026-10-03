@@ -212,6 +212,12 @@ describe("shouldConfirmGeneration", () => {
     ["キルスイッチ", new ApiError(503, { error: "generation_disabled" })],
     ["404", new ApiError(404, null)],
     ["401", new ApiError(401, { error: "unauthorized" })],
+    // 5xx でも attempt_not_draft でもない 4xx。サーバーがリクエストを受け付けなかったと
+    // 答えているので、起動していない。
+    ["400", new ApiError(400, null)],
+    ["403", new ApiError(403, null)],
+    ["409", new ApiError(409, { error: "conflict" })],
+    ["未知のコードの 422", new ApiError(422, { error: "some_new_code" })],
     ["想定外の例外", new Error("bug")],
   ])("%s は確かめない（起動していないことが確定している）", (_label, error) => {
     expect(shouldConfirmGeneration(error)).toBe(false);
