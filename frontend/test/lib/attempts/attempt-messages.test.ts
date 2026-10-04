@@ -2,13 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import {
+  ATTEMPT_GONE_MESSAGE,
+  CANNOT_LIKE_OWN_MESSAGE,
   apiErrorCode,
   descriptionFieldError,
   fallbackErrorMessage,
   failureReasonMessage,
   generationErrorMessage,
   resetsInText,
+  toLikeErrorMessage,
 } from "@/lib/attempts/attempt-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
 import { NETWORK_MESSAGE, SERVER_MESSAGE, TIMEOUT_MESSAGE } from "@/lib/request-error-messages";
 
 const NOW = Date.parse("2026-09-30T10:00:00Z");
@@ -182,5 +186,51 @@ describe("fallbackErrorMessage", () => {
   it("未知の 4xx はコード（無ければステータス）を含めた文にする（無言にしない）", () => {
     expect(fallbackErrorMessage(new ApiError(409, { error: "conflict_x" }))).toContain("conflict_x");
     expect(fallbackErrorMessage(new ApiError(400, null))).toContain("400");
+  });
+});
+
+describe("toLikeErrorMessage", () => {
+  it("401 は失効の文言", () => {
+    expect(toLikeErrorMessage(new ApiError(401, { error: "unauthorized" }))).toBe(
+      SESSION_EXPIRED_MESSAGE,
+    );
+  });
+
+  it("404 は挑戦が削除された文言（挑戦・お題のどちらが削除されても 404）", () => {
+    expect(toLikeErrorMessage(new ApiError(404, { error: "not_found" }))).toBe(ATTEMPT_GONE_MESSAGE);
+  });
+
+  it("422 cannot_like_own_attempt は自分の挑戦の文言", () => {
+    expect(toLikeErrorMessage(new ApiError(422, { error: "cannot_like_own_attempt" }))).toBe(
+      CANNOT_LIKE_OWN_MESSAGE,
+    );
+  });
+
+  it("cannot_like_own_attempt でも 422 以外なら自分の挑戦の文言にしない", () => {
+    expect(toLikeErrorMessage(new ApiError(400, { error: "cannot_like_own_attempt" }))).not.toBe(
+      CANNOT_LIKE_OWN_MESSAGE,
+    );
+  });
+
+  it.each([
+    ["422 で別のコード", new ApiError(422, { error: "something_else" })],
+    ["JSON でないボディの 422", new ApiError(422, "<html>")],
+    ["500", new ApiError(500, null)],
+    ["timeout", new ApiTimeoutError(15_000)],
+    ["通信断", new TypeError("Failed to fetch")],
+  ])("%s は fallbackErrorMessage と同じ", (_label, error) => {
+    expect(toLikeErrorMessage(error)).toBe(fallbackErrorMessage(error));
+  });
+
+  it("fallback に回った 422 はコードを含める（無言にしない）", () => {
+    expect(toLikeErrorMessage(new ApiError(422, { error: "something_else" }))).toContain(
+      "something_else",
+    );
+  });
+
+  it("5xx・timeout・通信断は通信エラーの文言", () => {
+    expect(toLikeErrorMessage(new ApiError(500, null))).toBe(SERVER_MESSAGE);
+    expect(toLikeErrorMessage(new ApiTimeoutError(15_000))).toBe(TIMEOUT_MESSAGE);
+    expect(toLikeErrorMessage(new TypeError("Failed to fetch"))).toBe(NETWORK_MESSAGE);
   });
 });
