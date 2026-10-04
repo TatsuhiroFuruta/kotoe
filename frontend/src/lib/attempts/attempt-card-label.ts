@@ -21,9 +21,6 @@ const EXCERPT_LENGTH = 40;
  *
  * Intl.Segmenter は Firefox では 125 から。無い環境ではコードポイントで数える（描画中に
  * 例外を投げないため）。その場合は上の文字を途中で切ることがある。
- *
- * Segmenter は呼び出しごとに作る。モジュールで 1 つだけ作ると、読み込んだ時点の環境で
- * 経路が決まり、テストで Segmenter の有無を切り替えられない。作る費用は小さい。
  */
 function* charactersOf(text: string): Generator<string> {
   if (typeof Intl.Segmenter !== "function") {
