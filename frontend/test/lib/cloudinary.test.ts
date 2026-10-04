@@ -182,7 +182,9 @@ describe("postImageUrlOrNull", () => {
   });
 
   it("URL を組み立てられなければ null", () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(postImageUrlOrNull("kotoe/../x")).toBeNull();
+    // 握り潰さず原因を残す（cloudinaryUrlOrNull と同じ性質）。
+    expect(consoleError).toHaveBeenCalled();
   });
 });
