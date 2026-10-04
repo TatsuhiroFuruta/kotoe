@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { attemptCardLabel } from "@/lib/attempts/attempt-card-label";
 import { attemptDetailHref } from "@/lib/attempts/attempt-detail-query";
 import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
 import type { Attempt } from "@/types/api";
@@ -23,8 +24,10 @@ export function AttemptCard({ attempt }: { attempt: Attempt }) {
 
   return (
     // href は id（API が返す整数）から組み立てた値だけ。
+    // aria-label で読み上げの名前を短くする（理由は attemptCardLabel）。
     <Link
       href={attemptDetailHref(attempt.id)}
+      aria-label={attemptCardLabel(attempt)}
       className="group block rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <article className="overflow-hidden rounded-card border border-line bg-surface transition-colors group-hover:border-accent">
