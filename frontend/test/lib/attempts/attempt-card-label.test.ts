@@ -49,9 +49,12 @@ describe("attemptCardLabel", () => {
     expect(attemptCardLabel(attempt(text))).toBe(`${"あ".repeat(39)}…、taro さんの挑戦、いいね 3`);
   });
 
-  it("Intl.Segmenter が無いブラウザでも例外にせず、コードポイントで切る", () => {
-    vi.stubGlobal("Intl", { ...Intl, Segmenter: undefined });
-    const text = "😀".repeat(41);
-    expect(attemptCardLabel(attempt(text))).toBe(`${"😀".repeat(40)}…、taro さんの挑戦、いいね 3`);
+  it("Intl.Segmenter が無いブラウザでも例外にせず、コードポイントで数える", () => {
+    // Intl のプロパティは列挙できないので、スプレッドでは写せない。Segmenter だけを隠す。
+    vi.stubGlobal("Intl", Object.assign(Object.create(Intl), { Segmenter: undefined }));
+    // 👍🏽 は 2 コードポイントで 1 書記素。21 個は書記素なら 21 文字（切らない）、
+    // コードポイントなら 42 文字（40 で切る）になり、どちらの経路を通ったかが分かる。
+    const text = "👍🏽".repeat(21);
+    expect(attemptCardLabel(attempt(text))).toBe(`${"👍🏽".repeat(20)}…、taro さんの挑戦、いいね 3`);
   });
 });

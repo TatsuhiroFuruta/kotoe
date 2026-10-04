@@ -19,15 +19,20 @@ const EXCERPT_LENGTH = 40;
  * 文字を先頭から 1 つずつ返す。書記素（見た目の 1 文字）で数えるのは、コードポイントで切ると
  * ZWJ でつないだ絵文字や肌の色の修飾子、結合文字の濁点を途中で切ってしまうため。
  *
- * Intl.Segmenter は Firefox では 125 から。無い環境で例外にすると挑戦の一覧ごと描画できなく
- * なるので、そのときはコードポイントで数える（読み上げ名の末尾が少し崩れるだけで済む）。
+ * Intl.Segmenter は Firefox では 125 から。無い環境ではコードポイントで数える（描画中に
+ * 例外を投げないため）。その場合は上の文字を途中で切ることがある。
+ *
+ * Segmenter は呼び出しごとに作る。モジュールで 1 つだけ作ると、読み込んだ時点の環境で
+ * 経路が決まり、テストで Segmenter の有無を切り替えられない。作る費用は小さい。
  */
-function charactersOf(text: string): Iterable<string> {
-  if (typeof Intl.Segmenter !== "function") return text;
-  const segments = new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(text);
-  return (function* () {
-    for (const { segment } of segments) yield segment;
-  })();
+function* charactersOf(text: string): Generator<string> {
+  if (typeof Intl.Segmenter !== "function") {
+    yield* text;
+    return;
+  }
+  for (const { segment } of new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(text)) {
+    yield segment;
+  }
 }
 
 function excerptOf(text: string): string {
