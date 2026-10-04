@@ -95,6 +95,20 @@ export function cloudinaryUrlOrNull(
 }
 
 /**
+ * お題の元画像を切り抜かずに出す URL。詳細のヒーローと比較ビュー（7-4）で同じ変換を使い、
+ * 派生画像を 1 つにする（上の「1 画像 1 サイズ」）。比較ビューの枠は 1280 より小さいが、
+ * 別の幅にすると、お題ごとに派生画像が 1 つ増える。
+ *
+ * 1280 は、本文の最大幅（max-w-5xl ≒ 1024px）に対し Retina で少し足りない程度の 1 本。
+ * 幅を増やすほど変換と転送量が増える（7-3a 設計書「決定 4」）。
+ */
+const POST_IMAGE_OPTIONS: CloudinaryOptions = { width: 1280 };
+
+export function postImageUrlOrNull(publicId: string): string | null {
+  return cloudinaryUrlOrNull(publicId, POST_IMAGE_OPTIONS);
+}
+
+/**
  * 保存名に使ってよい文字。fl_attachment:<名前> は変換文字列の一部なので、区切り
  * （, / :）や空白が混ざると別の変換として解釈される。呼び出し側は kotoe-attempt-<id> を渡す。
  */

@@ -105,7 +105,7 @@ export type Attempt = {
   similarity_score: number | null;
   user: PublicUser;
   likes_count: number;
-  /** リクエストした本人がいいね済みか。7-4 まで描画しない */
+  /** リクエストした本人がいいね済みか。未ログインなら常に false。描画するのは比較ビューだけ */
   liked: boolean;
   /** ISO 8601（UTC） */
   created_at: string;
@@ -137,6 +137,11 @@ export type AttemptResponse = {
 export type AttemptShowResponse = {
   attempt: Attempt;
   post: PostSummary;
+};
+
+/** POST / DELETE /api/attempts/:id/like。どちらも冪等で、更新後の liked と likes_count を含む。 */
+export type LikeResponse = {
+  attempt: Attempt;
 };
 
 /**

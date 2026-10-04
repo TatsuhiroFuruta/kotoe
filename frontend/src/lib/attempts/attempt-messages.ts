@@ -4,6 +4,7 @@
 // 通信そのものの失敗（timeout・通信断・5xx）の文言は lib/request-error-messages.ts にある。
 
 import { ApiError } from "@/lib/api";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import type { FailureReason } from "@/types/api";
 
@@ -37,6 +38,14 @@ export const GENERATION_NOT_STARTED_MESSAGE =
 
 /** 失敗パネルに必ず添える。枠は enqueue 時に消費し、失敗しても戻らない（ドメインの重要ルール）。 */
 export const QUOTA_USED_NOTE = "この生成で今日の生成回数を 1 回使いました";
+
+/** いいねの 404。挑戦の削除だけでなく、お題の削除でも返る（5-1）。 */
+export const ATTEMPT_GONE_MESSAGE = "この挑戦は削除されました";
+/**
+ * いいねの 422 cannot_like_own_attempt。比較ビューは自分の挑戦にボタンを出さないので、
+ * 届くのは画面を開いた後に別タブで別アカウントへ切り替えたときなど。
+ */
+export const CANNOT_LIKE_OWN_MESSAGE = "自分の挑戦にはいいねできません";
 
 const FAILURE_MESSAGES: Record<FailureReason, string> = {
   content_policy:
@@ -153,4 +162,23 @@ export function fallbackErrorMessage(error: unknown): string {
     return `操作を完了できませんでした（${apiErrorCode(error) ?? error.status}）`;
   }
   return toRequestErrorMessage(error);
+}
+
+/**
+ * いいね（POST / DELETE :like）の失敗を 1 文にする。無言にしない（FavoriteButton と同じ方針）。
+ *
+ * 401 は失効。api.ts がトークンを捨てるので、ボタンはすぐ「ログインしていいね」に変わる。
+ * 理由を伝えないと、押したら別のボタンに化けたようにしか見えない。
+ */
+export function toLikeErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 401) return SESSION_EXPIRED_MESSAGE;
+  if (error instanceof ApiError && error.status === 404) return ATTEMPT_GONE_MESSAGE;
+  if (
+    error instanceof ApiError &&
+    error.status === 422 &&
+    apiErrorCode(error) === "cannot_like_own_attempt"
+  ) {
+    return CANNOT_LIKE_OWN_MESSAGE;
+  }
+  return fallbackErrorMessage(error);
 }

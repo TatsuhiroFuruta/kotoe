@@ -14,3 +14,6 @@
 .idea/
 *.swp
 .claude/settings.local.json
+
+# superpowers の brainstorming で作るモックアップ（ローカルのみ）
+.superpowers/

@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import { buttonClasses } from "@/components/ui/button";
+import { attemptDetailHref } from "@/lib/attempts/attempt-detail-query";
 import { QUOTA_USED_NOTE, failureReasonMessage } from "@/lib/attempts/attempt-messages";
 import { cloudinaryDownloadUrlOrNull, cloudinaryUrlOrNull } from "@/lib/cloudinary";
 import type { Attempt } from "@/types/api";
@@ -126,6 +129,12 @@ function PublishedResult({ attempt, onStartOver }: { attempt: Attempt; onStartOv
           {attempt.description}
         </p>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href={attemptDetailHref(attempt.id)}
+            className={`${buttonClasses({ variant: "secondary", size: "sm" })} text-sm`}
+          >
+            お題と見比べる
+          </Link>
           {downloadHref !== null && (
             // download 属性は付けない（別オリジンでは効かない）。fl_attachment で保存させる。
             <a
@@ -138,7 +147,6 @@ function PublishedResult({ attempt, onStartOver }: { attempt: Attempt; onStartOv
           <StartOverButton onClick={onStartOver} />
         </div>
       </div>
-      {/* 7-4：/attempts/[id] ができたら、ここに比較ビューへのリンクを足す。 */}
     </div>
   );
 }

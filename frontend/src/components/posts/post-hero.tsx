@@ -1,10 +1,6 @@
 import { FavoriteButton } from "@/components/posts/favorite-button";
-import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
+import { postImageUrlOrNull } from "@/lib/cloudinary";
 import type { PostSummary } from "@/types/api";
-
-// 本文の最大幅（max-w-5xl ≒ 1024px）に対し、Retina で少し足りない程度の 1 本に抑える。
-// 幅を増やすほど変換と転送量が増える（7-3a 設計書「決定 4」の「1 画像 1 サイズ」）。
-const HERO_WIDTH = 1280;
 
 /**
  * 元画像・タイトル・投稿者・お気に入り。
@@ -26,7 +22,7 @@ export function PostHero({
   favorited: boolean;
   onFavoritedChange: (favorited: boolean) => void;
 }) {
-  const src = cloudinaryUrlOrNull(post.image_public_id, { width: HERO_WIDTH });
+  const src = postImageUrlOrNull(post.image_public_id);
 
   return (
     <section className="flex flex-col gap-4">
