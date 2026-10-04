@@ -1,9 +1,9 @@
-import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
+import { cloudinaryUrlOrNull, postImageUrlOrNull } from "@/lib/cloudinary";
 import type { Attempt, PostSummary } from "@/types/api";
 
-// 再現画像はカード・結果パネルと同じ変換にし、Cloudinary の派生画像を共有する（7-3b 設計書「決定 4」）。
-// 元画像も同じ幅にそろえる（枠の大きさが同じなので、片方だけ細かくしても見比べる役に立たない）。
-const IMAGE_WIDTH = 640;
+// 再現画像はカード・結果パネルと、元画像はお題詳細のヒーローと同じ変換にし、Cloudinary の
+// 派生画像を共有する（7-3b 設計書「決定 4」・cloudinary.ts の「1 画像 1 サイズ」）。
+const GENERATED_IMAGE_WIDTH = 640;
 
 /**
  * 元画像と再現画像を、同じ幅の正方形枠 2 つで並べる（7-4 設計書「決定 4」）。
@@ -13,10 +13,12 @@ const IMAGE_WIDTH = 640;
  * 枠に object-contain で収め、余白は bg-line の帯になる。再現画像は 1:1 なので枠いっぱいになる。
  */
 export function AttemptComparison({ post, attempt }: { post: PostSummary; attempt: Attempt }) {
-  const originalSrc = cloudinaryUrlOrNull(post.image_public_id, { width: IMAGE_WIDTH });
+  const originalSrc = postImageUrlOrNull(post.image_public_id);
   const publicId = attempt.generated_image_public_id;
   const generatedSrc =
-    publicId === null ? null : cloudinaryUrlOrNull(publicId, { width: IMAGE_WIDTH, aspect: "1:1" });
+    publicId === null
+      ? null
+      : cloudinaryUrlOrNull(publicId, { width: GENERATED_IMAGE_WIDTH, aspect: "1:1" });
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">

@@ -187,7 +187,7 @@ backlog の申し送りは「カードを `<Link>` で包み、いいねボタ�
 
 - 再現画像：`cloudinaryUrlOrNull(id, { width: 640, aspect: "1:1" })`。カードと同じ変換なので、
   Cloudinary の派生画像を共有できる（7-3b からの申し送り）
-- 元画像：`cloudinaryUrlOrNull(post.image_public_id, { width: 640 })`。縦横比は指定しない（切り抜かない）
+- 元画像：`postImageUrlOrNull(post.image_public_id)`（切り抜かず幅 1280）。お題詳細のヒーローと同じ変換にして派生画像を共有する（`cloudinary.ts` の「1 画像 1 サイズ」。当初は 640 としていたが、お題ごとに派生画像が 1 つ増えるため `/code-review` の指摘で変更）
 - null のときは同じ寸法の空枠（`role="img"` と `aria-label`）を出す（カードと同じ）
 - どちらも画面の最初に見えるので `loading="lazy"` は付けない
 - `alt`：元画像はお題のタイトル、再現画像は「{name} さんの再現画像」（カードと同じ。描写文は入れない）

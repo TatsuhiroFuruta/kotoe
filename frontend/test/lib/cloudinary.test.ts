@@ -5,6 +5,7 @@ import {
   cloudinaryDownloadUrlOrNull,
   cloudinaryUrl,
   cloudinaryUrlOrNull,
+  postImageUrlOrNull,
 } from "@/lib/cloudinary";
 
 const OPTIONS = { width: 640, aspect: "4:3" } as const;
@@ -170,5 +171,18 @@ describe("cloudinaryDownloadUrlOrNull", () => {
     expect(cloudinaryDownloadUrlOrNull("a/../b", { filename: "x" })).toBeNull();
     expect(cloudinaryDownloadUrlOrNull("a/b", { filename: "a,b" })).toBeNull();
     expect(consoleError).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("postImageUrlOrNull", () => {
+  it("お題の元画像を切り抜かずに 1280 で返す（ヒーローと比較ビューで派生画像を共有する）", () => {
+    expect(postImageUrlOrNull("kotoe/production/posts/abc123")).toBe(
+      cloudinaryUrl("kotoe/production/posts/abc123", { width: 1280 }),
+    );
+  });
+
+  it("URL を組み立てられなければ null", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(postImageUrlOrNull("kotoe/../x")).toBeNull();
   });
 });
