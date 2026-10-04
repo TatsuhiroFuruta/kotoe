@@ -97,7 +97,7 @@ describe("cloudinaryUrlOrNull", () => {
       const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
       expect(cloudinaryUrlOrNull(publicId, OPTIONS)).toBeNull();
-      expect(consoleError).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledTimes(1);
     },
   );
 
@@ -185,6 +185,6 @@ describe("postImageUrlOrNull", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(postImageUrlOrNull("kotoe/../x")).toBeNull();
     // 握り潰さず原因を残す（cloudinaryUrlOrNull と同じ性質）。
-    expect(consoleError).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledTimes(1);
   });
 });
