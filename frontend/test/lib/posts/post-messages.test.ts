@@ -190,15 +190,33 @@ describe("toLeftPageFailureMessage", () => {
     expect(toLeftPageFailureMessage(errors)).toBe(`お題を投稿できませんでした（${reason}）`);
   });
 
-  it("フォーム上部のエラーは、文を入れ子にせず「もう一度投稿してください」にする", () => {
-    // 上部の文言は「投稿できませんでした。入力内容を…」のような完結した文で、括弧に入れると重複・入れ子になる。
+  it.each([
+    ["画像の保存の失敗（502）", UPLOAD_FAILED_MESSAGE],
+    ["通信断", NETWORK_MESSAGE],
+    ["その他の 4xx", "操作を完了できませんでした（413）"],
+  ])("フォーム上部の %s は、文を括弧に入れず「。」でつないで添える", (_label, message) => {
+    expect(
+      toLeftPageFailureMessage({ image: null, title: null, form: { kind: "message", message } }),
+    ).toBe(`お題を投稿できませんでした。${message}`);
+  });
+
+  it("画面に無い欄のエラーは、もう無いフォームを指す文になるので汎用の文にする", () => {
     expect(
       toLeftPageFailureMessage({
         image: null,
         title: null,
-        form: { kind: "message", message: "投稿できませんでした。入力内容を確認してください" },
+        form: { kind: "message", message: UNKNOWN_FIELD_MESSAGE },
       }),
-    ).toBe(POST_FAILED_AFTER_LEAVE_MESSAGE);
-    expect(POST_FAILED_AFTER_LEAVE_MESSAGE).toBe("お題を投稿できませんでした。もう一度投稿してください");
+    ).toBe("お題を投稿できませんでした。もう一度投稿してください");
+  });
+
+  it("欄と上部の両方にエラーがあるときは、欄の理由を添える", () => {
+    expect(
+      toLeftPageFailureMessage({
+        image: "画像を選んでください",
+        title: null,
+        form: { kind: "message", message: UNKNOWN_FIELD_MESSAGE },
+      }),
+    ).toBe("お題を投稿できませんでした（画像を選んでください）");
   });
 });

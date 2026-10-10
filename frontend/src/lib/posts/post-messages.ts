@@ -24,7 +24,7 @@ export const POST_TIMEOUT_MESSAGE =
  * 成功のときはトーストを出すので、失敗で何も出さないと「投稿された」と受け取られる。
  */
 export const POST_FAILED_AFTER_LEAVE_MESSAGE = "お題を投稿できませんでした。もう一度投稿してください";
-/** 欄の理由を添えるときの書き出し。欄の文言は短い句なので括弧に入れられる */
+/** 理由を添えるときの書き出し */
 const POST_FAILED_PREFIX = "お題を投稿できませんでした";
 /** 422 のうち、画面に欄が無いもの。何も表示されない状態を作らないための受け皿 */
 export const UNKNOWN_FIELD_MESSAGE = "投稿できませんでした。入力内容を確認してください";
@@ -158,14 +158,20 @@ export function toPostFormErrors(error: unknown): PostFormErrors {
 /**
  * 送信中に画面を離れたあとの失敗を、トーストの 1 文にする。
  * timeout は「投稿されている場合がある」をそのまま伝える（押し直して二重にしないため）。
- * 欄のエラーは理由を添える。理由が無いと、同じファイルを送り直してまた弾かれる。
- * フォーム上部の文言は完結した文なので添えない（括弧に入れると重複・入れ子になり、
- * 「入力内容を確認してください」のように、もう無いフォームを指す文も混ざる）。
+ * 理由は必ず添える。理由が無いと、同じファイルを送り直してまた弾かれたり、止まっている
+ * サービスにまた送ったりする。欄の文言は短い句なので括弧に入れ、上部の文言は完結した文なので
+ * 「。」でつなぐ（括弧に入れると入れ子になる）。UNKNOWN_FIELD_MESSAGE だけは「入力内容を確認して
+ * ください」ともう無いフォームを指すので、汎用の文にする。
  */
 export function toLeftPageFailureMessage(errors: PostFormErrors): string {
   if (errors.form?.kind === "timeout") return POST_TIMEOUT_MESSAGE;
   if (errors.form?.kind === "session_expired") return SESSION_EXPIRED_MESSAGE;
 
-  const reason = errors.image ?? errors.title;
-  return reason === null ? POST_FAILED_AFTER_LEAVE_MESSAGE : `${POST_FAILED_PREFIX}（${reason}）`;
+  const fieldReason = errors.image ?? errors.title;
+  if (fieldReason !== null) return `${POST_FAILED_PREFIX}（${fieldReason}）`;
+
+  if (errors.form?.kind === "message" && errors.form.message !== UNKNOWN_FIELD_MESSAGE) {
+    return `${POST_FAILED_PREFIX}。${errors.form.message}`;
+  }
+  return POST_FAILED_AFTER_LEAVE_MESSAGE;
 }
