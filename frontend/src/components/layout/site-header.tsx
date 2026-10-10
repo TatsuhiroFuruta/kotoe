@@ -37,8 +37,8 @@ export function SiteHeader() {
 
           {/*
             ナビのリンクは、そのルートを作る issue がここに足す。
-            7-5:「お題を投稿」→ /posts/new ／ 7-6: アバター → /mypage ／
-            7-7:「ランキング」→ /rankings。
+            7-6: アバター → /mypage ／ 7-7:「ランキング」→ /rankings。
+            「お題を投稿」（7-5）は右側のアカウント側にボタンとして置いてある（デザインブリーフ 0）。
             main は Vercel の本番を追跡するので、存在しないルートへのリンクは置かない
             （置いた瞬間に本番で 404 になる）。
 
@@ -62,6 +62,18 @@ export function SiteHeader() {
           */}
           {auth.status === "loading" && (
             <span className="h-4 w-24 rounded bg-line" aria-hidden="true" />
+          )}
+
+          {/*
+            loading 以外では常に出す（7-5 設計書「決定 5」）。未ログインで押すと RequireAuth が
+            /login?next=/posts/new へ送り、ログイン後に戻ってくる。unreachable でも押した先で
+            再試行の画面が出るので、行き止まりにはならない。loading で出さないのは、
+            スケルトンの幅が状態によって変わらないようにするため。
+          */}
+          {auth.status !== "loading" && (
+            <Link href="/posts/new" className={buttonClasses({ size: "sm" })}>
+              お題を投稿
+            </Link>
           )}
 
           {auth.status === "unauthenticated" && (
