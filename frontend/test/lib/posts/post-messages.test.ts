@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import {
@@ -19,6 +19,10 @@ import { NETWORK_MESSAGE, SERVER_MESSAGE } from "@/lib/request-error-messages";
 const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];
 
 const unprocessable = (errors: unknown) => new ApiError(422, { errors });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("isBlankTitle", () => {
   it.each(["", " ", "　", "\n\t ", " 　\n"])("%j は空として扱う（Rails の presence と同じ）", (title) => {
@@ -191,32 +195,22 @@ describe("toLeftPageFailureMessage", () => {
   });
 
   it.each([
-    ["画像の保存の失敗（502）", UPLOAD_FAILED_MESSAGE],
-    ["通信断", NETWORK_MESSAGE],
-    ["その他の 4xx", "操作を完了できませんでした（413）"],
-  ])("フォーム上部の %s は、文を括弧に入れず「。」でつないで添える", (_label, message) => {
-    expect(
-      toLeftPageFailureMessage({ image: null, title: null, form: { kind: "message", message } }),
-    ).toBe(`お題を投稿できませんでした。${message}`);
-  });
-
-  it("画面に無い欄のエラーは、もう無いフォームを指す文になるので汎用の文にする", () => {
-    expect(
-      toLeftPageFailureMessage({
-        image: null,
-        title: null,
-        form: { kind: "message", message: UNKNOWN_FIELD_MESSAGE },
-      }),
-    ).toBe("お題を投稿できませんでした。もう一度投稿してください");
+    ["画像の保存の失敗（502）", new ApiError(502, { error: "image_upload_failed" })],
+    ["通信断（サーバーではお題ができている場合がある）", new TypeError("Failed to fetch")],
+    ["その他の 4xx", new ApiError(413, null)],
+    ["画面に無い欄の 422", new ApiError(422, { errors: { user: ["must_exist"] } })],
+    ["想定外の例外", new Error("unexpected")],
+  ])("%s は、投稿されていないか確かめてから時間をおいて送り直すよう伝える", (_label, error) => {
+    // 上部用の文言（「入力内容を確認して…」「読み込みに失敗しました」など）は流用しない。
+    // 失敗を断定すると、サーバーでは作られていた場合に二重投稿を誘う。
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(toLeftPageFailureMessage(toPostFormErrors(error))).toBe(POST_FAILED_AFTER_LEAVE_MESSAGE);
+    expect(POST_FAILED_AFTER_LEAVE_MESSAGE).toContain("投稿されていないか");
   });
 
   it("欄と上部の両方にエラーがあるときは、欄の理由を添える", () => {
     expect(
-      toLeftPageFailureMessage({
-        image: "画像を選んでください",
-        title: null,
-        form: { kind: "message", message: UNKNOWN_FIELD_MESSAGE },
-      }),
+      toLeftPageFailureMessage(toPostFormErrors(unprocessable({ image: ["image_missing"], user: ["x"] }))),
     ).toBe("お題を投稿できませんでした（画像を選んでください）");
   });
 });
