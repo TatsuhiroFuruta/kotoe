@@ -2,6 +2,7 @@
 // （CLAUDE.md「メッセージ・エラー・i18n の責務」）。
 //
 // 送る前の確認（image-file-check.ts）もバックと同じコードを返すので、同じ辞書で翻訳する。
+// 例外は image_empty（0 バイト）で、フロントだけが返す。バックが送らないからといって辞書から消さないこと。
 // 通信そのものの失敗（timeout 以外）の文言は lib/request-error-messages.ts にある。
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
@@ -22,7 +23,9 @@ export const POST_TIMEOUT_MESSAGE =
  * 送信中に画面を離れたあとで失敗したとき。フォームはもう無いので、欄の文言は見せられない。
  * 成功のときはトーストを出すので、失敗で何も出さないと「投稿された」と受け取られる。
  */
-export const POST_FAILED_AFTER_LEAVE_MESSAGE = "お題を投稿できませんでした";
+export const POST_FAILED_AFTER_LEAVE_MESSAGE = "お題を投稿できませんでした。もう一度投稿してください";
+/** 欄の理由を添えるときの書き出し。欄の文言は短い句なので括弧に入れられる */
+const POST_FAILED_PREFIX = "お題を投稿できませんでした";
 /** 422 のうち、画面に欄が無いもの。何も表示されない状態を作らないための受け皿 */
 export const UNKNOWN_FIELD_MESSAGE = "投稿できませんでした。入力内容を確認してください";
 
@@ -155,13 +158,14 @@ export function toPostFormErrors(error: unknown): PostFormErrors {
 /**
  * 送信中に画面を離れたあとの失敗を、トーストの 1 文にする。
  * timeout は「投稿されている場合がある」をそのまま伝える（押し直して二重にしないため）。
- * それ以外は理由を添える。理由が無いと、同じファイルを送り直してまた弾かれる。
+ * 欄のエラーは理由を添える。理由が無いと、同じファイルを送り直してまた弾かれる。
+ * フォーム上部の文言は完結した文なので添えない（括弧に入れると重複・入れ子になり、
+ * 「入力内容を確認してください」のように、もう無いフォームを指す文も混ざる）。
  */
 export function toLeftPageFailureMessage(errors: PostFormErrors): string {
   if (errors.form?.kind === "timeout") return POST_TIMEOUT_MESSAGE;
   if (errors.form?.kind === "session_expired") return SESSION_EXPIRED_MESSAGE;
 
-  const reason =
-    errors.image ?? errors.title ?? (errors.form?.kind === "message" ? errors.form.message : null);
-  return reason === null ? POST_FAILED_AFTER_LEAVE_MESSAGE : `${POST_FAILED_AFTER_LEAVE_MESSAGE}（${reason}）`;
+  const reason = errors.image ?? errors.title;
+  return reason === null ? POST_FAILED_AFTER_LEAVE_MESSAGE : `${POST_FAILED_PREFIX}（${reason}）`;
 }

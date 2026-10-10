@@ -64,6 +64,10 @@ export function PostForm() {
   );
   // 送信中に別のページへ移ったかどうか。移ったあとに成功しても、お題詳細へ連れ戻さない。
   const mountedRef = useRef(false);
+  // 二重送信の防止。同じタスクの中で submit が 2 回呼ばれると（requestSubmit() の連続呼び出しで
+  // 実測、2026-10-10）、state の submitting はまだ更新前で、POST が 2 本送られお題が 2 件できた。
+  // ref は代入した時点で次の呼び出しから見える。state は disabled と「投稿中…」の表示に使う。
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     // StrictMode の模擬的な再マウントでも true に戻るよう、本体で立てる。
@@ -120,9 +124,7 @@ export function PostForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // disabled と同じ値を見る保険。送信中は既定ボタンが disabled なので、Enter による
-    // 暗黙の送信もここまで来ない（ログイン画面などと同じ形）。
-    if (submitting) return;
+    if (submittingRef.current) return;
 
     setFormError(null);
     const missingImage = selection === null;
@@ -137,6 +139,7 @@ export function PostForm() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     const body = new FormData();
     body.append("post[title]", title);
@@ -163,6 +166,8 @@ export function PostForm() {
   }
 
   function showSubmitError(errors: PostFormErrors) {
+    submittingRef.current = false;
+
     // 送信中に画面を離れていたら、フォームはもう無い。成功だけトーストが出て失敗が無言だと、
     // 投稿されたと受け取られるので、失敗もトーストで伝える。
     if (!mountedRef.current) {
@@ -179,12 +184,12 @@ export function PostForm() {
       return;
     }
 
-    // サーバーが画像を弾いたら、選んだ時点で弾いたとき（handleSelect）と同じく選択を外す。
-    // 残すとエラーがプレビューの下に出て、押し直すと同じファイルをまた送ってしまう。
     setImageError(errors.image);
     setTitleError(errors.title);
     setFormError(errors.form);
     if (errors.image !== null) {
+      // サーバーが画像を弾いたら、選んだ時点で弾いたとき（handleSelect）と同じく選択を外す。
+      // 残すとエラーがプレビューの下に出て、押し直すと同じファイルをまた送ってしまう。
       setSelection(null);
       requestFocus("image");
     } else if (errors.title !== null) {

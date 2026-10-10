@@ -5,7 +5,8 @@
 // 15MB の写真を弱い回線で送ると、数分待ったあとに弾かれる（7-5 設計書「決定 2」）。
 // 値がずれてもバックが最終的に弾くので、安全側に倒れる。バックの値を変えたらここも直すこと。
 //
-// 返すのはバックと同じエラーコード。翻訳の辞書（post-messages.ts）を 1 つで済ませるため。
+// 返すのは基本的にバックと同じエラーコード。翻訳の辞書（post-messages.ts）を 1 つで済ませるため。
+// 0 バイトの image_empty だけはフロント専用（ImageFileErrorCode の説明を参照）。
 
 /** Images::Validation::MAX_BYTES（5.megabytes = 5 * 1024 * 1024） */
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;

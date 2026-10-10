@@ -34,11 +34,13 @@ function FilePreview({ file }: { file: File }) {
         <p className="text-ink">この画像はプレビューできません</p>
         <p className="max-w-full truncate text-ink-muted">{file.name}</p>
         {/*
-          このファイルについて「投稿できる」とは言わない。種類の分からないファイルは確認を
-          素通りする（image-file-check.ts）ので、名前で判断して約束するとバックの 422 と食い違う。
-          HEIC を選んだ人が不安にならないよう、一般的な事実として添えるだけにする。
+          HEIC / HEIF の名前のときだけ、一般的な事実として添える。どの失敗にも出すと、壊れた JPEG に
+          「そのまま投稿できます」と読めてしまう。種類の分からないファイルは確認を素通りする
+          （image-file-check.ts）ので、このファイルが投稿できるとは言い切らない。
         */}
-        <p className="text-ink-muted">HEIC・HEIF はブラウザによってプレビューできませんが、そのまま投稿できます</p>
+        {/\.hei[cf]$/i.test(file.name) && (
+          <p className="text-ink-muted">HEIC・HEIF はブラウザによってプレビューできませんが、そのまま投稿できます</p>
+        )}
       </div>
     );
   }

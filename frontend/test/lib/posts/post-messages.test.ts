@@ -186,8 +186,19 @@ describe("toLeftPageFailureMessage", () => {
   it.each([
     ["画像", { image: "JPEG・PNG・WebP・HEIC の画像を選んでください", title: null, form: null }, "JPEG・PNG・WebP・HEIC の画像を選んでください"],
     ["タイトル", { image: null, title: "タイトルを入力してください", form: null }, "タイトルを入力してください"],
-    ["フォーム上部", { image: null, title: null, form: { kind: "message" as const, message: "サーバーでエラー" } }, "サーバーでエラー"],
   ])("%s のエラーは理由を添える（同じものを送り直して、また弾かれないように）", (_label, errors, reason) => {
-    expect(toLeftPageFailureMessage(errors)).toBe(`${POST_FAILED_AFTER_LEAVE_MESSAGE}（${reason}）`);
+    expect(toLeftPageFailureMessage(errors)).toBe(`お題を投稿できませんでした（${reason}）`);
+  });
+
+  it("フォーム上部のエラーは、文を入れ子にせず「もう一度投稿してください」にする", () => {
+    // 上部の文言は「投稿できませんでした。入力内容を…」のような完結した文で、括弧に入れると重複・入れ子になる。
+    expect(
+      toLeftPageFailureMessage({
+        image: null,
+        title: null,
+        form: { kind: "message", message: "投稿できませんでした。入力内容を確認してください" },
+      }),
+    ).toBe(POST_FAILED_AFTER_LEAVE_MESSAGE);
+    expect(POST_FAILED_AFTER_LEAVE_MESSAGE).toBe("お題を投稿できませんでした。もう一度投稿してください");
   });
 });
