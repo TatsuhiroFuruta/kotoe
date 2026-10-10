@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 type TextFieldProps = {
   id: string;
   label: string;
@@ -8,6 +10,11 @@ type TextFieldProps = {
   /** サーバーが返したこのフィールドのエラー文言 */
   error?: string;
   minLength?: number;
+  /**
+   * 入力欄そのものへの参照。エラーのときに入力欄へフォーカスを移すために使う（7-5）。
+   * React 19 では ref を普通の prop として受け取れるので forwardRef は要らない。
+   */
+  ref?: Ref<HTMLInputElement>;
 };
 
 /**
@@ -27,6 +34,7 @@ export function TextField({
   autoComplete,
   error,
   minLength,
+  ref,
 }: TextFieldProps) {
   const errorId = `${id}-error`;
 
@@ -36,6 +44,7 @@ export function TextField({
         {label}
       </label>
       <input
+        ref={ref}
         id={id}
         name={id}
         type={type}
