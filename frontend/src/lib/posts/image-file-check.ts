@@ -31,14 +31,17 @@ export const IMAGE_ACCEPT = [...ALLOWED_IMAGE_TYPES, ".heic", ".heif"].join(",")
 /** ブラウザが種類を判断できなかったときの type。checkImageFile の説明を参照 */
 const UNKNOWN_TYPES: readonly string[] = ["", "application/octet-stream"];
 
-export type ImageFileErrorCode = "image_missing" | "image_too_large" | "image_type_not_allowed";
+/**
+ * image_empty だけはフロント専用のコード。バックは 0 バイトを image_missing（「画像を選んでください」）に
+ * するが、ファイルを選んだ直後の人にその文言は通じないので、選んだ時点では別の文言で知らせる。
+ */
+export type ImageFileErrorCode = "image_empty" | "image_too_large" | "image_type_not_allowed";
 
 /**
  * 送ってよいファイルなら null、だめならエラーコード。
  *
- * 0 バイト → サイズ → 形式の順に見るのは、バックと同じ順序にするため（同じファイルに同じコードを返す）。
- * 0 バイトを image_missing にするのもバック（missing?）と同じ。通すと、ファイルを選んだ状態で
- * 送ってから「画像を選んでください」と返ってくる。
+ * 0 バイト → サイズ → 形式の順に見るのは、バックと同じ順序にするため。0 バイトも弾くのはバック
+ * （missing?）と同じで、通すと、送ってから「画像を選んでください」と返ってくる。
  *
  * **type が「分からない」なら形式は判定しない。** 空文字と application/octet-stream がそれに当たる。
  * ブラウザは拡張子から type を決めるので、OS が知らない拡張子（環境によっては HEIC）では
@@ -46,7 +49,7 @@ export type ImageFileErrorCode = "image_missing" | "image_too_large" | "image_ty
  * そもそも file.type はバックのマジックバイト判定とは一致しない。分からないものはバックに任せる。
  */
 export function checkImageFile(file: Pick<File, "size" | "type">): ImageFileErrorCode | null {
-  if (file.size === 0) return "image_missing";
+  if (file.size === 0) return "image_empty";
   if (file.size > IMAGE_MAX_BYTES) return "image_too_large";
   if (!UNKNOWN_TYPES.includes(file.type) && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
     return "image_type_not_allowed";

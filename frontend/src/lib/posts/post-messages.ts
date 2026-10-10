@@ -22,11 +22,12 @@ export const POST_TIMEOUT_MESSAGE =
  * 送信中に画面を離れたあとで失敗したとき。フォームはもう無いので、欄の文言は見せられない。
  * 成功のときはトーストを出すので、失敗で何も出さないと「投稿された」と受け取られる。
  */
-export const POST_FAILED_AFTER_LEAVE_MESSAGE = "お題を投稿できませんでした。もう一度投稿してください";
+export const POST_FAILED_AFTER_LEAVE_MESSAGE = "お題を投稿できませんでした";
 /** 422 のうち、画面に欄が無いもの。何も表示されない状態を作らないための受け皿 */
 export const UNKNOWN_FIELD_MESSAGE = "投稿できませんでした。入力内容を確認してください";
 
 const IMAGE_MESSAGES: Record<string, string> = {
+  image_empty: "空のファイルです。別の画像を選んでください",
   image_missing: "画像を選んでください",
   image_too_large: `画像は ${IMAGE_MAX_BYTES / 1024 / 1024}MB 以下にしてください`,
   image_type_not_allowed: "JPEG・PNG・WebP・HEIC の画像を選んでください",
@@ -154,9 +155,13 @@ export function toPostFormErrors(error: unknown): PostFormErrors {
 /**
  * 送信中に画面を離れたあとの失敗を、トーストの 1 文にする。
  * timeout は「投稿されている場合がある」をそのまま伝える（押し直して二重にしないため）。
+ * それ以外は理由を添える。理由が無いと、同じファイルを送り直してまた弾かれる。
  */
 export function toLeftPageFailureMessage(errors: PostFormErrors): string {
   if (errors.form?.kind === "timeout") return POST_TIMEOUT_MESSAGE;
   if (errors.form?.kind === "session_expired") return SESSION_EXPIRED_MESSAGE;
-  return POST_FAILED_AFTER_LEAVE_MESSAGE;
+
+  const reason =
+    errors.image ?? errors.title ?? (errors.form?.kind === "message" ? errors.form.message : null);
+  return reason === null ? POST_FAILED_AFTER_LEAVE_MESSAGE : `${POST_FAILED_AFTER_LEAVE_MESSAGE}（${reason}）`;
 }

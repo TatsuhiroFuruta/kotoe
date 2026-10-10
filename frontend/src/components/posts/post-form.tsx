@@ -64,9 +64,6 @@ export function PostForm() {
   );
   // 送信中に別のページへ移ったかどうか。移ったあとに成功しても、お題詳細へ連れ戻さない。
   const mountedRef = useRef(false);
-  // 二重送信の防止。state の submitting は次の描画まで古い値のまま見えるので、同じ描画の
-  // うちに 2 回目の submit が届くと素通りする。ref は代入した瞬間に次の呼び出しから見える。
-  const submittingRef = useRef(false);
 
   useEffect(() => {
     // StrictMode の模擬的な再マウントでも true に戻るよう、本体で立てる。
@@ -76,18 +73,25 @@ export function PostForm() {
     };
   }, []);
 
-  // ドロップ枠の外にファイルを落とすと、ブラウザがそのファイルを開いて画面を離れ、入力が消える。
-  // フォームを表示している間だけ、ファイルのドラッグに限って既定の動作を止める
-  // （テキストをタイトル欄へドラッグする操作は止めない）。枠の中の処理は ImagePicker が持つ。
+  // ドロップ枠の外にファイルやリンクを落とすと、ブラウザがそれを開いて画面を離れ、入力が消える。
+  // フォームを表示している間は、枠の外へのドロップを受け付けない（dropEffect = "none" で
+  // カーソルにも出す）。止めないのは、文字列をタイトル欄へ落とす操作だけ。
+  // 枠の中は ImagePicker が先に preventDefault するので、defaultPrevented で見分ける。
   useEffect(() => {
-    function preventFileDrop(event: DragEvent) {
-      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    function refuseDrop(event: DragEvent) {
+      if (event.defaultPrevented) return;
+      const intoTextField =
+        event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+      const carriesFiles = event.dataTransfer?.types.includes("Files") ?? false;
+      if (intoTextField && !carriesFiles) return;
+      event.preventDefault();
+      if (event.dataTransfer !== null) event.dataTransfer.dropEffect = "none";
     }
-    window.addEventListener("dragover", preventFileDrop);
-    window.addEventListener("drop", preventFileDrop);
+    window.addEventListener("dragover", refuseDrop);
+    window.addEventListener("drop", refuseDrop);
     return () => {
-      window.removeEventListener("dragover", preventFileDrop);
-      window.removeEventListener("drop", preventFileDrop);
+      window.removeEventListener("dragover", refuseDrop);
+      window.removeEventListener("drop", refuseDrop);
     };
   }, []);
 
@@ -116,7 +120,9 @@ export function PostForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingRef.current) return;
+    // disabled と同じ値を見る保険。送信中は既定ボタンが disabled なので、Enter による
+    // 暗黙の送信もここまで来ない（ログイン画面などと同じ形）。
+    if (submitting) return;
 
     setFormError(null);
     const missingImage = selection === null;
@@ -131,7 +137,6 @@ export function PostForm() {
       return;
     }
 
-    submittingRef.current = true;
     setSubmitting(true);
     const body = new FormData();
     body.append("post[title]", title);
@@ -158,8 +163,6 @@ export function PostForm() {
   }
 
   function showSubmitError(errors: PostFormErrors) {
-    submittingRef.current = false;
-
     // 送信中に画面を離れていたら、フォームはもう無い。成功だけトーストが出て失敗が無言だと、
     // 投稿されたと受け取られるので、失敗もトーストで伝える。
     if (!mountedRef.current) {
@@ -178,12 +181,15 @@ export function PostForm() {
 
     // サーバーが画像を弾いたら、選んだ時点で弾いたとき（handleSelect）と同じく選択を外す。
     // 残すとエラーがプレビューの下に出て、押し直すと同じファイルをまた送ってしまう。
-    if (errors.image !== null) setSelection(null);
     setImageError(errors.image);
     setTitleError(errors.title);
     setFormError(errors.form);
-    if (errors.image !== null) requestFocus("image");
-    else if (errors.title !== null) requestFocus("title");
+    if (errors.image !== null) {
+      setSelection(null);
+      requestFocus("image");
+    } else if (errors.title !== null) {
+      requestFocus("title");
+    }
   }
 
   return (

@@ -32,6 +32,7 @@ describe("isBlankTitle", () => {
 
 describe("imageErrorMessage", () => {
   it.each([
+    ["image_empty", "空のファイルです。別の画像を選んでください"],
     ["image_missing", "画像を選んでください"],
     ["image_too_large", "画像は 5MB 以下にしてください"],
     ["image_type_not_allowed", "JPEG・PNG・WebP・HEIC の画像を選んでください"],
@@ -183,9 +184,10 @@ describe("toLeftPageFailureMessage", () => {
   });
 
   it.each([
-    ["欄のエラー", { image: "画像は 5MB 以下にしてください", title: null, form: null }],
-    ["フォーム上部のエラー", { image: null, title: null, form: { kind: "message" as const, message: "x" } }],
-  ])("%s は投稿できなかったことを伝える", (_label, errors) => {
-    expect(toLeftPageFailureMessage(errors)).toBe(POST_FAILED_AFTER_LEAVE_MESSAGE);
+    ["画像", { image: "JPEG・PNG・WebP・HEIC の画像を選んでください", title: null, form: null }, "JPEG・PNG・WebP・HEIC の画像を選んでください"],
+    ["タイトル", { image: null, title: "タイトルを入力してください", form: null }, "タイトルを入力してください"],
+    ["フォーム上部", { image: null, title: null, form: { kind: "message" as const, message: "サーバーでエラー" } }, "サーバーでエラー"],
+  ])("%s のエラーは理由を添える（同じものを送り直して、また弾かれないように）", (_label, errors, reason) => {
+    expect(toLeftPageFailureMessage(errors)).toBe(`${POST_FAILED_AFTER_LEAVE_MESSAGE}（${reason}）`);
   });
 });

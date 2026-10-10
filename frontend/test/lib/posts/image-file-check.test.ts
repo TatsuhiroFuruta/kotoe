@@ -57,7 +57,7 @@ describe("checkImageFile", () => {
     expect(IMAGE_ACCEPT.split(",")).toEqual([...ALLOWED_IMAGE_TYPES, ".heic", ".heif"]);
   });
 
-  it("0 バイトは image_missing（バックの missing? と同じ）", () => {
-    expect(checkImageFile(file(0, "image/png"))).toBe("image_missing");
+  it("0 バイトは image_empty（選んだ人に「画像を選んでください」と言わないよう、フロント専用のコード）", () => {
+    expect(checkImageFile(file(0, "image/png"))).toBe("image_empty");
   });
 });
