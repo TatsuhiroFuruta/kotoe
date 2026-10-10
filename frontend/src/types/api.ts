@@ -128,6 +128,14 @@ export type FavoriteResponse = {
   post: PostSummary;
 };
 
+/**
+ * POST /api/posts（201）。FavoriteResponse と形は同じだが意味が違うので、名前を分けておく
+ * （片方の形が変わったときに、もう片方が巻き込まれないように）。
+ */
+export type PostCreateResponse = {
+  post: PostSummary;
+};
+
 /** POST /api/posts/:id/attempts・PATCH /api/attempts/:id・POST /api/attempts/:id/generate */
 export type AttemptResponse = {
   attempt: Attempt;
