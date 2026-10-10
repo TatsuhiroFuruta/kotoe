@@ -52,7 +52,12 @@ describe("checkImageFile", () => {
     expect(checkImageFile(file(IMAGE_MAX_BYTES + 1, "image/gif"))).toBe("image_too_large");
   });
 
-  it("accept の値は許可する形式の一覧と同じ", () => {
-    expect(IMAGE_ACCEPT.split(",")).toEqual([...ALLOWED_IMAGE_TYPES]);
+  it("accept の値は許可する形式の一覧に、HEIC / HEIF の拡張子を足したもの", () => {
+    // OS が .heic を image/heic に対応付けない環境では、MIME だけだと選択画面に HEIC が出ない。
+    expect(IMAGE_ACCEPT.split(",")).toEqual([...ALLOWED_IMAGE_TYPES, ".heic", ".heif"]);
+  });
+
+  it("0 バイトは image_missing（バックの missing? と同じ）", () => {
+    expect(checkImageFile(file(0, "image/png"))).toBe("image_missing");
   });
 });

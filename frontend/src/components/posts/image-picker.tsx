@@ -27,11 +27,18 @@ function FilePreview({ file }: { file: File }) {
   }, [file]);
 
   if (previewFailed) {
-    // Safari 以外は HEIC を <img> で描けない。壊れた画像のアイコンを出さずに、投稿はできることを伝える。
+    // Safari 以外は HEIC を <img> で描けない。壊れた画像のアイコンを出さずに、HEIC なら投稿はできることを伝える。
     // ファイル名は利用者が自由に付けられる文字列なので、{value} で出すだけにする（属性・URL に入れない）。
     return (
       <div className="flex flex-col items-center gap-1 rounded-card bg-line px-4 py-8 text-center text-sm">
-        <p className="text-ink">この形式はプレビューできません（投稿はできます）</p>
+        <p className="text-ink">
+          この画像はプレビューできません
+          {/*
+            投稿できると言い切るのは HEIC / HEIF だけ。種類の分からないファイルは確認を素通りするので
+            （image-file-check.ts）、ほかの拡張子で約束するとバックの 422 と食い違う。
+          */}
+          {/\.hei[cf]$/i.test(file.name) && "（HEIC は投稿できます）"}
+        </p>
         <p className="max-w-full truncate text-ink-muted">{file.name}</p>
       </div>
     );

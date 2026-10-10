@@ -17,8 +17,10 @@ import {
   POST_CREATED_MESSAGE,
   POST_TIMEOUT_MESSAGE,
   titleErrorMessage,
+  toLeftPageFailureMessage,
   toPostFormErrors,
   type PostFormError,
+  type PostFormErrors,
 } from "@/lib/posts/post-messages";
 import { toast } from "@/lib/toast/toast-store";
 import type { PostCreateResponse } from "@/types/api";
@@ -62,12 +64,30 @@ export function PostForm() {
   );
   // 送信中に別のページへ移ったかどうか。移ったあとに成功しても、お題詳細へ連れ戻さない。
   const mountedRef = useRef(false);
+  // 二重送信の防止。state の submitting は次の描画まで古い値のまま見えるので、同じ描画の
+  // うちに 2 回目の submit が届くと素通りする。ref は代入した瞬間に次の呼び出しから見える。
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     // StrictMode の模擬的な再マウントでも true に戻るよう、本体で立てる。
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  // ドロップ枠の外にファイルを落とすと、ブラウザがそのファイルを開いて画面を離れ、入力が消える。
+  // フォームを表示している間だけ、ファイルのドラッグに限って既定の動作を止める
+  // （テキストをタイトル欄へドラッグする操作は止めない）。枠の中の処理は ImagePicker が持つ。
+  useEffect(() => {
+    function preventFileDrop(event: DragEvent) {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    }
+    window.addEventListener("dragover", preventFileDrop);
+    window.addEventListener("drop", preventFileDrop);
+    return () => {
+      window.removeEventListener("dragover", preventFileDrop);
+      window.removeEventListener("drop", preventFileDrop);
     };
   }, []);
 
@@ -96,8 +116,7 @@ export function PostForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // disabled だけに頼らない。Enter の連打は disabled が描画される前に届くことがある。
-    if (submitting) return;
+    if (submittingRef.current) return;
 
     setFormError(null);
     const missingImage = selection === null;
@@ -112,38 +131,59 @@ export function PostForm() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     const body = new FormData();
     body.append("post[title]", title);
     body.append("post[image]", selection.file);
 
+    // try は送信だけを包む。成功のあとの処理（応答の取り出し・遷移）まで包むと、そこで投げた例外が
+    // 送信の失敗として表示され、作成済みのお題を押し直して二重にしてしまう。
+    let response: PostCreateResponse;
     try {
-      const { post } = await apiFetch<PostCreateResponse>("/api/posts", {
+      response = await apiFetch<PostCreateResponse>("/api/posts", {
         method: "POST",
         body,
         timeoutMs: POST_TIMEOUT_MS,
       });
-      toast.success(POST_CREATED_MESSAGE);
-      // replace：戻るボタンで空の投稿フォームに戻ると「投稿が消えた」ように見えるため（決定 6）。
-      // submitting は戻さない。遷移が終わるまでの二重送信を防ぐ（ログイン画面と同じ）。
-      if (mountedRef.current) router.replace(postDetailHref(post.id));
     } catch (error: unknown) {
-      const errors = toPostFormErrors(error);
-      setSubmitting(false);
-
-      if (errors.form?.kind === "session_expired") {
-        // api.ts がトークンを捨てたので、RequireAuth がこのあとログイン画面へ送る。
-        // 入力は消える（既知の制約。7-2.6・7-3d で扱う）。理由だけは伝える。
-        toast.error(SESSION_EXPIRED_MESSAGE);
-        return;
-      }
-
-      setImageError(errors.image);
-      setTitleError(errors.title);
-      setFormError(errors.form);
-      if (errors.image !== null) requestFocus("image");
-      else if (errors.title !== null) requestFocus("title");
+      showSubmitError(toPostFormErrors(error));
+      return;
     }
+
+    toast.success(POST_CREATED_MESSAGE);
+    // replace：戻るボタンで空の投稿フォームに戻ると「投稿が消えた」ように見えるため（決定 6）。
+    // submitting は戻さない。遷移が終わるまでの二重送信を防ぐ（ログイン画面と同じ）。
+    if (mountedRef.current) router.replace(postDetailHref(response.post.id));
+  }
+
+  function showSubmitError(errors: PostFormErrors) {
+    submittingRef.current = false;
+
+    // 送信中に画面を離れていたら、フォームはもう無い。成功だけトーストが出て失敗が無言だと、
+    // 投稿されたと受け取られるので、失敗もトーストで伝える。
+    if (!mountedRef.current) {
+      toast.error(toLeftPageFailureMessage(errors));
+      return;
+    }
+
+    setSubmitting(false);
+
+    if (errors.form?.kind === "session_expired") {
+      // api.ts がトークンを捨てたので、RequireAuth がこのあとログイン画面へ送る。
+      // 入力は消える（既知の制約。7-2.6・7-3d で扱う）。理由だけは伝える。
+      toast.error(SESSION_EXPIRED_MESSAGE);
+      return;
+    }
+
+    // サーバーが画像を弾いたら、選んだ時点で弾いたとき（handleSelect）と同じく選択を外す。
+    // 残すとエラーがプレビューの下に出て、押し直すと同じファイルをまた送ってしまう。
+    if (errors.image !== null) setSelection(null);
+    setImageError(errors.image);
+    setTitleError(errors.title);
+    setFormError(errors.form);
+    if (errors.image !== null) requestFocus("image");
+    else if (errors.title !== null) requestFocus("title");
   }
 
   return (

@@ -911,7 +911,8 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   - 送信は `apiFetch` に `FormData` と `timeoutMs: 120_000` を渡す。進み具合（%）は出さない
     （`fetch` は送信の進み具合を取れない。必要になったら `api.ts` に XHR の送信関数を足す）
   - サイズ（5MB）と形式は選んだ時点でフロントでも確かめる（`lib/posts/image-file-check.ts`）。
-    **正はバックの `Images::Validation`。値を変えたら両方直す**。`file.type` が空なら形式はバックに任せる
+    **正はバックの `Images::Validation`。値を変えたら両方直す**。`file.type` が空か
+    `application/octet-stream`（種類不明。Chrome の HEIC で実測）なら形式はバックに任せる。0 バイトは `image_missing`
   - 文言は `lib/posts/post-messages.ts`。送る前の確認もバックと同じエラーコードを返し、同じ辞書で翻訳する
   - timeout は「投稿されている場合がある」と知らせ、お題一覧を新しいタブで開くリンクを出す（二重投稿の防止）
   - 成功したらトーストを出し、`router.replace` でお題詳細へ

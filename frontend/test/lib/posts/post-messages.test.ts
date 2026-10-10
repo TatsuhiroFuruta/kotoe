@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import {
+  POST_FAILED_AFTER_LEAVE_MESSAGE,
   POST_TIMEOUT_MESSAGE,
   UNKNOWN_FIELD_MESSAGE,
   UPLOAD_FAILED_MESSAGE,
   imageErrorMessage,
   isBlankTitle,
   titleErrorMessage,
+  toLeftPageFailureMessage,
   toPostFormErrors,
 } from "@/lib/posts/post-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
 import { NETWORK_MESSAGE, SERVER_MESSAGE } from "@/lib/request-error-messages";
 
 /** Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値が返る */
@@ -161,5 +164,28 @@ describe("toPostFormErrors", () => {
       kind: "message",
       message: "操作を完了できませんでした（404）",
     });
+  });
+});
+
+describe("toLeftPageFailureMessage", () => {
+  // 送信中に画面を離れたあとで失敗したとき、フォームが無いのでトーストで伝える。
+  // 何も出さないと、成功時だけトーストが出る以上「投稿された」と受け取られる。
+  it("timeout は「投稿されている場合がある」を伝える", () => {
+    expect(toLeftPageFailureMessage({ image: null, title: null, form: { kind: "timeout" } })).toBe(
+      POST_TIMEOUT_MESSAGE,
+    );
+  });
+
+  it("失効はセッションの文言", () => {
+    expect(
+      toLeftPageFailureMessage({ image: null, title: null, form: { kind: "session_expired" } }),
+    ).toBe(SESSION_EXPIRED_MESSAGE);
+  });
+
+  it.each([
+    ["欄のエラー", { image: "画像は 5MB 以下にしてください", title: null, form: null }],
+    ["フォーム上部のエラー", { image: null, title: null, form: { kind: "message" as const, message: "x" } }],
+  ])("%s は投稿できなかったことを伝える", (_label, errors) => {
+    expect(toLeftPageFailureMessage(errors)).toBe(POST_FAILED_AFTER_LEAVE_MESSAGE);
   });
 });

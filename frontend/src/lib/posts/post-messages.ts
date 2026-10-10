@@ -6,6 +6,7 @@
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import { fallbackErrorMessage } from "@/lib/attempts/attempt-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
 import { IMAGE_MAX_BYTES } from "@/lib/posts/image-file-check";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 
@@ -17,6 +18,11 @@ export const UPLOAD_FAILED_MESSAGE = "画像の保存に失敗しました。時
  */
 export const POST_TIMEOUT_MESSAGE =
   "投稿に時間がかかっています。投稿が完了している場合がありますので、お題一覧で確認してから再度お試しください";
+/**
+ * 送信中に画面を離れたあとで失敗したとき。フォームはもう無いので、欄の文言は見せられない。
+ * 成功のときはトーストを出すので、失敗で何も出さないと「投稿された」と受け取られる。
+ */
+export const POST_FAILED_AFTER_LEAVE_MESSAGE = "お題を投稿できませんでした。もう一度投稿してください";
 /** 422 のうち、画面に欄が無いもの。何も表示されない状態を作らないための受け皿 */
 export const UNKNOWN_FIELD_MESSAGE = "投稿できませんでした。入力内容を確認してください";
 
@@ -143,4 +149,14 @@ export function toPostFormErrors(error: unknown): PostFormErrors {
       ? fallbackErrorMessage(error)
       : toRequestErrorMessage(error),
   );
+}
+
+/**
+ * 送信中に画面を離れたあとの失敗を、トーストの 1 文にする。
+ * timeout は「投稿されている場合がある」をそのまま伝える（押し直して二重にしないため）。
+ */
+export function toLeftPageFailureMessage(errors: PostFormErrors): string {
+  if (errors.form?.kind === "timeout") return POST_TIMEOUT_MESSAGE;
+  if (errors.form?.kind === "session_expired") return SESSION_EXPIRED_MESSAGE;
+  return POST_FAILED_AFTER_LEAVE_MESSAGE;
 }

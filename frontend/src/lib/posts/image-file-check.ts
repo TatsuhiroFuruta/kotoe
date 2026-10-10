@@ -22,18 +22,23 @@ export const ALLOWED_IMAGE_TYPES: readonly string[] = [
 /**
  * `<input type="file" accept>` に渡す値。ファイル選択画面の絞り込みであって判定ではない
  * （ドラッグ＆ドロップは accept を通らない）。判定は checkImageFile が担う。
+ *
+ * HEIC / HEIF は拡張子も並べる。選択画面は MIME から拡張子を逆引きして絞り込むので、
+ * OS が .heic を image/heic に対応付けていない環境では、MIME だけだと HEIC が一覧に出ない。
  */
-export const IMAGE_ACCEPT = ALLOWED_IMAGE_TYPES.join(",");
+export const IMAGE_ACCEPT = [...ALLOWED_IMAGE_TYPES, ".heic", ".heif"].join(",");
 
 /** ブラウザが種類を判断できなかったときの type。checkImageFile の説明を参照 */
 const UNKNOWN_TYPES: readonly string[] = ["", "application/octet-stream"];
 
-export type ImageFileErrorCode = "image_too_large" | "image_type_not_allowed";
+export type ImageFileErrorCode = "image_missing" | "image_too_large" | "image_type_not_allowed";
 
 /**
  * 送ってよいファイルなら null、だめならエラーコード。
  *
- * サイズを先に見るのはバックと同じ順序にするため（同じファイルに同じコードを返す）。
+ * 0 バイト → サイズ → 形式の順に見るのは、バックと同じ順序にするため（同じファイルに同じコードを返す）。
+ * 0 バイトを image_missing にするのもバック（missing?）と同じ。通すと、ファイルを選んだ状態で
+ * 送ってから「画像を選んでください」と返ってくる。
  *
  * **type が「分からない」なら形式は判定しない。** 空文字と application/octet-stream がそれに当たる。
  * ブラウザは拡張子から type を決めるので、OS が知らない拡張子（環境によっては HEIC）では
@@ -41,6 +46,7 @@ export type ImageFileErrorCode = "image_too_large" | "image_type_not_allowed";
  * そもそも file.type はバックのマジックバイト判定とは一致しない。分からないものはバックに任せる。
  */
 export function checkImageFile(file: Pick<File, "size" | "type">): ImageFileErrorCode | null {
+  if (file.size === 0) return "image_missing";
   if (file.size > IMAGE_MAX_BYTES) return "image_too_large";
   if (!UNKNOWN_TYPES.includes(file.type) && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
     return "image_type_not_allowed";
