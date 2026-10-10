@@ -69,9 +69,18 @@ export function SiteHeader() {
             /login?next=/posts/new へ送り、ログイン後に戻ってくる。unreachable でも押した先で
             再試行の画面が出るので、行き止まりにはならない。loading で出さないのは、
             スケルトンの幅が状態によって変わらないようにするため。
+
+            未ログインのときだけ secondary にする。その状態での第一の目的はログイン・登録なので、
+            primary は「新規登録」だけに譲る（2 つ並ぶとどちらが主か分からない。2026-10-10 決定）。
           */}
           {auth.status !== "loading" && (
-            <Link href="/posts/new" className={buttonClasses({ size: "sm" })}>
+            <Link
+              href="/posts/new"
+              className={buttonClasses({
+                variant: auth.status === "unauthenticated" ? "secondary" : "primary",
+                size: "sm",
+              })}
+            >
               お題を投稿
             </Link>
           )}
