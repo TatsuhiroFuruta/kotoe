@@ -40,6 +40,10 @@ describe("checkImageFile", () => {
     expect(checkImageFile(file(1024, ""))).toBeNull();
   });
 
+  it("type が application/octet-stream（種類不明）でも形式は判定しない（バックに任せる）", () => {
+    expect(checkImageFile(file(1024, "application/octet-stream"))).toBeNull();
+  });
+
   it("type が空でもサイズは判定する", () => {
     expect(checkImageFile(file(IMAGE_MAX_BYTES + 1, ""))).toBe("image_too_large");
   });

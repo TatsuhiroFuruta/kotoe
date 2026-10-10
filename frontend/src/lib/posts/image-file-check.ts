@@ -25,6 +25,9 @@ export const ALLOWED_IMAGE_TYPES: readonly string[] = [
  */
 export const IMAGE_ACCEPT = ALLOWED_IMAGE_TYPES.join(",");
 
+/** ブラウザが種類を判断できなかったときの type。checkImageFile の説明を参照 */
+const UNKNOWN_TYPES: readonly string[] = ["", "application/octet-stream"];
+
 export type ImageFileErrorCode = "image_too_large" | "image_type_not_allowed";
 
 /**
@@ -32,12 +35,15 @@ export type ImageFileErrorCode = "image_too_large" | "image_type_not_allowed";
  *
  * サイズを先に見るのはバックと同じ順序にするため（同じファイルに同じコードを返す）。
  *
- * **type が空なら形式は判定しない。** Chrome・Firefox は HEIC の type を空にすることが多く、
- * 弾くと正しい HEIC を拒否してしまう。そもそも file.type は拡張子から決まる値で、
- * バックのマジックバイト判定とは一致しない。分からないものはバックに任せる。
+ * **type が「分からない」なら形式は判定しない。** 空文字と application/octet-stream がそれに当たる。
+ * ブラウザは拡張子から type を決めるので、OS が知らない拡張子（環境によっては HEIC）では
+ * どちらかになる。弾くと正しい HEIC を拒否してしまう（2026-10-10、Chrome で octet-stream を実測）。
+ * そもそも file.type はバックのマジックバイト判定とは一致しない。分からないものはバックに任せる。
  */
 export function checkImageFile(file: Pick<File, "size" | "type">): ImageFileErrorCode | null {
   if (file.size > IMAGE_MAX_BYTES) return "image_too_large";
-  if (file.type !== "" && !ALLOWED_IMAGE_TYPES.includes(file.type)) return "image_type_not_allowed";
+  if (!UNKNOWN_TYPES.includes(file.type) && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return "image_type_not_allowed";
+  }
   return null;
 }

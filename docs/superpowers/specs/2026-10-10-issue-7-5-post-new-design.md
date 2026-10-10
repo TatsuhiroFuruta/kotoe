@@ -69,7 +69,8 @@
 - **返すのはバックと同じエラーコード**（`image_too_large` / `image_type_not_allowed`）。翻訳の辞書が 1 つで済む
 - 理由：バックは本文を受け取り終えてから判定するので、15MB の写真を 1Mbps で送ると、約 2 分待ったあとに
   弾かれる（実際にはその前に timeout する）。スマートフォンの写真は 8〜15MB になることがある
-- **`file.type` が空なら形式の判定をしない**（バックに任せる）。HEIC は Chrome・Firefox で空になりやすく、
+- **`file.type` が空か `application/octet-stream` なら形式の判定をしない**（バックに任せる）。どちらも
+  ブラウザが種類を判断できなかったときの値で、HEIC はこうなりやすい（2026-10-10、Chrome で octet-stream を実測）。
   弾くと正しい HEIC を拒否してしまう。`file.type` は拡張子由来で、バックのマジックバイト判定とは一致しない
 - サイズの境界はバックと同じ「超えたら」（5MB ちょうどは通す）
 - `<input accept>` は `image/jpeg,image/png,image/webp,image/heic,image/heif` にする。ファイル選択画面の絞り込みで、
