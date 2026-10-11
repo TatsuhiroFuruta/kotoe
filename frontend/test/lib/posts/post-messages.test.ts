@@ -2,8 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import {
-  POST_FAILED_AFTER_LEAVE_MESSAGE,
-  POST_TIMEOUT_MESSAGE,
   UNKNOWN_FIELD_MESSAGE,
   UPLOAD_FAILED_MESSAGE,
   imageErrorMessage,
@@ -11,9 +9,9 @@ import {
   titleErrorMessage,
   toLeftPageFailureMessage,
   toPostFormErrors,
+  unconfirmedMessage,
 } from "@/lib/posts/post-messages";
 import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
-import { NETWORK_MESSAGE, SERVER_MESSAGE } from "@/lib/request-error-messages";
 
 /** Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値が返る */
 const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];
@@ -60,7 +58,7 @@ describe("titleErrorMessage", () => {
 });
 
 describe("toPostFormErrors", () => {
-  describe("422", () => {
+  describe("422（rejected）", () => {
     it("画像とタイトルのエラーを、それぞれの欄に振り分ける", () => {
       expect(
         toPostFormErrors(unprocessable({ image: ["image_too_large"], title: ["blank"] })),
@@ -87,27 +85,30 @@ describe("toPostFormErrors", () => {
       expect(toPostFormErrors(unprocessable({ title: codes })).title).toBe("このタイトルは使えません");
     });
 
+    const unknownField = {
+      kind: "rejected",
+      message: UNKNOWN_FIELD_MESSAGE,
+      reason: "入力内容が受け付けられませんでした",
+    };
+
     it("画面に無い欄のエラーはフォーム上部に出す（何も表示されない状態を作らない）", () => {
       expect(toPostFormErrors(unprocessable({ user: ["must_exist"] }))).toEqual({
         image: null,
         title: null,
-        form: { kind: "message", message: UNKNOWN_FIELD_MESSAGE },
+        form: unknownField,
       });
     });
 
     it("JSON の __proto__ キーも画面に無い欄として扱う", () => {
       const errors: unknown = JSON.parse('{"__proto__": ["x"]}');
-      expect(toPostFormErrors(unprocessable(errors)).form).toEqual({
-        kind: "message",
-        message: UNKNOWN_FIELD_MESSAGE,
-      });
+      expect(toPostFormErrors(unprocessable(errors)).form).toEqual(unknownField);
     });
 
     it("画面にある欄と無い欄が混ざっていたら、両方出す", () => {
       expect(toPostFormErrors(unprocessable({ image: ["image_missing"], user: ["x"] }))).toEqual({
         image: "画像を選んでください",
         title: null,
-        form: { kind: "message", message: UNKNOWN_FIELD_MESSAGE },
+        form: unknownField,
       });
     });
 
@@ -117,25 +118,26 @@ describe("toPostFormErrors", () => {
       ["errors が無い", new ApiError(422, { error: "something" })],
       ["本文が JSON でない", new ApiError(422, "<html>")],
     ])("%s ときはフォーム上部に出す", (_label, error) => {
-      const result = toPostFormErrors(error);
-      expect(result.image).toBeNull();
-      expect(result.title).toBeNull();
-      expect(result.form).toEqual({ kind: "message", message: expect.any(String) });
+      expect(toPostFormErrors(error)).toEqual({ image: null, title: null, form: unknownField });
     });
   });
 
-  it("502 image_upload_failed は画像の保存に失敗した文言", () => {
-    expect(toPostFormErrors(new ApiError(502, { error: "image_upload_failed" }))).toEqual({
-      image: null,
-      title: null,
-      form: { kind: "message", message: UPLOAD_FAILED_MESSAGE },
+  it("502 image_upload_failed は rejected（画像の保存に失敗したので、お題は保存されていない）", () => {
+    expect(toPostFormErrors(new ApiError(502, { error: "image_upload_failed" })).form).toEqual({
+      kind: "rejected",
+      message: UPLOAD_FAILED_MESSAGE,
+      reason: "画像の保存に失敗しました",
     });
   });
 
-  it("それ以外の 502（Render のプロキシの HTML など）はサーバーエラー", () => {
-    expect(toPostFormErrors(new ApiError(502, "<html>")).form).toEqual({
-      kind: "message",
-      message: SERVER_MESSAGE,
+  it.each([
+    ["コードがあればコード", new ApiError(403, { error: "forbidden" }), "forbidden"],
+    ["無ければステータス", new ApiError(413, null), "413"],
+  ])("その他の 4xx は rejected。理由は%s", (_label, error, reason) => {
+    expect(toPostFormErrors(error).form).toEqual({
+      kind: "rejected",
+      message: `操作を完了できませんでした（${reason}）`,
+      reason,
     });
   });
 
@@ -145,72 +147,64 @@ describe("toPostFormErrors", () => {
     });
   });
 
-  it("timeout は「投稿されている場合がある」を出すための種類を返す", () => {
-    expect(toPostFormErrors(new ApiTimeoutError(120_000)).form).toEqual({ kind: "timeout" });
-    expect(POST_TIMEOUT_MESSAGE).toContain("投稿が完了している場合があります");
-  });
-
-  it("通信断は通信エラーの文言", () => {
-    expect(toPostFormErrors(new TypeError("Failed to fetch")).form).toEqual({
-      kind: "message",
-      message: NETWORK_MESSAGE,
+  // 応答が届かなかったもの。Rails は気づかずに処理を続けるので、お題は作られている場合がある。
+  it.each([
+    ["timeout", new ApiTimeoutError(120_000), "応答が時間内に返りませんでした"],
+    ["通信断", new TypeError("Failed to fetch"), "通信が切れました"],
+    ["500", new ApiError(500, null), "サーバーでエラーが発生しました"],
+    ["プロキシの 502（HTML）", new ApiError(502, "<html>"), "サーバーでエラーが発生しました"],
+    ["503", new ApiError(503, { error: "x" }), "サーバーでエラーが発生しました"],
+  ])("%s は unconfirmed", (_label, error, reason) => {
+    expect(toPostFormErrors(error)).toEqual({
+      image: null,
+      title: null,
+      form: { kind: "unconfirmed", reason },
     });
   });
 
-  it("500 はサーバーエラー", () => {
-    expect(toPostFormErrors(new ApiError(500, null)).form).toEqual({
-      kind: "message",
-      message: SERVER_MESSAGE,
+  it("想定外の例外は unconfirmed にし、原文をコンソールに残す", () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = new Error("unexpected");
+    expect(toPostFormErrors(error).form).toEqual({
+      kind: "unconfirmed",
+      reason: "予期しないエラーが発生しました",
     });
+    expect(log).toHaveBeenCalledWith(expect.any(String), error);
   });
+});
 
-  it("その他の 4xx はステータスを添えた汎用の文言", () => {
-    expect(toPostFormErrors(new ApiError(404, null)).form).toEqual({
-      kind: "message",
-      message: "操作を完了できませんでした（404）",
-    });
+describe("unconfirmedMessage", () => {
+  it("失敗と断定せず、一覧で確かめるよう伝える", () => {
+    expect(unconfirmedMessage("通信が切れました")).toBe(
+      "投稿が完了したか確認できませんでした（通信が切れました）。お題一覧で確かめてから、必要ならもう一度投稿してください",
+    );
   });
 });
 
 describe("toLeftPageFailureMessage", () => {
-  // 送信中に画面を離れたあとで失敗したとき、フォームが無いのでトーストで伝える。
-  // 何も出さないと、成功時だけトーストが出る以上「投稿された」と受け取られる。
-  it("timeout は「投稿されている場合がある」を伝える", () => {
-    expect(toLeftPageFailureMessage({ image: null, title: null, form: { kind: "timeout" } })).toBe(
-      POST_TIMEOUT_MESSAGE,
-    );
-  });
+  // 送信中に画面を離れたあとの失敗。toPostFormErrors の実際の出力から組み立てて、つなぎ目も確かめる。
+  const leave = (error: unknown) => toLeftPageFailureMessage(toPostFormErrors(error));
 
   it("失効はセッションの文言", () => {
-    expect(
-      toLeftPageFailureMessage({ image: null, title: null, form: { kind: "session_expired" } }),
-    ).toBe(SESSION_EXPIRED_MESSAGE);
+    expect(leave(new ApiError(401, null))).toBe(SESSION_EXPIRED_MESSAGE);
   });
 
   it.each([
-    ["画像", { image: "JPEG・PNG・WebP・HEIC の画像を選んでください", title: null, form: null }, "JPEG・PNG・WebP・HEIC の画像を選んでください"],
-    ["タイトル", { image: null, title: "タイトルを入力してください", form: null }, "タイトルを入力してください"],
-  ])("%s のエラーは理由を添える（同じものを送り直して、また弾かれないように）", (_label, errors, reason) => {
-    expect(toLeftPageFailureMessage(errors)).toBe(`お題を投稿できませんでした（${reason}）`);
+    ["timeout", new ApiTimeoutError(120_000), "応答が時間内に返りませんでした"],
+    ["通信断", new TypeError("Failed to fetch"), "通信が切れました"],
+    ["5xx", new ApiError(500, null), "サーバーでエラーが発生しました"],
+  ])("%s は「確認できませんでした」（失敗と断定すると二重投稿を誘う）", (_label, error, reason) => {
+    expect(leave(error)).toBe(unconfirmedMessage(reason));
   });
 
   it.each([
-    ["画像の保存の失敗（502）", new ApiError(502, { error: "image_upload_failed" })],
-    ["通信断（サーバーではお題ができている場合がある）", new TypeError("Failed to fetch")],
-    ["その他の 4xx", new ApiError(413, null)],
-    ["画面に無い欄の 422", new ApiError(422, { errors: { user: ["must_exist"] } })],
-    ["想定外の例外", new Error("unexpected")],
-  ])("%s は、投稿されていないか確かめてから時間をおいて送り直すよう伝える", (_label, error) => {
-    // 上部用の文言（「入力内容を確認して…」「読み込みに失敗しました」など）は流用しない。
-    // 失敗を断定すると、サーバーでは作られていた場合に二重投稿を誘う。
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(toLeftPageFailureMessage(toPostFormErrors(error))).toBe(POST_FAILED_AFTER_LEAVE_MESSAGE);
-    expect(POST_FAILED_AFTER_LEAVE_MESSAGE).toContain("投稿されていないか");
-  });
-
-  it("欄と上部の両方にエラーがあるときは、欄の理由を添える", () => {
-    expect(
-      toLeftPageFailureMessage(toPostFormErrors(unprocessable({ image: ["image_missing"], user: ["x"] }))),
-    ).toBe("お題を投稿できませんでした（画像を選んでください）");
+    ["画像の欄", unprocessable({ image: ["image_type_not_allowed"] }), "JPEG・PNG・WebP・HEIC の画像を選んでください"],
+    ["タイトルの欄", unprocessable({ title: ["blank"] }), "タイトルを入力してください"],
+    ["画像の保存の失敗", new ApiError(502, { error: "image_upload_failed" }), "画像の保存に失敗しました"],
+    ["画面に無い欄", unprocessable({ user: ["x"] }), "入力内容が受け付けられませんでした"],
+    ["その他の 4xx", new ApiError(413, null), "413"],
+    ["欄と画面に無い欄の両方（欄を優先）", unprocessable({ image: ["image_missing"], user: ["x"] }), "画像を選んでください"],
+  ])("%s は「投稿できませんでした」に理由を括弧で添える", (_label, error, reason) => {
+    expect(leave(error)).toBe(`お題を投稿できませんでした（${reason}）`);
   });
 });

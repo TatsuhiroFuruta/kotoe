@@ -15,10 +15,10 @@ import {
   imageErrorMessage,
   isBlankTitle,
   POST_CREATED_MESSAGE,
-  POST_TIMEOUT_MESSAGE,
   titleErrorMessage,
   toLeftPageFailureMessage,
   toPostFormErrors,
+  unconfirmedMessage,
   type PostFormError,
   type PostFormErrors,
 } from "@/lib/posts/post-messages";
@@ -208,9 +208,9 @@ export function PostForm() {
       <form onSubmit={handleSubmit} noValidate className="mt-6 flex flex-col gap-5">
         {formError !== null && formError.kind !== "session_expired" && (
           <div role="alert" className="rounded-card bg-danger/10 px-3 py-2 text-sm text-danger">
-            {formError.kind === "timeout" ? (
+            {formError.kind === "unconfirmed" ? (
               <p>
-                {POST_TIMEOUT_MESSAGE}{" "}
+                {unconfirmedMessage(formError.reason)}{" "}
                 {/*
                   新しいタブで開く。同じタブで移ると、この画面の入力（画像・タイトル）が消え、
                   投稿されていなかったときに入れ直しになる。
