@@ -64,4 +64,92 @@ describe("tokenStore", () => {
 
     expect(tokenStore.get()).toBe("jwt-abc");
   });
+
+  describe("expire", () => {
+    it("中身が同じトークンなら捨てて true を返し、失効として記録する", () => {
+      tokenStore.set("jwt-abc");
+
+      expect(tokenStore.expire("jwt-abc")).toBe(true);
+
+      expect(tokenStore.get()).toBeNull();
+      expect(tokenStore.wasExpired()).toBe(true);
+    });
+
+    // 送信時のトークンと今のトークンが違う＝応答を待つ間に再ログインした。
+    // 古い 401 で新しいトークンを消すと、ログイン直後に未ログインへ戻される。
+    it("中身が別のトークンなら何もせず false を返す", () => {
+      tokenStore.set("jwt-new");
+
+      expect(tokenStore.expire("jwt-old")).toBe(false);
+
+      expect(tokenStore.get()).toBe("jwt-new");
+      expect(tokenStore.wasExpired()).toBe(false);
+    });
+
+    // 並行した 401 の 2 本目以降。ここで true を返すと、トーストが本数分出る。
+    it("すでに捨てられていれば false を返す", () => {
+      tokenStore.set("jwt-abc");
+      tokenStore.expire("jwt-abc");
+
+      expect(tokenStore.expire("jwt-abc")).toBe(false);
+    });
+
+    // AuthProvider は通知を受けて token と wasExpired を読み直す。記録を通知の後に
+    // 書くと、「トークンは消えたが失効ではない」描画が 1 回挟まり、その描画で
+    // RequireAuth が ?reason= 無しの URL へ送ってしまう。
+    it("通知の時点で wasExpired() はすでに true", () => {
+      tokenStore.set("jwt-abc");
+      let seen: boolean | null = null;
+      const unsubscribe = tokenStore.subscribe(() => {
+        seen = tokenStore.wasExpired();
+      });
+
+      tokenStore.expire("jwt-abc");
+
+      expect(seen).toBe(true);
+      unsubscribe();
+    });
+
+    it("set（ログイン）で失効の記録を消す", () => {
+      tokenStore.set("jwt-abc");
+      tokenStore.expire("jwt-abc");
+
+      tokenStore.set("jwt-new");
+
+      expect(tokenStore.wasExpired()).toBe(false);
+    });
+
+    it("clear（ログアウト）で失効の記録を消す", () => {
+      tokenStore.set("jwt-abc");
+      tokenStore.expire("jwt-abc");
+
+      tokenStore.clear();
+
+      expect(tokenStore.wasExpired()).toBe(false);
+    });
+
+    // 失効の記録が残ったまま、別タブでログイン → ログアウトされると、
+    // こちらのタブは「期限切れ」でログイン画面へ送ってしまう。
+    it("ほかのタブがトークンを変えたら（storage イベント）失効の記録を消す", () => {
+      const unsubscribe = tokenStore.subscribe(() => {});
+      tokenStore.set("jwt-abc");
+      tokenStore.expire("jwt-abc");
+
+      window.dispatchEvent(new StorageEvent("storage", { key: "kotoe.auth.token" }));
+
+      expect(tokenStore.wasExpired()).toBe(false);
+      unsubscribe();
+    });
+
+    it("無関係なキーの storage イベントでは消さない", () => {
+      const unsubscribe = tokenStore.subscribe(() => {});
+      tokenStore.set("jwt-abc");
+      tokenStore.expire("jwt-abc");
+
+      window.dispatchEvent(new StorageEvent("storage", { key: "other.key" }));
+
+      expect(tokenStore.wasExpired()).toBe(true);
+      unsubscribe();
+    });
+  });
 });
