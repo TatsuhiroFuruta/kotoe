@@ -4,7 +4,6 @@
 // 通信そのものの失敗（timeout・通信断・5xx）の文言は lib/request-error-messages.ts にある。
 
 import { ApiError } from "@/lib/api";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import type { FailureReason } from "@/types/api";
 
@@ -167,11 +166,11 @@ export function fallbackErrorMessage(error: unknown): string {
 /**
  * いいね（POST / DELETE :like）の失敗を 1 文にする。無言にしない（FavoriteButton と同じ方針）。
  *
- * 401 は失効。api.ts がトークンを捨てるので、ボタンはすぐ「ログインしていいね」に変わる。
- * 理由を伝えないと、押したら別のボタンに化けたようにしか見えない。
+ * 401 は失効で、null を返す（呼び出し側はトーストを出さない）。理由のトーストは api.ts が
+ * 1 回だけ出し、ボタンはトークンが捨てられたことで「ログインしていいね」に変わる（7-2.6）。
  */
-export function toLikeErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 401) return SESSION_EXPIRED_MESSAGE;
+export function toLikeErrorMessage(error: unknown): string | null {
+  if (error instanceof ApiError && error.status === 401) return null;
   if (error instanceof ApiError && error.status === 404) return ATTEMPT_GONE_MESSAGE;
   if (
     error instanceof ApiError &&

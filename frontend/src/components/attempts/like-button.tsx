@@ -49,7 +49,9 @@ export function LikeButton({
       });
       onChange(updated);
     } catch (error: unknown) {
-      toast.error(toLikeErrorMessage(error));
+      // 失効（401）は null。理由のトーストは api.ts が出している。
+      const message = toLikeErrorMessage(error);
+      if (message !== null) toast.error(message);
     } finally {
       setPending(false);
     }

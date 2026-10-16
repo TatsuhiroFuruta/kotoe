@@ -12,7 +12,6 @@ import {
   resetsInText,
   toLikeErrorMessage,
 } from "@/lib/attempts/attempt-messages";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { NETWORK_MESSAGE, SERVER_MESSAGE, TIMEOUT_MESSAGE } from "@/lib/request-error-messages";
 
 const NOW = Date.parse("2026-09-30T10:00:00Z");
@@ -190,10 +189,9 @@ describe("fallbackErrorMessage", () => {
 });
 
 describe("toLikeErrorMessage", () => {
-  it("401 は失効の文言", () => {
-    expect(toLikeErrorMessage(new ApiError(401, { error: "unauthorized" }))).toBe(
-      SESSION_EXPIRED_MESSAGE,
-    );
+  // 失効のトーストは api.ts が 1 回だけ出す（7-2.6）。ここでも文言を返すと 2 件になる。
+  it("401 は null（トーストを出さない）", () => {
+    expect(toLikeErrorMessage(new ApiError(401, { error: "unauthorized" }))).toBeNull();
   });
 
   it("404 は挑戦が削除された文言（挑戦・お題のどちらが削除されても 404）", () => {

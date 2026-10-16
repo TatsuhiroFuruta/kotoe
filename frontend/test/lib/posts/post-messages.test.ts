@@ -11,7 +11,6 @@ import {
   toPostFormErrors,
   unconfirmedMessage,
 } from "@/lib/posts/post-messages";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 
 /** Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値が返る */
 const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];
@@ -185,8 +184,9 @@ describe("toLeftPageFailureMessage", () => {
   // 送信中に画面を離れたあとの失敗。toPostFormErrors の実際の出力から組み立てて、つなぎ目も確かめる。
   const leave = (error: unknown) => toLeftPageFailureMessage(toPostFormErrors(error));
 
-  it("失効はセッションの文言", () => {
-    expect(leave(new ApiError(401, null))).toBe(SESSION_EXPIRED_MESSAGE);
+  // 失効のトーストは api.ts が 1 回だけ出す（7-2.6）。画面を離れたあとでも同じ。
+  it("失効は null（トーストを出さない）", () => {
+    expect(leave(new ApiError(401, null))).toBeNull();
   });
 
   it.each([

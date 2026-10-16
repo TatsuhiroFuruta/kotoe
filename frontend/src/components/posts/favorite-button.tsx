@@ -6,7 +6,6 @@ import { useState } from "react";
 import { buttonClasses } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth/auth-context";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import { toast } from "@/lib/toast/toast-store";
@@ -15,13 +14,13 @@ import type { FavoriteResponse } from "@/types/api";
 const POST_GONE_MESSAGE = "このお題は削除されました";
 
 /**
- * 失敗を 1 文にする。**無言にしない**のが要点（backlog 7-3b：7-2.6 が未着手のうちの最低限）。
+ * 失敗を 1 文にする。**無言にしない**のが要点（backlog 7-3b）。
  *
- * 401 は失効。api.ts がトークンを捨てるので、このボタンはすぐ「ログインしてお気に入り」に
- * 変わる。理由を伝えないと、押したら別のボタンに化けたようにしか見えない。
+ * 401 は失効で、null を返す（呼び出し側はトーストを出さない）。理由のトーストは api.ts が
+ * 1 回だけ出し、ボタンはトークンが捨てられたことで「ログインしてお気に入り」に変わる（7-2.6）。
  */
-function toFavoriteErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 401) return SESSION_EXPIRED_MESSAGE;
+function toFavoriteErrorMessage(error: unknown): string | null {
+  if (error instanceof ApiError && error.status === 401) return null;
   if (error instanceof ApiError && error.status === 404) return POST_GONE_MESSAGE;
   return toRequestErrorMessage(error);
 }
@@ -63,7 +62,8 @@ export function FavoriteButton({
       });
       onChange(post.favorited);
     } catch (error: unknown) {
-      toast.error(toFavoriteErrorMessage(error));
+      const message = toFavoriteErrorMessage(error);
+      if (message !== null) toast.error(message);
     } finally {
       setPending(false);
     }
