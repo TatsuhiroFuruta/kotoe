@@ -104,10 +104,15 @@ describe("tokenStore", () => {
         seen = tokenStore.wasExpired();
       });
 
-      tokenStore.expire("jwt-abc");
+      // 購読はモジュール直下の Set に残る。expect が失敗しても外さないと、後のテストの
+      // set / clear でもこの listener が呼ばれ、関係のないテストまで巻き添えで落ちる。
+      try {
+        tokenStore.expire("jwt-abc");
 
-      expect(seen).toBe(true);
-      unsubscribe();
+        expect(seen).toBe(true);
+      } finally {
+        unsubscribe();
+      }
     });
 
     it("set（ログイン）で失効の記録を消す", () => {
@@ -131,25 +136,33 @@ describe("tokenStore", () => {
     // 失効の記録が残ったまま、別タブでログイン → ログアウトされると、
     // こちらのタブは「期限切れ」でログイン画面へ送ってしまう。
     it("ほかのタブがトークンを変えたら（storage イベント）失効の記録を消す", () => {
+      // storage イベントは subscribe が window に付けるリスナーが受け取るので、購読しておく。
+      // 外し忘れると window のリスナーも残るので、失敗しても必ず外す。
       const unsubscribe = tokenStore.subscribe(() => {});
-      tokenStore.set("jwt-abc");
-      tokenStore.expire("jwt-abc");
+      try {
+        tokenStore.set("jwt-abc");
+        tokenStore.expire("jwt-abc");
 
-      window.dispatchEvent(new StorageEvent("storage", { key: "kotoe.auth.token" }));
+        window.dispatchEvent(new StorageEvent("storage", { key: "kotoe.auth.token" }));
 
-      expect(tokenStore.wasExpired()).toBe(false);
-      unsubscribe();
+        expect(tokenStore.wasExpired()).toBe(false);
+      } finally {
+        unsubscribe();
+      }
     });
 
     it("無関係なキーの storage イベントでは消さない", () => {
       const unsubscribe = tokenStore.subscribe(() => {});
-      tokenStore.set("jwt-abc");
-      tokenStore.expire("jwt-abc");
+      try {
+        tokenStore.set("jwt-abc");
+        tokenStore.expire("jwt-abc");
 
-      window.dispatchEvent(new StorageEvent("storage", { key: "other.key" }));
+        window.dispatchEvent(new StorageEvent("storage", { key: "other.key" }));
 
-      expect(tokenStore.wasExpired()).toBe(true);
-      unsubscribe();
+        expect(tokenStore.wasExpired()).toBe(true);
+      } finally {
+        unsubscribe();
+      }
     });
   });
 });
