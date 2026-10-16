@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, ApiTimeoutError, apiFetch, apiRequest } from "@/lib/api";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { tokenStore } from "@/lib/auth/token-store";
+import { toast, toastStore } from "@/lib/toast/toast-store";
 
 /**
  * fetch を差し替え、渡された引数を検査できるようにする。
@@ -22,6 +24,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/** 失効のトースト。ほかのトーストと混ざっても数を数えられるよう、文言で絞る。 */
+function sessionExpiredToasts() {
+  return toastStore.get().filter((item) => item.message === SESSION_EXPIRED_MESSAGE);
+}
+
+/** トーストのストアはモジュールスコープでテスト間に持ち越されるので、公開 API で空に戻す。 */
+function dismissAllToasts() {
+  for (const item of toastStore.get()) toast.dismiss(item.id);
+}
+
 /** fetch に渡されたヘッダを取り出す。 */
 function sentHeader(fetchMock: ReturnType<typeof stubFetch>, name: string): string | null {
   const init = fetchMock.mock.calls[0]?.[1];
@@ -37,6 +49,7 @@ describe("apiRequest", () => {
   beforeEach(() => {
     window.localStorage.clear();
     tokenStore.clear();
+    dismissAllToasts();
   });
 
   afterEach(() => {
@@ -233,6 +246,7 @@ describe("apiRequest の timeout", () => {
   beforeEach(() => {
     window.localStorage.clear();
     tokenStore.clear();
+    dismissAllToasts();
   });
 
   afterEach(() => {
@@ -301,5 +315,122 @@ describe("apiRequest の timeout", () => {
 
     await expect(promise).rejects.toMatchObject({ name: "TimeoutError" });
     await expect(promise).rejects.not.toBeInstanceOf(ApiTimeoutError);
+  });
+});
+
+describe("apiRequest の失効の通知", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    tokenStore.clear();
+    dismissAllToasts();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("Authorization を載せたリクエストの 401 で、失効のトーストを 1 件出して失効を記録する", async () => {
+    tokenStore.set("jwt-abc");
+    stubFetch(jsonResponse({ error: "unauthorized" }, 401));
+
+    await expect(apiFetch("/api/me")).rejects.toBeInstanceOf(ApiError);
+
+    expect(sessionExpiredToasts()).toHaveLength(1);
+    expect(tokenStore.wasExpired()).toBe(true);
+  });
+
+  // 起動時の復元が開発時の StrictMode で 2 回走る、マイページが並行で叩く、などで起きる。
+  // 本数分出ると、同じ文言のトーストが画面の隅に積み上がる。
+  it("並行した 401 が 3 本返っても、トーストは 1 件", async () => {
+    tokenStore.set("jwt-abc");
+    vi.stubGlobal(
+      "fetch",
+      // Response の本文は 1 回しか読めないので、呼ばれるたびに作る。
+      vi.fn<typeof fetch>(async () => jsonResponse({ error: "unauthorized" }, 401)),
+    );
+
+    await Promise.allSettled([
+      apiFetch("/api/me"),
+      apiFetch("/api/posts/1/favorite", { method: "POST" }),
+      apiFetch("/api/attempts/1/like", { method: "POST" }),
+    ]);
+
+    expect(sessionExpiredToasts()).toHaveLength(1);
+  });
+
+  // パスワードの誤り。失効ではない（ログイン画面の赤い枠が担当）。
+  it("Authorization を載せていない 401 では出さない", async () => {
+    stubFetch(jsonResponse({ error: "invalid_credentials" }, 401));
+
+    await expect(
+      apiFetch("/api/auth/sign_in", { method: "POST", skipAuth: true }),
+    ).rejects.toBeInstanceOf(ApiError);
+
+    expect(sessionExpiredToasts()).toHaveLength(0);
+    expect(tokenStore.wasExpired()).toBe(false);
+  });
+
+  // 再ログインで差し替わったあとに古い 401 が返った。今のセッションは生きているので、
+  // 「期限切れ」と出すと、ログインし直したばかりの人に誤った指示を出すことになる。
+  it("応答を待つ間に別のトークンへ差し替わっていたら出さない", async () => {
+    tokenStore.set("jwt-old");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => {
+        tokenStore.set("jwt-new");
+        return jsonResponse({ error: "unauthorized" }, 401);
+      }),
+    );
+
+    await expect(apiFetch("/api/me")).rejects.toBeInstanceOf(ApiError);
+
+    expect(sessionExpiredToasts()).toHaveLength(0);
+    expect(tokenStore.get()).toBe("jwt-new");
+  });
+
+  // 7-2.7 設計書「後続への申し送り 2」。トークンは捨てたのに「応答がありません」と
+  // 言われると、黙ってログアウトされたように見える。
+  it("401 の本文を読む途中でタイムアウトしたら、ApiTimeoutError ではなく ApiError(401) を投げる", async () => {
+    tokenStore.set("jwt-abc");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_input, init) => {
+        // ヘッダまでは届き、本文が届かないまま中断される状況。本物の fetch と同じく、
+        // signal が中断されたら本文の読み取りを signal.reason で失敗させる。
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason));
+          },
+        });
+        return new Response(body, { status: 401 });
+      }),
+    );
+
+    await expect(apiFetch("/api/me", { timeoutMs: 20 })).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+    });
+    expect(sessionExpiredToasts()).toHaveLength(1);
+  });
+
+  // 上の変換は「このリクエストで失効させたとき」だけ。401 以外の本文の読み取り中の
+  // タイムアウトまで 401 に化けさせてはいけない。
+  it("401 以外の本文を読む途中のタイムアウトは ApiTimeoutError のまま", async () => {
+    tokenStore.set("jwt-abc");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_input, init) => {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason));
+          },
+        });
+        return new Response(body, { status: 200 });
+      }),
+    );
+
+    await expect(apiFetch("/api/me", { timeoutMs: 20 })).rejects.toBeInstanceOf(ApiTimeoutError);
+    expect(tokenStore.get()).toBe("jwt-abc");
   });
 });

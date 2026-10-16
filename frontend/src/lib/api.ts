@@ -1,5 +1,6 @@
 // Rails API を叩く共通クライアント。個別コンポーネントで直接 fetch しない。
 
+import { notifySessionExpired } from "@/lib/auth/session-expiry";
 import { tokenStore } from "@/lib/auth/token-store";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -126,6 +127,10 @@ export async function apiRequest<T>(
     ? AbortSignal.any([timeoutSignal, requestInit.signal])
     : timeoutSignal;
 
+  // このリクエストの 401 でトークンを失効させたか。本文の読み取り中に timeout が
+  // 発火したとき、ApiTimeoutError ではなく 401 として投げ直すのに使う（下の catch）。
+  let expiredByThisRequest = false;
+
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, { ...requestInit, headers, signal });
 
@@ -138,13 +143,12 @@ export async function apiRequest<T>(
     // 画面遷移を決めるのは RequireAuth の仕事。認証不要ページで期限が切れても
     // ユーザーを画面から放り出さないため。
     //
-    // 「今も同じトークンが入っているか」まで見るのは、token が送信時に
-    // キャプチャした値だから。応答が返るまでの間に再ログインで別のトークンへ
-    // 差し替わっていることがあり、そのとき古い 401 で新しいトークンを消すと、
-    // ログイン成功直後に未ログインへ戻される（複数の API を並行で叩く
-    // マイページで踏む）。
-    if (response.status === 401 && token && tokenStore.get() === token) {
-      tokenStore.clear();
+    // 「今も同じトークンが入っているか」の比較は expire() の中にある。true が返るのは
+    // 実際に捨てた 1 回だけなので、並行した 401 が何本あっても知らせは 1 回になる。
+    // 各画面は 401 でトーストを出さない（ここが出す。7-2.6 設計書「決定 5」）。
+    if (response.status === 401 && token && tokenStore.expire(token)) {
+      expiredByThisRequest = true;
+      notifySessionExpired();
     }
 
     const data = await parseBody(response);
@@ -171,6 +175,10 @@ export async function apiRequest<T>(
     // 中断するため。fetch だけを包むと、本文を読んでいる最中の中断を拾えない。
     // ApiError はここを素通りする。
     if (timeoutSignal.aborted && error instanceof Error && error.name === "TimeoutError") {
+      // 401 の本文を読んでいる最中に timeout が発火した。トークンはもう捨てて
+      // 知らせも出したので、「応答がありません」ではなく 401 として扱わせる
+      // （7-2.7 設計書「後続への申し送り 2」）。本文は読めていないので null。
+      if (expiredByThisRequest) throw new ApiError(401, null);
       throw new ApiTimeoutError(timeoutMs);
     }
     throw error;

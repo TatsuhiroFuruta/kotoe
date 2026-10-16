@@ -11,7 +11,7 @@ import {
   toPostFormErrors,
   unconfirmedMessage,
 } from "@/lib/posts/post-messages";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 
 /** Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値が返る */
 const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];

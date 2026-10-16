@@ -25,7 +25,7 @@ import {
 import { type PollOutcome, shouldConfirmGeneration } from "@/lib/attempts/poll-attempt";
 import { useAttemptPolling } from "@/lib/attempts/use-attempt-polling";
 import { useAuth } from "@/lib/auth/auth-context";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import { toast } from "@/lib/toast/toast-store";
 import type { Attempt, AttemptResponse } from "@/types/api";

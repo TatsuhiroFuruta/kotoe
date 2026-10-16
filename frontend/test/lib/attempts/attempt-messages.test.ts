@@ -12,7 +12,7 @@ import {
   resetsInText,
   toLikeErrorMessage,
 } from "@/lib/attempts/attempt-messages";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { NETWORK_MESSAGE, SERVER_MESSAGE, TIMEOUT_MESSAGE } from "@/lib/request-error-messages";
 
 const NOW = Date.parse("2026-09-30T10:00:00Z");

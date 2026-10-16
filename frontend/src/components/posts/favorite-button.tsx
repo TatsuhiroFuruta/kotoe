@@ -6,7 +6,7 @@ import { useState } from "react";
 import { buttonClasses } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth/auth-context";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import { toast } from "@/lib/toast/toast-store";

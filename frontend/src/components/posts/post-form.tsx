@@ -8,7 +8,7 @@ import { ImagePicker } from "@/components/posts/image-picker";
 import { buttonClasses } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
 import { apiFetch } from "@/lib/api";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { checkImageFile } from "@/lib/posts/image-file-check";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import {

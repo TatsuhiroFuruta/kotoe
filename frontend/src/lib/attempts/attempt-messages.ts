@@ -4,7 +4,7 @@
 // 通信そのものの失敗（timeout・通信断・5xx）の文言は lib/request-error-messages.ts にある。
 
 import { ApiError } from "@/lib/api";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import type { FailureReason } from "@/types/api";
 

@@ -9,7 +9,7 @@
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import { apiErrorCode, fallbackErrorMessage } from "@/lib/attempts/attempt-messages";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { IMAGE_MAX_BYTES } from "@/lib/posts/image-file-check";
 
 export const POST_CREATED_MESSAGE = "お題を投稿しました";
