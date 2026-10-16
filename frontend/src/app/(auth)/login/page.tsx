@@ -1,5 +1,5 @@
 import { LoginForm } from "@/components/auth/login-form";
-import { parseLoginReason } from "@/lib/auth/login-reason";
+import { LOGIN_REASON_EXPIRED, parseLoginReason } from "@/lib/auth/login-reason";
 import type { RawSearchParams } from "@/lib/search-params";
 
 /**
@@ -16,6 +16,6 @@ export default async function LoginPage({
 }) {
   const reason = parseLoginReason((await searchParams).reason);
 
-  // 理由は今「失効」の 1 種類だけなので、null かどうかで足りる。
-  return <LoginForm expired={reason !== null} />;
+  // null かどうかでは判定しない。理由が増えたとき、別の理由でも「期限切れ」の枠が出てしまう。
+  return <LoginForm expired={reason === LOGIN_REASON_EXPIRED} />;
 }

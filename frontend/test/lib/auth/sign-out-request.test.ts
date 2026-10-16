@@ -48,6 +48,8 @@ describe("requestSignOut", () => {
 
     expect(toastStore.get().filter((item) => item.message === SESSION_EXPIRED_MESSAGE)).toHaveLength(0);
     expect(tokenStore.wasExpired()).toBe(false);
+    // ローカルのトークンを捨てるのは AuthProvider の signOut（成否にかかわらず finally で捨てる）。
+    expect(tokenStore.get()).toBe("jwt-expired");
   });
 
   it("トークンが無ければリクエストを出さない", async () => {
