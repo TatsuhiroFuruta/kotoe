@@ -9,8 +9,13 @@ import type { User } from "@/types/api";
 export type AuthState =
   | { status: "loading" }
   | { status: "authenticated"; user: User }
-  /** 未ログインが確定した（トークンが無い、または 401 で破棄された） */
-  | { status: "unauthenticated" }
+  /**
+   * 未ログインが確定した（トークンが無い、または 401 で破棄された）。
+   * expired は「401 で破棄された」とき true。5 つ目の状態にしないのは、未ログインと同じ表示で
+   * よい分岐が 7 箇所あり、状態を分けると 1 箇所の漏れでそこだけ何も出なくなるため（7-2.6 決定 2）。
+   * 見るのは RequireAuth だけ。
+   */
+  | { status: "unauthenticated"; expired: boolean }
   /** トークンはあるが、有効かどうか確かめられない（通信断・5xx・CORS） */
   | { status: "unreachable" };
 
@@ -23,10 +28,12 @@ export type AuthStateInput = {
   session: { token: string; user: User } | null;
   /** 復元に失敗したトークン。無限リトライを防ぐために覚えている */
   restoreFailedFor: string | null;
+  /** 最後にトークンが消えた理由が失効か（tokenStore.wasExpired()） */
+  expired: boolean;
 };
 
 /**
- * 4 つの入力から表示すべき状態を決める。**判定の順序そのものが仕様**なので、
+ * 5 つの入力から表示すべき状態を決める。**判定の順序そのものが仕様**なので、
  * 行を入れ替えないこと。各行が前の行より先に来られない理由：
  *
  *   1. hydrated … ハイドレーション中は token が必ず null になる。これを先に
@@ -41,9 +48,10 @@ export function deriveAuthState({
   token,
   session,
   restoreFailedFor,
+  expired,
 }: AuthStateInput): AuthState {
   if (!hydrated) return { status: "loading" };
-  if (token === null) return { status: "unauthenticated" };
+  if (token === null) return { status: "unauthenticated", expired };
   if (session?.token === token) return { status: "authenticated", user: session.user };
   if (restoreFailedFor === token) return { status: "unreachable" };
   return { status: "loading" };

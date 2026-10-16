@@ -36,6 +36,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const neverChanges = () => () => {};
 const hydratedOnClient = () => true;
 const notHydratedOnServer = () => false;
+// サーバーはトークンを持たないので、失効もしていない。
+const notExpiredOnServer = () => false;
 
 /**
  * レスポンスヘッダから JWT を取り出す。
@@ -63,6 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.subscribe,
     tokenStore.get,
     tokenStore.getServerSnapshot,
+  );
+
+  // 最後にトークンが消えた理由が失効か。expire() は記録してから通知するので、
+  // token が null になった描画では、こちらも同じ描画で true になっている。
+  const expired = useSyncExternalStore(
+    tokenStore.subscribe,
+    tokenStore.wasExpired,
+    notExpiredOnServer,
   );
 
   // 「どのトークンに対して誰だと分かっているか」を持つ。トークンと一緒に
@@ -166,13 +176,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      ...deriveAuthState({ hydrated, token, session, restoreFailedFor }),
+      ...deriveAuthState({ hydrated, token, session, restoreFailedFor, expired }),
       signUp,
       signIn,
       signOut,
       retryRestore,
     }),
-    [hydrated, token, session, restoreFailedFor, signUp, signIn, signOut, retryRestore],
+    [hydrated, token, session, restoreFailedFor, expired, signUp, signIn, signOut, retryRestore],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
