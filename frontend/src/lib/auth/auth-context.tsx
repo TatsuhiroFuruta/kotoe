@@ -13,6 +13,7 @@ import {
 
 import { apiFetch, apiRequest } from "@/lib/api";
 import { deriveAuthState, type AuthState } from "@/lib/auth/derive-auth-state";
+import { requestSignOut } from "@/lib/auth/sign-out-request";
 import { tokenStore } from "@/lib/auth/token-store";
 import type { MeResponse, User } from "@/types/api";
 
@@ -158,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      await apiFetch<null>("/api/auth/sign_out", { method: "DELETE" });
+      await requestSignOut();
     } catch {
       // サーバー側の失効に失敗しても、ローカルのトークンは必ず捨てる。
       // ここで投げると「ログアウトを押したのにログイン状態のまま」になり、
