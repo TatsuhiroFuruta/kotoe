@@ -62,6 +62,17 @@ export type ApiRequestInit = RequestInit & {
    * 変換で落ちる）。待ちたいなら具体的な値を渡す。
    */
   timeoutMs?: number;
+
+  /**
+   * false なら、Authorization を載せたリクエストの 401 を失効として扱わない（トークンを捨てず、
+   * 失効のトーストも出さない）。既定は true。
+   *
+   * ログアウト（DELETE /api/auth/sign_out）だけが使う。前日から開いたままのタブでログアウトを
+   * 押すと、送るトークンは既に失効していて 401 が返る。自分から抜けようとした人に
+   * 「もう一度ログインしてください」と出さないため（7-2.6）。トークンは載せる（サーバー側で
+   * 失効させるのに要る）ので、skipAuth では代わりにならない。
+   */
+  treatUnauthorizedAsExpiry?: boolean;
 };
 
 /**
@@ -94,7 +105,12 @@ export async function apiRequest<T>(
     throw new Error("NEXT_PUBLIC_API_BASE_URL が設定されていません");
   }
 
-  const { skipAuth, timeoutMs = DEFAULT_TIMEOUT_MS, ...requestInit } = init ?? {};
+  const {
+    skipAuth,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    treatUnauthorizedAsExpiry = true,
+    ...requestInit
+  } = init ?? {};
   const token = skipAuth ? null : tokenStore.get();
 
   const headers = new Headers(requestInit.headers);
@@ -146,7 +162,12 @@ export async function apiRequest<T>(
     // 「今も同じトークンが入っているか」の比較は expire() の中にある。true が返るのは
     // 実際に捨てた 1 回だけなので、並行した 401 が何本あっても知らせは 1 回になる。
     // 各画面は 401 でトーストを出さない（ここが出す。7-2.6 設計書「決定 5」）。
-    if (response.status === 401 && token && tokenStore.expire(token)) {
+    if (
+      response.status === 401 &&
+      token &&
+      treatUnauthorizedAsExpiry &&
+      tokenStore.expire(token)
+    ) {
       expiredByThisRequest = true;
       notifySessionExpired();
     }

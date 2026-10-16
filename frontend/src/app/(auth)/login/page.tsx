@@ -16,5 +16,6 @@ export default async function LoginPage({
 }) {
   const reason = parseLoginReason((await searchParams).reason);
 
-  return <LoginForm expired={reason === "expired"} />;
+  // 理由は今「失効」の 1 種類だけなので、null かどうかで足りる。
+  return <LoginForm expired={reason !== null} />;
 }

@@ -359,6 +359,22 @@ describe("apiRequest の失効の通知", () => {
     expect(sessionExpiredToasts()).toHaveLength(1);
   });
 
+  // ログアウト（DELETE /api/auth/sign_out）は、既に失効したトークンを送ると 401 になる。
+  // 自分から抜けようとした人に「もう一度ログインしてください」と出してはいけない。
+  it("treatUnauthorizedAsExpiry: false なら、Authorization を載せた 401 でも失効として扱わない", async () => {
+    tokenStore.set("jwt-abc");
+    const fetchMock = stubFetch(jsonResponse({ error: "unauthorized" }, 401));
+
+    await expect(
+      apiFetch("/api/auth/sign_out", { method: "DELETE", treatUnauthorizedAsExpiry: false }),
+    ).rejects.toBeInstanceOf(ApiError);
+
+    expect(sentAuthorization(fetchMock)).toBe("Bearer jwt-abc");
+    expect(sessionExpiredToasts()).toHaveLength(0);
+    expect(tokenStore.wasExpired()).toBe(false);
+    expect(tokenStore.get()).toBe("jwt-abc");
+  });
+
   // パスワードの誤り。失効ではない（ログイン画面の赤い枠が担当）。
   it("Authorization を載せていない 401 では出さない", async () => {
     stubFetch(jsonResponse({ error: "invalid_credentials" }, 401));
