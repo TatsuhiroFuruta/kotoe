@@ -104,8 +104,9 @@ describe("tokenStore", () => {
         seen = tokenStore.wasExpired();
       });
 
-      // 購読はモジュール直下の Set に残る。expect が失敗しても外さないと、後のテストの
-      // set / clear でもこの listener が呼ばれ、関係のないテストまで巻き添えで落ちる。
+      // 購読はモジュール直下の Set に残る。外さないと、後のテストの set / clear（beforeEach の
+      // clear を含む）でもこの listener が呼ばれる。listener が例外を投げる状態だと、関係のない
+      // テストまで落ちる（7-2.6 の Task 1 で、wasExpired がまだ無かったときに実際に起きた）。
       try {
         tokenStore.expire("jwt-abc");
 
