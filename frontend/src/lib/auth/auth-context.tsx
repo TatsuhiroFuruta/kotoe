@@ -13,6 +13,7 @@ import {
 
 import { apiFetch, apiRequest } from "@/lib/api";
 import { deriveAuthState, type AuthState } from "@/lib/auth/derive-auth-state";
+import { requestSignOut } from "@/lib/auth/sign-out-request";
 import { tokenStore } from "@/lib/auth/token-store";
 import type { MeResponse, User } from "@/types/api";
 
@@ -36,6 +37,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const neverChanges = () => () => {};
 const hydratedOnClient = () => true;
 const notHydratedOnServer = () => false;
+// サーバーはトークンを持たないので、失効もしていない。
+const notExpiredOnServer = () => false;
 
 /**
  * レスポンスヘッダから JWT を取り出す。
@@ -63,6 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.subscribe,
     tokenStore.get,
     tokenStore.getServerSnapshot,
+  );
+
+  // 最後にトークンが消えた理由が失効か。expire() は記録してから通知するので、
+  // token が null になった描画では、こちらも同じ描画で true になっている。
+  const expired = useSyncExternalStore(
+    tokenStore.subscribe,
+    tokenStore.wasExpired,
+    notExpiredOnServer,
   );
 
   // 「どのトークンに対して誰だと分かっているか」を持つ。トークンと一緒に
@@ -148,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      await apiFetch<null>("/api/auth/sign_out", { method: "DELETE" });
+      await requestSignOut();
     } catch {
       // サーバー側の失効に失敗しても、ローカルのトークンは必ず捨てる。
       // ここで投げると「ログアウトを押したのにログイン状態のまま」になり、
@@ -166,13 +177,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      ...deriveAuthState({ hydrated, token, session, restoreFailedFor }),
+      ...deriveAuthState({ hydrated, token, session, restoreFailedFor, expired }),
       signUp,
       signIn,
       signOut,
       retryRestore,
     }),
-    [hydrated, token, session, restoreFailedFor, signUp, signIn, signOut, retryRestore],
+    [hydrated, token, session, restoreFailedFor, expired, signUp, signIn, signOut, retryRestore],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

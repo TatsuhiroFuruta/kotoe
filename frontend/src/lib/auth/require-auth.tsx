@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { buttonClasses } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
+import { loginPathFor } from "@/lib/auth/login-reason";
 
 /**
  * 認証必須ページのガード。画面遷移を知るのはこのファイルだけ。
@@ -17,6 +18,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+
+  // 失効でログイン画面へ送るときは、理由を ?reason=expired で運ぶ（7-2.6 決定 3）。
+  // effect の依存に入れるため、narrowing した結果を外で取り出しておく。
+  const expired = auth.status === "unauthenticated" && auth.expired;
 
   useEffect(() => {
     // 飛ばすのは「未ログインが確定した」ときだけ。unreachable では飛ばさない
@@ -33,9 +38,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
     // push ではなく replace。push だと、ログイン後に戻るボタンでここへ戻り、
     // また /login へ飛ばされるループができる。
-    router.replace(`/login?next=${encodeURIComponent(current)}`);
+    router.replace(loginPathFor(current, expired));
     // pathname を依存に残すのは、クライアント遷移でここが再評価されるようにするため。
-  }, [auth.status, pathname, router]);
+  }, [auth.status, expired, pathname, router]);
 
   if (auth.status === "unreachable") {
     return (

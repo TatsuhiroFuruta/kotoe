@@ -25,7 +25,6 @@ import {
 import { type PollOutcome, shouldConfirmGeneration } from "@/lib/attempts/poll-attempt";
 import { useAttemptPolling } from "@/lib/attempts/use-attempt-polling";
 import { useAuth } from "@/lib/auth/auth-context";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import { toast } from "@/lib/toast/toast-store";
 import type { Attempt, AttemptResponse } from "@/types/api";
@@ -192,8 +191,8 @@ export function AttemptComposer({
     const isUpdate = updatingId !== null;
 
     // 失効。文面は残す（入力欄は常に表示）。ボタン領域はログイン導線に変わる。
+    // 理由のトーストは api.ts が出している（7-2.6）。
     if (isUnauthorized(error)) {
-      toast.error(SESSION_EXPIRED_MESSAGE);
       focusTextareaAfterRender();
       return null;
     }
@@ -284,8 +283,8 @@ export function AttemptComposer({
   }
 
   function showGenerateError(error: unknown, attemptId: number) {
+    // 理由のトーストは api.ts が出している（7-2.6）。
     if (isUnauthorized(error)) {
-      toast.error(SESSION_EXPIRED_MESSAGE);
       setPhase({ kind: "idle" });
       focusTextareaAfterRender();
       return;

@@ -1,0 +1,127 @@
+"use client";
+
+// ログイン画面の本体。page.tsx（サーバーコンポーネント）が ?reason= を検証して expired を渡す。
+// ページ側で読むのは、useSearchParams() が <Suspense> を要求して本番ビルドだけ落ちるのと、
+// 枠をサーバーが返す HTML の時点で入れておき、表示後に差し込まれて入力欄がずれるのを避けるため
+// （7-2.6 決定 4）。
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type FormEvent } from "react";
+
+import { buttonClasses } from "@/components/ui/button";
+import { TextField } from "@/components/ui/text-field";
+import { useAuth } from "@/lib/auth/auth-context";
+import { toAuthFormErrors, type AuthFormErrors } from "@/lib/auth/error-messages";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
+
+const NO_ERRORS: AuthFormErrors = { formError: null, fieldErrors: {} };
+
+/**
+ * 戻り先を決める。**描画中に呼んではいけない**（イベントハンドラと effect の中だけ）。
+ *
+ * useSearchParams() を使わずに window.location から読むのは、あちらが静的ページで
+ * <Suspense> 境界を要求し、ローカルでは通るのに Vercel の本番ビルドだけ落ちるため
+ *（7-1 の申し送り 3）。描画中に読まないので、ハイドレーションの不一致も起きない。
+ *
+ * safeNextPath() は不正な値に対して "/" を返すので、呼び出し側でフォールバックを
+ * 書かない。書くと「検査した対象」と「実際に遷移する対象」が食い違う余地ができる。
+ */
+function resolveNextPath(): string {
+  return safeNextPath(new URLSearchParams(window.location.search).get("next"));
+}
+
+export function LoginForm({ expired }: { expired: boolean }) {
+  const auth = useAuth();
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<AuthFormErrors>(NO_ERRORS);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 認証済みでこの画面に来た場合（別タブでログインした、戻るボタンで戻ったなど）は
+  // フォームを見せずに戻り先へ送る。unreachable のときは送らない：ログインし直せば
+  // 新しいトークンが取れるので、この画面自体が回復手段のひとつになる。
+  useEffect(() => {
+    if (auth.status !== "authenticated") return;
+    router.replace(resolveNextPath());
+  }, [auth.status, router]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrors(NO_ERRORS);
+    setSubmitting(true);
+
+    try {
+      await auth.signIn({ email, password });
+      // 成功時は submitting を false に戻さない。遷移が終わるまでのあいだに
+      // 二重送信されるのを防ぐ。
+      router.replace(resolveNextPath());
+    } catch (error) {
+      setErrors(toAuthFormErrors(error));
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <h1 className="text-xl font-semibold text-ink">ログイン</h1>
+
+      <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+        {/*
+          失効でここへ送られたときの案内。エラーではないので赤にしない。
+          role="status"（alert ではない）：着いた時点から出ている説明で、割り込んで読み上げるものではない。
+          ログインに失敗しても消さず、赤い枠はこの下に出る。
+        */}
+        {expired && (
+          <p role="status" className="rounded-card bg-accent/10 px-3 py-2 text-sm text-ink">
+            {SESSION_EXPIRED_MESSAGE}
+          </p>
+        )}
+
+        {errors.formError !== null && (
+          <p role="alert" className="rounded-card bg-danger/10 px-3 py-2 text-sm text-danger">
+            {errors.formError}
+          </p>
+        )}
+
+        <TextField
+          id="email"
+          label="メールアドレス"
+          type="email"
+          value={email}
+          onChange={setEmail}
+          autoComplete="email"
+          error={errors.fieldErrors.email}
+        />
+
+        <TextField
+          id="password"
+          label="パスワード"
+          type="password"
+          value={password}
+          onChange={setPassword}
+          autoComplete="current-password"
+          error={errors.fieldErrors.password}
+        />
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className={`mt-2 ${buttonClasses()}`}
+        >
+          {submitting ? "送信中…" : "ログイン"}
+        </button>
+      </form>
+
+      <p className="mt-6 text-sm text-ink-muted">
+        アカウントをお持ちでない方は{" "}
+        <Link href="/signup" className="text-accent hover:text-accent-strong">
+          新規登録
+        </Link>
+      </p>
+    </>
+  );
+}

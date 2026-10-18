@@ -5,6 +5,7 @@
 // コードだけを返し、日本語をここ 1 箇所に集約する。
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
+import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/session-expiry";
 import { NETWORK_MESSAGE, SERVER_MESSAGE, TIMEOUT_MESSAGE } from "@/lib/request-error-messages";
 
 export type AuthFormErrors = {
@@ -13,12 +14,6 @@ export type AuthFormErrors = {
   /** フィールド名 → 文言 */
   fieldErrors: Record<string, string>;
 };
-
-/**
- * JWT の失効（Authorization を載せたリクエストの 401）。ログインフォーム以外でも出すので export する。
- * 7-3b のお気に入りが最初の利用者。7-2.6 で失効の通知を設計するときもこれを使う（文言を 2 箇所に書かない）。
- */
-export const SESSION_EXPIRED_MESSAGE = "セッションの有効期限が切れました。もう一度ログインしてください";
 
 /** 401 のボディ（Warden の FailureApp）のコード */
 const FORM_MESSAGES: Record<string, string> = {

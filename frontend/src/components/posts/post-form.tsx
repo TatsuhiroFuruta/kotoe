@@ -8,7 +8,6 @@ import { ImagePicker } from "@/components/posts/image-picker";
 import { buttonClasses } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
 import { apiFetch } from "@/lib/api";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
 import { checkImageFile } from "@/lib/posts/image-file-check";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import {
@@ -169,18 +168,18 @@ export function PostForm() {
     submittingRef.current = false;
 
     // 送信中に画面を離れていたら、フォームはもう無い。成功だけトーストが出て失敗が無言だと、
-    // 投稿されたと受け取られるので、失敗もトーストで伝える。
+    // 投稿されたと受け取られるので、失敗もトーストで伝える。失効は null（api.ts が出している）。
     if (!mountedRef.current) {
-      toast.error(toLeftPageFailureMessage(errors));
+      const message = toLeftPageFailureMessage(errors);
+      if (message !== null) toast.error(message);
       return;
     }
 
     setSubmitting(false);
 
     if (errors.form?.kind === "session_expired") {
-      // api.ts がトークンを捨てたので、RequireAuth がこのあとログイン画面へ送る。
-      // 入力は消える（既知の制約。7-2.6・7-3d で扱う）。理由だけは伝える。
-      toast.error(SESSION_EXPIRED_MESSAGE);
+      // api.ts がトークンを捨てて理由のトーストも出したので、RequireAuth がこのあと
+      // /login?reason=expired へ送る。入力は消える（既知の制約。7-3d で扱う）。
       return;
     }
 

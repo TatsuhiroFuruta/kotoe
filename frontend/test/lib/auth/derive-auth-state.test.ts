@@ -11,6 +11,7 @@ const base: AuthStateInput = {
   token: null,
   session: null,
   restoreFailedFor: null,
+  expired: false,
 };
 
 describe("deriveAuthState", () => {
@@ -32,7 +33,24 @@ describe("deriveAuthState", () => {
   });
 
   it("トークンが無ければ unauthenticated を返す", () => {
-    expect(deriveAuthState({ ...base, token: null })).toEqual({ status: "unauthenticated" });
+    expect(deriveAuthState({ ...base, token: null })).toEqual({
+      status: "unauthenticated",
+      expired: false,
+    });
+  });
+
+  it("失効でトークンが消えたなら、unauthenticated に expired: true を載せる", () => {
+    expect(deriveAuthState({ ...base, token: null, expired: true })).toEqual({
+      status: "unauthenticated",
+      expired: true,
+    });
+  });
+
+  // 判定の順序は変えない。ハイドレーション前は、失効の記録があっても loading。
+  it("ハイドレーション前は、失効の記録があっても loading を返す", () => {
+    expect(deriveAuthState({ ...base, hydrated: false, token: null, expired: true })).toEqual({
+      status: "loading",
+    });
   });
 
   it("セッションが現在のトークンのものなら authenticated とユーザーを返す", () => {

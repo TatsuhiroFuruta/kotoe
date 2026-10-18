@@ -9,7 +9,6 @@
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import { apiErrorCode, fallbackErrorMessage } from "@/lib/attempts/attempt-messages";
-import { SESSION_EXPIRED_MESSAGE } from "@/lib/auth/error-messages";
 import { IMAGE_MAX_BYTES } from "@/lib/posts/image-file-check";
 
 export const POST_CREATED_MESSAGE = "お題を投稿しました";
@@ -176,12 +175,12 @@ export function unconfirmedMessage(reason: string): string {
  * 送信中に画面を離れたあとの失敗を、トーストの 1 文にする。成功のときはトーストを出すので、
  * 失敗で何も出さないと「投稿された」と受け取られる。
  *
- * - 失効：セッションの文言
+ * - 失効：null（呼び出し側はトーストを出さない）。理由のトーストは api.ts が既に出している（7-2.6）
  * - unconfirmed：画面と同じ文（リンクは無し）
  * - rejected：理由を括弧で添える。欄のエラーがあればそれを優先する（直すべき入力が分かる）
  */
-export function toLeftPageFailureMessage(errors: PostFormErrors): string {
-  if (errors.form?.kind === "session_expired") return SESSION_EXPIRED_MESSAGE;
+export function toLeftPageFailureMessage(errors: PostFormErrors): string | null {
+  if (errors.form?.kind === "session_expired") return null;
   if (errors.form?.kind === "unconfirmed") return unconfirmedMessage(errors.form.reason);
 
   const reason = errors.image ?? errors.title ?? errors.form?.reason ?? UNKNOWN_FIELD_REASON;

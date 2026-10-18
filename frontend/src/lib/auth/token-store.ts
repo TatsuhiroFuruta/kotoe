@@ -27,6 +27,13 @@ let fallbackToken: string | null = null;
 // 古いトークンを読み続けてタブ間の同期が壊れる。
 let storageWritable = true;
 
+// 最後にトークンが消えた理由が失効（api.ts が 401 を検知して expire() を呼んだ）か。
+// RequireAuth がログイン画面へ ?reason=expired を付けるかどうかを決めるのに使う。
+//
+// タブごとのメモリにだけ持ち、localStorage には書かない。書くとタブ間で「消えた」と
+// 「理由」が別々に届き、順序が保証されない（設計書「既知の制約 1」）。
+let expired = false;
+
 function readStorage(): string | null {
   // SSR では window が無い。サイトデータを拒否している環境では
   // localStorage へのアクセス自体が例外を投げる。どちらも落とさない。
@@ -74,13 +81,40 @@ export const tokenStore = {
   },
 
   set(token: string): void {
+    expired = false;
     writeStorage(token);
     notify();
   },
 
+  /** ログアウト。理由は持たない（自分で抜けたので、説明は要らない）。 */
   clear(): void {
+    expired = false;
     writeStorage(null);
     notify();
+  },
+
+  /**
+   * 失効したトークンを捨てる。api.ts が「Authorization を載せたリクエストの 401」で呼ぶ。
+   *
+   * 中身が token と一致するときだけ捨てる。token は送信時にキャプチャした値で、応答を
+   * 待つ間に再ログインで差し替わっていることがある。そのとき古い 401 で新しいトークンを
+   * 消すと、ログイン成功直後に未ログインへ戻される（複数の API を並行で叩くページで踏む）。
+   *
+   * 実際に捨てたときだけ true を返す。並行した 401 が何本返っても true は最初の 1 本だけ
+   * なので、呼び出し側はこれを見て通知を 1 回に絞れる。
+   */
+  expire(token: string): boolean {
+    if (readStorage() !== token) return false;
+
+    // 通知より先に書く。購読者は通知の中で wasExpired() を読む。
+    expired = true;
+    writeStorage(null);
+    notify();
+    return true;
+  },
+
+  wasExpired(): boolean {
+    return expired;
   },
 
   /**
@@ -94,6 +128,9 @@ export const tokenStore = {
     const onStorage = (event: StorageEvent) => {
       // key が null なのは localStorage.clear() のとき。これも取りこぼさない。
       if (event.key !== null && event.key !== STORAGE_KEY) return;
+      // ほかのタブがトークンを変えた。こちらで以前に記録した失効は、もう今の状態の理由ではない。
+      // listener を呼ぶ前に消す（React は listener の中で wasExpired() を読み直す）。
+      expired = false;
       listener();
     };
     window.addEventListener("storage", onStorage);
