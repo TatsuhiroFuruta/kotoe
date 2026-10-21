@@ -1,5 +1,6 @@
 "use client";
 
+import { MypageList } from "@/components/mypage/mypage-list";
 import { MypageTabs } from "@/components/mypage/mypage-tabs";
 import { ProfileHeader } from "@/components/mypage/profile-header";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -15,8 +16,7 @@ export function MypageView({ query }: { query: MypageQuery }) {
     <div className="flex flex-col gap-6">
       <ProfileHeader name={auth.user.name} />
       <MypageTabs current={query.tab} />
-      {/* 一覧は次のタスクで MypageList に置き換える。 */}
-      <div />
+      <MypageList query={query} />
     </div>
   );
 }
