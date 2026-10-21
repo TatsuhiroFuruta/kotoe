@@ -5,15 +5,15 @@ import { useEffect, useState } from "react";
 
 import { PostCard } from "@/components/posts/post-card";
 import { PostSearchForm } from "@/components/posts/post-search-form";
-import { buttonClasses } from "@/components/ui/button";
+import { CardGridSkeleton } from "@/components/ui/card-grid-skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
+import { RetryableError } from "@/components/ui/retryable-error";
 import { SortToggle } from "@/components/ui/sort-toggle";
 import { apiFetch } from "@/lib/api";
 import { postsApiPath, postsHref, type PostsQuery, type PostsSort } from "@/lib/posts/posts-query";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import type { PostsIndexResponse } from "@/types/api";
-
-const SKELETON_COUNT = 12; // サーバーの 1 ページの件数と同じ。レイアウトが跳ねないように
 
 const SORT_OPTIONS: { sort: PostsSort; label: string }[] = [
   { sort: "recent", label: "新着順" },
@@ -76,43 +76,17 @@ export function PostList({ query }: { query: PostsQuery }) {
         />
       </div>
 
-      {outcome === null && <PostGridSkeleton />}
+      {outcome === null && <CardGridSkeleton aspect="4:3" />}
 
       {outcome?.kind === "error" && (
-        <div className="flex flex-col items-center gap-4 rounded-card border border-line bg-surface p-8 text-center">
-          <p className="text-ink">{outcome.message}</p>
-          <button
-            type="button"
-            onClick={() => setRetryCount((count) => count + 1)}
-            className={buttonClasses({ variant: "secondary" })}
-          >
-            再試行
-          </button>
-        </div>
+        <RetryableError
+          message={outcome.message}
+          onRetry={() => setRetryCount((count) => count + 1)}
+        />
       )}
 
       {outcome?.kind === "success" && <PostResults query={query} data={outcome.data} />}
     </div>
-  );
-}
-
-function PostGridSkeleton() {
-  return (
-    <ul
-      aria-busy="true"
-      aria-label="読み込み中"
-      className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
-    >
-      {Array.from({ length: SKELETON_COUNT }, (_, index) => (
-        <li key={index} className="overflow-hidden rounded-card border border-line bg-surface">
-          <div className="aspect-4/3 w-full animate-pulse bg-line" />
-          <div className="flex flex-col gap-2 p-4">
-            <div className="h-5 w-3/4 animate-pulse rounded bg-line" />
-            <div className="h-4 w-1/3 animate-pulse rounded bg-line" />
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -163,14 +137,5 @@ function PostResults({ query, data }: { query: PostsQuery; data: PostsIndexRespo
         hrefFor={(page) => postsHref({ ...query, page })}
       />
     </>
-  );
-}
-
-function EmptyState({ message, children }: { message: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-card border border-line bg-surface p-10 text-center">
-      <p className="wrap-break-word text-ink-muted">{message}</p>
-      {children}
-    </div>
   );
 }

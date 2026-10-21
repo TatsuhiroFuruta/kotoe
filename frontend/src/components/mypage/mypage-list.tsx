@@ -7,13 +7,14 @@ import { DraftCard } from "@/components/mypage/draft-card";
 import { MyAttemptCard } from "@/components/mypage/my-attempt-card";
 import { PostCard } from "@/components/posts/post-card";
 import { buttonClasses } from "@/components/ui/button";
+import { CardGridSkeleton } from "@/components/ui/card-grid-skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
+import { RetryableError } from "@/components/ui/retryable-error";
 import { apiFetch } from "@/lib/api";
 import { mypageApiPath, mypageHref, type MypageQuery, type MypageTab } from "@/lib/mypage/mypage-query";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import type { MyAttemptsResponse, PostsIndexResponse } from "@/types/api";
-
-const SKELETON_COUNT = 12; // サーバーの 1 ページの件数と同じ。レイアウトが跳ねないように
 
 /** 応答の形はタブで分かれる。tab から kind を決めて詰め、描画は kind で分岐する。 */
 type ListData =
@@ -29,12 +30,11 @@ const EMPTY_STATES: Record<MypageTab, { message: string; label: string; href: st
   favorites: { message: "お気に入りしたお題はありません", label: "お題を探す", href: "/posts" },
 };
 
-async function fetchList(query: MypageQuery, signal: AbortSignal): Promise<ListData> {
-  const path = mypageApiPath(query);
-  if (query.tab === "posts" || query.tab === "favorites") {
-    return { kind: "posts", data: await apiFetch<PostsIndexResponse>(path, { signal }) };
+async function fetchList(tab: MypageTab, apiPath: string, signal: AbortSignal): Promise<ListData> {
+  if (tab === "posts" || tab === "favorites") {
+    return { kind: "posts", data: await apiFetch<PostsIndexResponse>(apiPath, { signal }) };
   }
-  return { kind: "attempts", data: await apiFetch<MyAttemptsResponse>(path, { signal }) };
+  return { kind: "attempts", data: await apiFetch<MyAttemptsResponse>(apiPath, { signal }) };
 }
 
 /**
@@ -44,8 +44,8 @@ async function fetchList(query: MypageQuery, signal: AbortSignal): Promise<ListD
  * 後から届いても key が一致せず描画されない（cleanup の abort が間に合わない場合の保険）。
  */
 export function MypageList({ query }: { query: MypageQuery }) {
-  const { tab, page } = query;
-  const apiPath = mypageApiPath({ tab, page });
+  const { tab } = query;
+  const apiPath = mypageApiPath(query);
   const [retryCount, setRetryCount] = useState(0);
   const requestKey = `${apiPath}#${retryCount}`;
   const [result, setResult] = useState<{ key: string; outcome: Outcome } | null>(null);
@@ -53,7 +53,7 @@ export function MypageList({ query }: { query: MypageQuery }) {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetchList({ tab, page }, controller.signal)
+    fetchList(tab, apiPath, controller.signal)
       .then((list) => setResult({ key: requestKey, outcome: { kind: "success", list } }))
       .catch((error: unknown) => {
         // 自分で中断した（タブが変わった／アンマウントした）ものは失敗ではない。
@@ -65,51 +65,24 @@ export function MypageList({ query }: { query: MypageQuery }) {
       });
 
     return () => controller.abort();
-  }, [tab, page, requestKey]);
+  }, [tab, apiPath, requestKey]);
 
   const outcome = result?.key === requestKey ? result.outcome : null;
 
   return (
     <div className="flex flex-col gap-6">
-      {outcome === null && <GridSkeleton tab={tab} />}
+      {/* 挑戦カードの画像は正方形、お題・下書きのカードは 4:3。 */}
+      {outcome === null && <CardGridSkeleton aspect={tab === "attempts" ? "1:1" : "4:3"} />}
 
       {outcome?.kind === "error" && (
-        <div className="flex flex-col items-center gap-4 rounded-card border border-line bg-surface p-8 text-center">
-          <p className="text-ink">{outcome.message}</p>
-          <button
-            type="button"
-            onClick={() => setRetryCount((count) => count + 1)}
-            className={buttonClasses({ variant: "secondary" })}
-          >
-            再試行
-          </button>
-        </div>
+        <RetryableError
+          message={outcome.message}
+          onRetry={() => setRetryCount((count) => count + 1)}
+        />
       )}
 
       {outcome?.kind === "success" && <ListResults query={query} list={outcome.list} />}
     </div>
-  );
-}
-
-function GridSkeleton({ tab }: { tab: MypageTab }) {
-  // 挑戦カードの画像は正方形、お題・下書きのカードは 4:3。
-  const imageAspect = tab === "attempts" ? "aspect-square" : "aspect-4/3";
-  return (
-    <ul
-      aria-busy="true"
-      aria-label="読み込み中"
-      className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
-    >
-      {Array.from({ length: SKELETON_COUNT }, (_, index) => (
-        <li key={index} className="overflow-hidden rounded-card border border-line bg-surface">
-          <div className={`${imageAspect} w-full animate-pulse bg-line`} />
-          <div className="flex flex-col gap-2 p-4">
-            <div className="h-5 w-3/4 animate-pulse rounded bg-line" />
-            <div className="h-4 w-1/3 animate-pulse rounded bg-line" />
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -169,14 +142,5 @@ function ListResults({ query, list }: { query: MypageQuery; list: ListData }) {
         hrefFor={(page) => mypageHref({ tab: query.tab, page })}
       />
     </>
-  );
-}
-
-function EmptyState({ message, children }: { message: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-card border border-line bg-surface p-10 text-center">
-      <p className="wrap-break-word text-ink-muted">{message}</p>
-      {children}
-    </div>
   );
 }

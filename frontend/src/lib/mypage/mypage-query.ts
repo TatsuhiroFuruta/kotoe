@@ -37,14 +37,22 @@ export function parseMypageQuery(params: RawSearchParams): MypageQuery {
   return { tab, page };
 }
 
-/** 既定値のパラメータを省いたクエリ文字列。 */
-function toSearch({ tab, page }: MypageQuery): string {
+/** page だけのクエリ文字列。1 ページ目は省く。画面の URL と API パスで共通。 */
+function pageSearch(page: number): string {
   const params = new URLSearchParams();
-  if (tab !== DEFAULT_QUERY.tab) params.set("tab", tab);
   if (page !== DEFAULT_QUERY.page) params.set("page", String(page));
 
   const search = params.toString();
   return search ? `?${search}` : "";
+}
+
+/** 既定値のパラメータを省いたクエリ文字列。 */
+function toSearch({ tab, page }: MypageQuery): string {
+  if (tab === DEFAULT_QUERY.tab) return pageSearch(page);
+
+  const params = new URLSearchParams({ tab });
+  if (page !== DEFAULT_QUERY.page) params.set("page", String(page));
+  return `?${params.toString()}`;
 }
 
 /**
@@ -57,5 +65,5 @@ export function mypageHref(query: Partial<MypageQuery> = {}): string {
 
 /** API のパス。tab はパスにだけ入れ、クエリには page だけを載せる。 */
 export function mypageApiPath({ tab, page }: MypageQuery): string {
-  return `/api/me/${tab}${toSearch({ tab: DEFAULT_QUERY.tab, page })}`;
+  return `/api/me/${tab}${pageSearch(page)}`;
 }
