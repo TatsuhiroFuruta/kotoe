@@ -25,6 +25,10 @@ describe("avatarInitial", () => {
     ["\u{1F1EF}\u{1F1F5}taro", "\u{1F1EF}\u{1F1F5}"], // 国旗（地域指示記号 2 つ）
     ["\u{1F1EF}\u{1F1F5}", "\u{1F1EF}\u{1F1F5}"],
     ["#\uFE0F\u20E3team", "#\uFE0F\u20E3"], // キーキャップ
+    ["\u2800bob", "B"], // 点字の空白（見えない記号）
+    ["\u3164taro", "T"], // ハングルフィラー（Default_Ignorable）
+    ["\ud800bob", "B"], // 単独のサロゲート
+    ["bob", "B"],
   ])("%j → %j", (name, initial) => {
     expect(avatarInitial(name)).toBe(initial);
   });
