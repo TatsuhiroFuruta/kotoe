@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { attemptCardLabel } from "@/lib/attempts/attempt-card-label";
+import { myAttemptCardLabel } from "@/lib/attempts/attempt-card-label";
 import { attemptDetailHref } from "@/lib/attempts/attempt-detail-query";
 import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
 import type { MyAttempt } from "@/types/api";
@@ -62,7 +62,7 @@ export function MyAttemptCard({ attempt }: { attempt: MyAttempt }) {
   return (
     <Link
       href={attemptDetailHref(attempt.id)}
-      aria-label={attemptCardLabel(attempt)}
+      aria-label={myAttemptCardLabel(attempt)}
       className="group block rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <article className={`${CARD_CLASSES} transition-colors group-hover:border-accent`}>

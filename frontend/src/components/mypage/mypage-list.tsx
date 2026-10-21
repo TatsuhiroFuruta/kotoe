@@ -71,7 +71,7 @@ export function MypageList({ query }: { query: MypageQuery }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {outcome === null && <GridSkeleton />}
+      {outcome === null && <GridSkeleton tab={tab} />}
 
       {outcome?.kind === "error" && (
         <div className="flex flex-col items-center gap-4 rounded-card border border-line bg-surface p-8 text-center">
@@ -91,7 +91,9 @@ export function MypageList({ query }: { query: MypageQuery }) {
   );
 }
 
-function GridSkeleton() {
+function GridSkeleton({ tab }: { tab: MypageTab }) {
+  // 挑戦カードの画像は正方形、お題・下書きのカードは 4:3。
+  const imageAspect = tab === "attempts" ? "aspect-square" : "aspect-4/3";
   return (
     <ul
       aria-busy="true"
@@ -100,7 +102,7 @@ function GridSkeleton() {
     >
       {Array.from({ length: SKELETON_COUNT }, (_, index) => (
         <li key={index} className="overflow-hidden rounded-card border border-line bg-surface">
-          <div className="aspect-4/3 w-full animate-pulse bg-line" />
+          <div className={`${imageAspect} w-full animate-pulse bg-line`} />
           <div className="flex flex-col gap-2 p-4">
             <div className="h-5 w-3/4 animate-pulse rounded bg-line" />
             <div className="h-4 w-1/3 animate-pulse rounded bg-line" />

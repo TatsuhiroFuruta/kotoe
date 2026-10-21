@@ -52,9 +52,9 @@ export function ProfileHeader({ name }: { name: string }) {
         <h1 className="wrap-break-word text-2xl font-semibold tracking-tight text-ink">{name}</h1>
 
         {outcome === null && (
-          <div aria-busy="true" aria-label="読み込み中" className="mt-2 flex gap-4">
+          <div role="status" aria-busy="true" aria-label="読み込み中" className="mt-2 flex gap-4">
             {Array.from({ length: 3 }, (_, index) => (
-              <div key={index} className="h-4 w-20 animate-pulse rounded bg-line" />
+              <div key={index} className="h-5 w-20 animate-pulse rounded bg-line" />
             ))}
           </div>
         )}

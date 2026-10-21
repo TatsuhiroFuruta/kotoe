@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { attemptCardLabel } from "@/lib/attempts/attempt-card-label";
+import { attemptCardLabel, myAttemptCardLabel } from "@/lib/attempts/attempt-card-label";
 
 const attempt = (description: string, likes = 3) => ({
   user: { name: "taro" },
@@ -56,5 +56,24 @@ describe("attemptCardLabel", () => {
     // コードポイントなら 42 文字（40 で切る）になり、どちらの経路を通ったかが分かる。
     const text = "👍🏽".repeat(21);
     expect(attemptCardLabel(attempt(text))).toBe(`${"👍🏽".repeat(20)}…、taro さんの挑戦、いいね 3`);
+  });
+});
+
+describe("myAttemptCardLabel", () => {
+  const mine = (title: string | null) => ({
+    user: { name: "taro" },
+    description: "赤い太陽",
+    likes_count: 5,
+    post: { id: 1, title, image_public_id: null, discarded: false },
+  });
+
+  it("描写文・お題・いいね数の順で並べ、見えていない自分の名前は含めない", () => {
+    const label = myAttemptCardLabel(mine("夕焼けの海"));
+    expect(label).toBe("赤い太陽、お題：夕焼けの海、いいね 5");
+    expect(label).not.toContain("taro");
+  });
+
+  it("お題の題名が null のときは null と読ませず、お題の部分を省く", () => {
+    expect(myAttemptCardLabel(mine(null))).toBe("赤い太陽、いいね 5");
   });
 });

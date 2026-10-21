@@ -10,7 +10,7 @@
  * 区切りは「、」にする（括弧は読み上げの設定によって「かっこ」と読まれる）。
  */
 
-import type { Attempt } from "@/types/api";
+import type { Attempt, MyAttempt } from "@/types/api";
 
 /** 描写文の長さ（書記素の数）。同じ人のカードを区別できれば足りる。 */
 const EXCERPT_LENGTH = 40;
@@ -55,4 +55,20 @@ export function attemptCardLabel(attempt: {
 }): string {
   const { name } = attempt.user;
   return `${excerptOf(attempt.description)}、${name} さんの挑戦、いいね ${attempt.likes_count}`;
+}
+
+/**
+ * マイページの挑戦カードの読み上げ名。投稿者は常に本人で名前は画面に出ていないので、
+ * 名前の代わりに、どのお題への挑戦かを読む（見えている「お題：…」と同じ順）。
+ * 題名が無いときはお題の部分ごと省く。
+ */
+export function myAttemptCardLabel(attempt: {
+  description: MyAttempt["description"];
+  likes_count: MyAttempt["likes_count"];
+  post: Pick<MyAttempt["post"], "title">;
+}): string {
+  const parts = [excerptOf(attempt.description)];
+  if (attempt.post.title !== null) parts.push(`お題：${attempt.post.title}`);
+  parts.push(`いいね ${attempt.likes_count}`);
+  return parts.join("、");
 }
