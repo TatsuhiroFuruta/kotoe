@@ -11,7 +11,7 @@ export function UserAvatar({ name, size }: { name: string; size: keyof typeof si
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-accent/10 font-semibold text-accent ${sizeClasses[size]}`}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent/10 font-semibold text-accent ${sizeClasses[size]}`}
     >
       {avatarInitial(name)}
     </span>

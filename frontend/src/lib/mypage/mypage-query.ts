@@ -37,22 +37,24 @@ export function parseMypageQuery(params: RawSearchParams): MypageQuery {
   return { tab, page };
 }
 
-/** page だけのクエリ文字列。1 ページ目は省く。画面の URL と API パスで共通。 */
-function pageSearch(page: number): string {
-  const params = new URLSearchParams();
+/** 既定値でない page だけを URLSearchParams に足す。1 ページ目は省くという規則はここだけに置く。 */
+function withPage(params: URLSearchParams, page: number): string {
   if (page !== DEFAULT_QUERY.page) params.set("page", String(page));
 
   const search = params.toString();
   return search ? `?${search}` : "";
 }
 
+/** page だけのクエリ文字列。画面の URL と API パスで共通。 */
+function pageSearch(page: number): string {
+  return withPage(new URLSearchParams(), page);
+}
+
 /** 既定値のパラメータを省いたクエリ文字列。 */
 function toSearch({ tab, page }: MypageQuery): string {
-  if (tab === DEFAULT_QUERY.tab) return pageSearch(page);
-
-  const params = new URLSearchParams({ tab });
-  if (page !== DEFAULT_QUERY.page) params.set("page", String(page));
-  return `?${params.toString()}`;
+  const params = new URLSearchParams();
+  if (tab !== DEFAULT_QUERY.tab) params.set("tab", tab);
+  return withPage(params, page);
 }
 
 /**

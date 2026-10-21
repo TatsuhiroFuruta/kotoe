@@ -5,12 +5,17 @@
  * Intl.Segmenter は Firefox では 125 から。無い環境ではコードポイントで数える（描画中に
  * 例外を投げないため）。その場合は上の文字を途中で切ることがある。
  */
+let segmenter: Intl.Segmenter | undefined;
+
 export function* charactersOf(text: string): Generator<string> {
+  // 有無の判定は呼ぶたびに行う（キャッシュするのは作ったインスタンスだけ）。
+  // こうすると Segmenter を隠すテストでも、先に作られたインスタンスに影響されずに代替経路を通る。
   if (typeof Intl.Segmenter !== "function") {
     yield* text;
     return;
   }
-  for (const { segment } of new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(text)) {
+  segmenter ??= new Intl.Segmenter("ja", { granularity: "grapheme" });
+  for (const { segment } of segmenter.segment(text)) {
     yield segment;
   }
 }
