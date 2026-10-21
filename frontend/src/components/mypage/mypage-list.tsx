@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { DraftCard } from "@/components/mypage/draft-card";
+import { MyAttemptCard } from "@/components/mypage/my-attempt-card";
 import { PostCard } from "@/components/posts/post-card";
 import { buttonClasses } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
@@ -147,8 +149,17 @@ function ListResults({ query, list }: { query: MypageQuery; list: ListData }) {
           ))}
         </ul>
       ) : (
-        // Task 5: ここに MyAttemptCard（attempts タブ）/ DraftCard（drafts タブ）を並べる。
-        null
+        <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {list.data.attempts.map((attempt) => (
+            <li key={attempt.id}>
+              {query.tab === "drafts" ? (
+                <DraftCard draft={attempt} />
+              ) : (
+                <MyAttemptCard attempt={attempt} />
+              )}
+            </li>
+          ))}
+        </ul>
       )}
       <Pagination
         page={query.page}
