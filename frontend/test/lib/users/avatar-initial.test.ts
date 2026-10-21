@@ -28,7 +28,7 @@ describe("avatarInitial", () => {
     ["\u2800bob", "B"], // 点字の空白（見えない記号）
     ["\u3164taro", "T"], // ハングルフィラー（Default_Ignorable）
     ["\ud800bob", "B"], // 単独のサロゲート
-    ["bob", "B"],
+    ["\ue000bob", "B"], // 私用領域の文字
   ])("%j → %j", (name, initial) => {
     expect(avatarInitial(name)).toBe(initial);
   });
