@@ -111,6 +111,19 @@ export type Attempt = {
   created_at: string;
 };
 
+/** me/attempts・me/drafts の post。削除済みなら title と image_public_id は null（6-3） */
+export type AttemptPostSummary = {
+  id: number;
+  title: string | null;
+  image_public_id: string | null;
+  discarded: boolean;
+};
+
+export type MyAttempt = Attempt & { post: AttemptPostSummary };
+
+/** GET /api/me/attempts・/api/me/drafts。どちらもキーは attempts */
+export type MyAttemptsResponse = { attempts: MyAttempt[]; meta: PaginationMeta };
+
 /**
  * GET /api/posts/:id。
  * meta は attempts のページングだけを指す。best_attempts はページングを持たず、

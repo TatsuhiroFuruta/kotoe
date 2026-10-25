@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { buttonClasses } from "@/components/ui/button";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAuth } from "@/lib/auth/auth-context";
 
 export function SiteHeader() {
@@ -37,7 +38,7 @@ export function SiteHeader() {
 
           {/*
             ナビのリンクは、そのルートを作る issue がここに足す。
-            7-6: アバター → /mypage ／ 7-7:「ランキング」→ /rankings。
+            7-7:「ランキング」→ /rankings。
             「お題を投稿」（7-5）は右側のアカウント側にボタンとして置いてある（デザインブリーフ 0）。
             main は Vercel の本番を追跡するので、存在しないルートへのリンクは置かない
             （置いた瞬間に本番で 404 になる）。
@@ -106,9 +107,15 @@ export function SiteHeader() {
                 name には長さの上限が無い（presence だけ）。空白を含まない長い名前でも
                 1 行に収まるよう幅を切り、全文は title で読めるようにする。
               */}
-              <span className="max-w-40 truncate text-ink-muted" title={auth.user.name}>
-                {auth.user.name}
-              </span>
+              <Link
+                href="/mypage"
+                className="flex min-w-0 items-center gap-2 text-ink-muted hover:text-ink"
+              >
+                <UserAvatar name={auth.user.name} size="sm" />
+                <span className="max-w-40 truncate" title={auth.user.name}>
+                  {auth.user.name}
+                </span>
+              </Link>
               <button
                 type="button"
                 onClick={handleSignOut}

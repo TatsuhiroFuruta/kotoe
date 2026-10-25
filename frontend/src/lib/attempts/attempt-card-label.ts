@@ -10,27 +10,11 @@
  * 区切りは「、」にする（括弧は読み上げの設定によって「かっこ」と読まれる）。
  */
 
-import type { Attempt } from "@/types/api";
+import { charactersOf } from "@/lib/text/graphemes";
+import type { Attempt, MyAttempt } from "@/types/api";
 
 /** 描写文の長さ（書記素の数）。同じ人のカードを区別できれば足りる。 */
 const EXCERPT_LENGTH = 40;
-
-/**
- * 文字を先頭から 1 つずつ返す。書記素（見た目の 1 文字）で数えるのは、コードポイントで切ると
- * ZWJ でつないだ絵文字や肌の色の修飾子、結合文字の濁点を途中で切ってしまうため。
- *
- * Intl.Segmenter は Firefox では 125 から。無い環境ではコードポイントで数える（描画中に
- * 例外を投げないため）。その場合は上の文字を途中で切ることがある。
- */
-function* charactersOf(text: string): Generator<string> {
-  if (typeof Intl.Segmenter !== "function") {
-    yield* text;
-    return;
-  }
-  for (const { segment } of new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(text)) {
-    yield segment;
-  }
-}
 
 function excerptOf(text: string): string {
   // 改行や連続する空白で文字数を使い切らないよう、先に 1 つの空白へまとめる。
@@ -55,4 +39,20 @@ export function attemptCardLabel(attempt: {
 }): string {
   const { name } = attempt.user;
   return `${excerptOf(attempt.description)}、${name} さんの挑戦、いいね ${attempt.likes_count}`;
+}
+
+/**
+ * マイページの挑戦カードの読み上げ名。投稿者は常に本人で名前は画面に出ていないので、
+ * 名前の代わりに、どのお題への挑戦かを読む（見えている「お題：…」と同じ順）。
+ * 題名が無いときはお題の部分ごと省く。
+ */
+export function myAttemptCardLabel(attempt: {
+  description: MyAttempt["description"];
+  likes_count: MyAttempt["likes_count"];
+  post: Pick<MyAttempt["post"], "title">;
+}): string {
+  const parts = [excerptOf(attempt.description)];
+  if (attempt.post.title !== null) parts.push(`お題：${attempt.post.title}`);
+  parts.push(`いいね ${attempt.likes_count}`);
+  return parts.join("、");
 }
