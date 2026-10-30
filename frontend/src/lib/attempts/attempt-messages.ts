@@ -30,6 +30,9 @@ export const EDIT_NOT_SAVED_MESSAGE =
  */
 export const DRAFT_UNAVAILABLE_MESSAGE = "この下書きは開けませんでした";
 
+/** 受け口の下書きを読み込んでいる間の入力欄の案内。書けない理由を見せる（その間は readOnly）。 */
+export const DRAFT_LOADING_PLACEHOLDER = "下書きを読み込んでいます…";
+
 export const ATTEMPT_DELETED_MESSAGE = "挑戦を削除しました";
 export const DRAFT_DELETED_MESSAGE = "下書きを削除しました";
 export const DELETE_ATTEMPT_TITLE = "この挑戦を削除しますか？";

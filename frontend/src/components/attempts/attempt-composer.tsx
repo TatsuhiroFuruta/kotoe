@@ -14,6 +14,7 @@ import {
   DESCRIPTION_MAX_LENGTH,
   descriptionFieldError,
   DRAFT_GONE_MESSAGE,
+  DRAFT_LOADING_PLACEHOLDER,
   DRAFT_SAVED_MESSAGE,
   DRAFT_UNAVAILABLE_MESSAGE,
   EDIT_NOT_SAVED_MESSAGE,
@@ -479,7 +480,7 @@ export function AttemptComposer({
             if (fieldError !== null) setFieldError(null);
           }}
           rows={6}
-          placeholder={PLACEHOLDER}
+          placeholder={resumePending ? DRAFT_LOADING_PLACEHOLDER : PLACEHOLDER}
           aria-invalid={fieldError === null ? undefined : true}
           aria-describedby={describedBy}
           className="resize-y rounded-card border border-line bg-canvas px-3 py-2 text-ink outline-none focus:border-accent"
