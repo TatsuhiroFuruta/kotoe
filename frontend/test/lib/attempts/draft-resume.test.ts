@@ -122,6 +122,13 @@ describe("draftResumeAction", () => {
     );
   });
 
+  it("前回が 401（silent）なら、再ログイン後の取り直しの結果を適用する", () => {
+    const previous = { key: 34, outcome: { kind: "silent" } as const };
+    expect(draftResumeAction({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+      "apply",
+    );
+  });
+
   it("入力欄に文面があれば ready を適用せず、書いた文面を残して受け口を終える（?draft= を外す）", () => {
     expect(
       draftResumeAction({ previous: null, draftKey: 34, outcome: ready, currentText: "書きかけ" }),

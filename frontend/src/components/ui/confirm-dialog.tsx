@@ -8,8 +8,8 @@ import { buttonClasses } from "@/components/ui/button";
  * 確認ダイアログ。ネイティブの <dialog> を showModal() で開き、フォーカスの閉じ込めと
  * 背後の操作の無効化をブラウザに任せる（7-6b 設計書 決定 5）。ブラウザの confirm() は使わない。
  *
- * 開閉の正は open prop。Esc（cancel イベント）も既定の閉じる動作を止めて onCancel に渡すので、
- * React の state と <dialog> の開閉がずれない。pending の間は Esc でも閉じない
+ * 開閉の正は open prop。Esc（cancel イベント）は既定の閉じる動作を止めて onCancel に渡す。
+ * 止められずにブラウザが閉じた場合は onClose で揃える（下のコメント）。pending の間は Esc でも閉じない
  * （送信中に閉じると、結果を見せる場所が無くなる）。
  */
 export function ConfirmDialog({

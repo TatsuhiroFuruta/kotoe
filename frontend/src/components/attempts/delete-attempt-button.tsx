@@ -39,6 +39,7 @@ export function DeleteAttemptButton({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
   // state の pending は再描画まで反映されないので、同じタスク内の連打は ref で止める（7-5 と同じ）。
   const sendingRef = useRef(false);
   const copy = COPY[kind];
@@ -73,9 +74,10 @@ export function DeleteAttemptButton({
     }
 
     toast.success(copy.done);
-    // 挑戦詳細では、移り先の読み込みが終わるまでこのボタンが残る。送信中のままだと、
-    // その間に押し直すと「処理中…」で閉じられないダイアログが開く。
-    sendingRef.current = false;
+    // 挑戦詳細では、移り先の読み込みが終わるまでこのボタンが残る。送信中のままだと押し直したときに
+    // 「処理中…」で閉じられないダイアログが開き、送信中を解くだけだと二度目の DELETE（404 で成功扱い）と
+    // トーストが重なる。もう消したので、ボタンごと押せなくする（sendingRef は true のまま）。
+    setDeleted(true);
     setPending(false);
     setOpen(false);
     onDeleted();
@@ -86,6 +88,7 @@ export function DeleteAttemptButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
+        disabled={deleted}
         className={`${buttonClasses({ variant: "secondary", size: "sm" })} text-sm`}
       >
         削除
