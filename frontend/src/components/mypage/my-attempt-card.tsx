@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DeleteAttemptButton } from "@/components/attempts/delete-attempt-button";
 import { myAttemptCardLabel } from "@/lib/attempts/attempt-card-label";
 import { attemptDetailHref } from "@/lib/attempts/attempt-detail-query";
 import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
@@ -16,7 +17,13 @@ const CARD_CLASSES = "overflow-hidden rounded-card border border-line bg-surface
  * お題が削除済みのときはリンクにしない。挑戦詳細 API が Post.kept.find で 404 を返すため、
  * 押せるようにすると行き先が「見つかりません」になる。
  */
-export function MyAttemptCard({ attempt }: { attempt: MyAttempt }) {
+export function MyAttemptCard({
+  attempt,
+  onDeleted,
+}: {
+  attempt: MyAttempt;
+  onDeleted: () => void;
+}) {
   const publicId = attempt.generated_image_public_id;
   const src =
     publicId === null ? null : cloudinaryUrlOrNull(publicId, { width: IMAGE_WIDTH, aspect: "1:1" });
@@ -55,19 +62,36 @@ export function MyAttemptCard({ attempt }: { attempt: MyAttempt }) {
     </>
   );
 
+  // 削除の行はリンクの外に置く。<a> の中にボタンを入れると、押せる要素の入れ子になり、
+  // 押すと削除と同時に挑戦詳細へ移る（7-6b 設計書 決定 3）。
+  const footer = (
+    <div className="mt-auto flex justify-end border-t border-line px-4 py-3">
+      <DeleteAttemptButton attemptId={attempt.id} kind="attempt" onDeleted={onDeleted} />
+    </div>
+  );
+
   if (post.discarded) {
-    return <article className={CARD_CLASSES}>{body}</article>;
+    return (
+      <article className={`${CARD_CLASSES} flex h-full flex-col`}>
+        <div>{body}</div>
+        {footer}
+      </article>
+    );
   }
 
   return (
-    <Link
-      href={attemptDetailHref(attempt.id)}
-      aria-label={myAttemptCardLabel(attempt)}
-      className="group block rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+    // 枠の強調は、リンクに乗ったときだけにする（削除の行に乗っても挑戦詳細へは移らないため）。
+    <article
+      className={`${CARD_CLASSES} flex h-full flex-col transition-colors has-[a:hover]:border-accent`}
     >
-      <article className={`${CARD_CLASSES} transition-colors group-hover:border-accent`}>
+      <Link
+        href={attemptDetailHref(attempt.id)}
+        aria-label={myAttemptCardLabel(attempt)}
+        className="block focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+      >
         {body}
-      </article>
-    </Link>
+      </Link>
+      {footer}
+    </article>
   );
 }
