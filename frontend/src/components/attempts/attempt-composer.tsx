@@ -24,10 +24,10 @@ import {
   POST_GONE_MESSAGE,
 } from "@/lib/attempts/attempt-messages";
 import {
+  draftResumeAction,
   draftResumeFromError,
   draftResumeFromResponse,
   type DraftResumeOutcome,
-  shouldApplyDraftResume,
 } from "@/lib/attempts/draft-resume";
 import { type PollOutcome, shouldConfirmGeneration } from "@/lib/attempts/poll-attempt";
 import { useAttemptPolling } from "@/lib/attempts/use-attempt-polling";
@@ -146,9 +146,12 @@ export function AttemptComposer({
   // 結果の適用。トーストと URL の書き換えは、取得の effect の依存に入れたくないので effect event にする
   // （onResumeEnd は親の再描画のたびに作り直され、依存に入れると取り直しが走る）。
   const applyResume = useEffectEvent((draftKey: number, outcome: DraftResumeOutcome) => {
-    if (!shouldApplyDraftResume({ previous: resume, draftKey, outcome, currentText: text })) {
-      // 書いた文面を残したときも、読み込み中（resumePending）を終わらせるために結果だけは記録する。
-      if (resume?.key !== draftKey) setResume({ key: draftKey, outcome });
+    const action = draftResumeAction({ previous: resume, draftKey, outcome, currentText: text });
+    if (action === "ignore") return;
+    if (action === "keep-text") {
+      // 読み込み中（resumePending）を終わらせるために結果だけは記録し、受け口を終える。
+      setResume({ key: draftKey, outcome });
+      onResumeEnd();
       return;
     }
     setResume({ key: draftKey, outcome });

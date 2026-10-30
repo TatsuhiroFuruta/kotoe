@@ -44,16 +44,18 @@ export function draftResumeFromError(error: unknown): DraftResumeOutcome {
 }
 
 /**
- * 取得した結果を描写フォームに適用するか。適用しないのは 2 つの場合。
+ * 取得した結果を描写フォームにどう扱うか。
  *
- * - 同じ下書きが ready / unavailable で決着済み。認証が loading を経て戻ると（失効後の再ログイン、
+ * - "ignore"：同じ下書きが ready / unavailable で決着済み。認証が loading を経て戻ると（失効後の再ログイン、
  *   unreachable からの再試行）取得が走り直すが、もう一度 ready を適用すると書き直した文面が
  *   保存済みの文面に戻され、「保存済み」の表示で消えたことにも気づけない。unavailable はトーストの繰り返しになる。
  *   failed（通信の失敗）だけは取り直しで開けるようになるので適用する。
- * - ready で、入力欄に既に文面がある。unreachable の間は取得せず書けるので、あとから届いた下書きで
- *   書いた文面を上書きしない（7-6b 設計書「作り手に任せること」）。
+ * - "keep-text"：ready だが、入力欄に既に文面がある。unreachable の間は取得せず書けるので、あとから届いた
+ *   下書きで書いた文面を上書きしない。書いた文面は新しい下書きになるので、呼び出し側は ?draft= を外す
+ *   （残すとリロードで古い下書きが開き、書いた文面とは別の下書きに見える）。
+ * - "apply"：それ以外。
  */
-export function shouldApplyDraftResume({
+export function draftResumeAction({
   previous,
   draftKey,
   outcome,
@@ -63,11 +65,12 @@ export function shouldApplyDraftResume({
   draftKey: number;
   outcome: DraftResumeOutcome;
   currentText: string;
-}): boolean {
+}): "apply" | "ignore" | "keep-text" {
   const settled =
     previous !== null &&
     previous.key === draftKey &&
     (previous.outcome.kind === "ready" || previous.outcome.kind === "unavailable");
-  if (settled) return false;
-  return !(outcome.kind === "ready" && currentText !== "");
+  if (settled) return "ignore";
+  if (outcome.kind === "ready" && currentText !== "") return "keep-text";
+  return "apply";
 }

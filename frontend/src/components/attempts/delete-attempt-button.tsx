@@ -39,7 +39,6 @@ export function DeleteAttemptButton({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   // state の pending は再描画まで反映されないので、同じタスク内の連打は ref で止める（7-5 と同じ）。
   const sendingRef = useRef(false);
   const copy = COPY[kind];
@@ -47,8 +46,8 @@ export function DeleteAttemptButton({
   function close() {
     setOpen(false);
     setError(null);
-    // ダイアログが閉じてから戻す。ボタンは残っている（成功時は呼ばない）。
-    triggerRef.current?.focus();
+    // 開いた「削除」へのフォーカスの復元は、<dialog> の close() に任せる
+    // （Esc・「やめる」のどちらでも戻ることを Chrome で確認、2026-10-30）。
   }
 
   async function handleConfirm() {
@@ -74,6 +73,10 @@ export function DeleteAttemptButton({
     }
 
     toast.success(copy.done);
+    // 挑戦詳細では、移り先の読み込みが終わるまでこのボタンが残る。送信中のままだと、
+    // その間に押し直すと「処理中…」で閉じられないダイアログが開く。
+    sendingRef.current = false;
+    setPending(false);
     setOpen(false);
     onDeleted();
   }
@@ -81,7 +84,6 @@ export function DeleteAttemptButton({
   return (
     <>
       <button
-        ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
         className={`${buttonClasses({ variant: "secondary", size: "sm" })} text-sm`}

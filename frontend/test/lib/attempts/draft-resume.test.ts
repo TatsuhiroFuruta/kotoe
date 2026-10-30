@@ -4,7 +4,7 @@ import { ApiError, ApiTimeoutError } from "@/lib/api";
 import {
   draftResumeFromError,
   draftResumeFromResponse,
-  shouldApplyDraftResume,
+  draftResumeAction,
 } from "@/lib/attempts/draft-resume";
 import type { AttemptShowResponse, AttemptStatus } from "@/types/api";
 
@@ -96,53 +96,53 @@ describe("draftResumeFromError", () => {
   });
 });
 
-describe("shouldApplyDraftResume", () => {
+describe("draftResumeAction", () => {
   const ready = { kind: "ready", draftId: 34, description: "夕焼けの海" } as const;
 
   it("初めての結果で、入力欄が空なら適用する", () => {
-    expect(shouldApplyDraftResume({ previous: null, draftKey: 34, outcome: ready, currentText: "" })).toBe(
-      true,
+    expect(draftResumeAction({ previous: null, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+      "apply",
     );
   });
 
   it.each(["ready", "unavailable"] as const)(
-    "同じ下書きが %s で決着済みなら、取り直しの結果を適用しない（書き直しを上書きしない・トーストを繰り返さない）",
+    "同じ下書きが %s で決着済みなら、取り直しの結果を無視する（書き直しを上書きしない・トーストを繰り返さない）",
     (kind) => {
       const previous = { key: 34, outcome: kind === "ready" ? ready : ({ kind } as const) };
-      expect(
-        shouldApplyDraftResume({ previous, draftKey: 34, outcome: ready, currentText: "" }),
-      ).toBe(false);
+      expect(draftResumeAction({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+        "ignore",
+      );
     },
   );
 
   it("前回が通信の失敗なら、取り直しの結果を適用する", () => {
     const previous = { key: 34, outcome: { kind: "failed", message: "x" } as const };
-    expect(shouldApplyDraftResume({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
-      true,
+    expect(draftResumeAction({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+      "apply",
     );
   });
 
-  it("入力欄に文面があれば、ready でも上書きしない", () => {
+  it("入力欄に文面があれば ready を適用せず、書いた文面を残して受け口を終える（?draft= を外す）", () => {
     expect(
-      shouldApplyDraftResume({ previous: null, draftKey: 34, outcome: ready, currentText: "書きかけ" }),
-    ).toBe(false);
+      draftResumeAction({ previous: null, draftKey: 34, outcome: ready, currentText: "書きかけ" }),
+    ).toBe("keep-text");
   });
 
   it("入力欄に文面があっても、ready 以外（トーストを出すだけ）は適用する", () => {
     expect(
-      shouldApplyDraftResume({
+      draftResumeAction({
         previous: null,
         draftKey: 34,
         outcome: { kind: "unavailable" },
         currentText: "書きかけ",
       }),
-    ).toBe(true);
+    ).toBe("apply");
   });
 
   it("別の下書きの結果は、前回が決着済みでも適用する", () => {
     const previous = { key: 33, outcome: ready };
-    expect(shouldApplyDraftResume({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
-      true,
+    expect(draftResumeAction({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+      "apply",
     );
   });
 });
