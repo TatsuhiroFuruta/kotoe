@@ -42,3 +42,32 @@ export function draftResumeFromError(error: unknown): DraftResumeOutcome {
   if (error instanceof ApiError && error.status === 401) return { kind: "silent" };
   return { kind: "failed", message: toRequestErrorMessage(error) };
 }
+
+/**
+ * 取得した結果を描写フォームに適用するか。適用しないのは 2 つの場合。
+ *
+ * - 同じ下書きが ready / unavailable で決着済み。認証が loading を経て戻ると（失効後の再ログイン、
+ *   unreachable からの再試行）取得が走り直すが、もう一度 ready を適用すると書き直した文面が
+ *   保存済みの文面に戻され、「保存済み」の表示で消えたことにも気づけない。unavailable はトーストの繰り返しになる。
+ *   failed（通信の失敗）だけは取り直しで開けるようになるので適用する。
+ * - ready で、入力欄に既に文面がある。unreachable の間は取得せず書けるので、あとから届いた下書きで
+ *   書いた文面を上書きしない（7-6b 設計書「作り手に任せること」）。
+ */
+export function shouldApplyDraftResume({
+  previous,
+  draftKey,
+  outcome,
+  currentText,
+}: {
+  previous: { key: number; outcome: DraftResumeOutcome } | null;
+  draftKey: number;
+  outcome: DraftResumeOutcome;
+  currentText: string;
+}): boolean {
+  const settled =
+    previous !== null &&
+    previous.key === draftKey &&
+    (previous.outcome.kind === "ready" || previous.outcome.kind === "unavailable");
+  if (settled) return false;
+  return !(outcome.kind === "ready" && currentText !== "");
+}

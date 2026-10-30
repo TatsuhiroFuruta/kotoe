@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
-import { draftResumeFromError, draftResumeFromResponse } from "@/lib/attempts/draft-resume";
+import {
+  draftResumeFromError,
+  draftResumeFromResponse,
+  shouldApplyDraftResume,
+} from "@/lib/attempts/draft-resume";
 import type { AttemptShowResponse, AttemptStatus } from "@/types/api";
 
 const expected = { postId: 12, userId: 7 };
@@ -89,5 +93,56 @@ describe("draftResumeFromError", () => {
     const outcome = draftResumeFromError(new TypeError("Failed to fetch"));
     expect(outcome.kind).toBe("failed");
     if (outcome.kind === "failed") expect(outcome.message).not.toBe("");
+  });
+});
+
+describe("shouldApplyDraftResume", () => {
+  const ready = { kind: "ready", draftId: 34, description: "夕焼けの海" } as const;
+
+  it("初めての結果で、入力欄が空なら適用する", () => {
+    expect(shouldApplyDraftResume({ previous: null, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+      true,
+    );
+  });
+
+  it.each(["ready", "unavailable"] as const)(
+    "同じ下書きが %s で決着済みなら、取り直しの結果を適用しない（書き直しを上書きしない・トーストを繰り返さない）",
+    (kind) => {
+      const previous = { key: 34, outcome: kind === "ready" ? ready : ({ kind } as const) };
+      expect(
+        shouldApplyDraftResume({ previous, draftKey: 34, outcome: ready, currentText: "" }),
+      ).toBe(false);
+    },
+  );
+
+  it("前回が通信の失敗なら、取り直しの結果を適用する", () => {
+    const previous = { key: 34, outcome: { kind: "failed", message: "x" } as const };
+    expect(shouldApplyDraftResume({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+      true,
+    );
+  });
+
+  it("入力欄に文面があれば、ready でも上書きしない", () => {
+    expect(
+      shouldApplyDraftResume({ previous: null, draftKey: 34, outcome: ready, currentText: "書きかけ" }),
+    ).toBe(false);
+  });
+
+  it("入力欄に文面があっても、ready 以外（トーストを出すだけ）は適用する", () => {
+    expect(
+      shouldApplyDraftResume({
+        previous: null,
+        draftKey: 34,
+        outcome: { kind: "unavailable" },
+        currentText: "書きかけ",
+      }),
+    ).toBe(true);
+  });
+
+  it("別の下書きの結果は、前回が決着済みでも適用する", () => {
+    const previous = { key: 33, outcome: ready };
+    expect(shouldApplyDraftResume({ previous, draftKey: 34, outcome: ready, currentText: "" })).toBe(
+      true,
+    );
   });
 });

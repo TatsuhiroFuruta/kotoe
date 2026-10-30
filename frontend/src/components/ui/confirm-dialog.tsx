@@ -49,6 +49,15 @@ export function ConfirmDialog({
         event.preventDefault();
         if (!pending) onCancel();
       }}
+      // preventDefault が効かずにブラウザが閉じることがある。ユーザー操作を挟まずに Esc を 2 回押すと、
+      // 2 回目の cancel は取り消せない（Chrome で実測、2026-10-30）。open が真のまま閉じると、
+      // 送信の失敗が閉じたダイアログの中に出て見えず、次に「削除」を押しても開かない。
+      // 送信中なら開き直し、そうでなければ「やめる」と同じに扱って state を揃える。
+      onClose={() => {
+        if (!open) return;
+        if (pending) dialogRef.current?.showModal();
+        else onCancel();
+      }}
       className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-card border border-line bg-surface p-6 text-ink backdrop:bg-ink/40"
     >
       <h2 id={titleId} className="text-lg font-semibold">
