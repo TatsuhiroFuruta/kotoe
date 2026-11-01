@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DraftCard } from "@/components/mypage/draft-card";
@@ -43,7 +44,15 @@ async function fetchList(tab: MypageTab, apiPath: string, signal: AbortSignal): 
  * requestKey に API パスを含めるので、タブを素早く切り替えて前のタブの応答が
  * 後から届いても key が一致せず描画されない（cleanup の abort が間に合わない場合の保険）。
  */
-export function MypageList({ query }: { query: MypageQuery }) {
+export function MypageList({
+  query,
+  onItemDeleted,
+}: {
+  query: MypageQuery;
+  /** カードを削除したあと。統計（ProfileHeader）の取り直しに使う */
+  onItemDeleted: () => void;
+}) {
+  const router = useRouter();
   const { tab } = query;
   const apiPath = mypageApiPath(query);
   const [retryCount, setRetryCount] = useState(0);
@@ -69,6 +78,19 @@ export function MypageList({ query }: { query: MypageQuery }) {
 
   const outcome = result?.key === requestKey ? result.outcome : null;
 
+  /**
+   * 削除のあと。ページの最後の 1 枚だったなら、取り直すと範囲外（「このページには何もありません」）に
+   * なるので 1 つ前のページへ移る。1 ページ目なら取り直して空状態を出す（7-6b 設計書 決定 4）。
+   */
+  function handleDeleted(itemCountOnPage: number) {
+    if (itemCountOnPage === 1 && query.page > 1) {
+      router.replace(mypageHref({ tab: query.tab, page: query.page - 1 }));
+    } else {
+      setRetryCount((count) => count + 1);
+    }
+    onItemDeleted();
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* 挑戦カードの画像は正方形、お題・下書きのカードは 4:3。 */}
@@ -81,12 +103,22 @@ export function MypageList({ query }: { query: MypageQuery }) {
         />
       )}
 
-      {outcome?.kind === "success" && <ListResults query={query} list={outcome.list} />}
+      {outcome?.kind === "success" && (
+        <ListResults query={query} list={outcome.list} onDeleted={handleDeleted} />
+      )}
     </div>
   );
 }
 
-function ListResults({ query, list }: { query: MypageQuery; list: ListData }) {
+function ListResults({
+  query,
+  list,
+  onDeleted,
+}: {
+  query: MypageQuery;
+  list: ListData;
+  onDeleted: (itemCountOnPage: number) => void;
+}) {
   const meta = list.data.meta;
   const itemCount = list.kind === "posts" ? list.data.posts.length : list.data.attempts.length;
 
@@ -128,9 +160,9 @@ function ListResults({ query, list }: { query: MypageQuery; list: ListData }) {
           {list.data.attempts.map((attempt) => (
             <li key={attempt.id}>
               {query.tab === "drafts" ? (
-                <DraftCard draft={attempt} />
+                <DraftCard draft={attempt} onDeleted={() => onDeleted(itemCount)} />
               ) : (
-                <MyAttemptCard attempt={attempt} />
+                <MyAttemptCard attempt={attempt} onDeleted={() => onDeleted(itemCount)} />
               )}
             </li>
           ))}

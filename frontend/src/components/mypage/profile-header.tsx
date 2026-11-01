@@ -22,9 +22,16 @@ const API_PATH = "/api/me";
  * 一致するものだけ表示する。effect の中で同期的に setState しないため）。
  * 統計の取得に失敗しても、一覧（隣の MypageList）には影響させない。
  */
-export function ProfileHeader({ name }: { name: string }) {
+export function ProfileHeader({
+  name,
+  refreshKey,
+}: {
+  name: string;
+  /** 増えるたびに統計を取り直す。カードを削除すると挑戦数と獲得いいねが変わるため（7-6b） */
+  refreshKey: number;
+}) {
   const [retryCount, setRetryCount] = useState(0);
-  const requestKey = `${API_PATH}#${retryCount}`;
+  const requestKey = `${API_PATH}#${retryCount}#${refreshKey}`;
   const [result, setResult] = useState<{ key: string; outcome: Outcome } | null>(null);
 
   useEffect(() => {

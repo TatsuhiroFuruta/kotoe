@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AttemptComparison } from "@/components/attempts/attempt-comparison";
 import { CopyLinkButton } from "@/components/attempts/copy-link-button";
+import { DeleteAttemptButton } from "@/components/attempts/delete-attempt-button";
 import { LikeButton } from "@/components/attempts/like-button";
 import { buttonClasses } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api";
 import { attemptDetailHref } from "@/lib/attempts/attempt-detail-query";
 import { useAuth } from "@/lib/auth/auth-context";
 import { cloudinaryDownloadUrlOrNull } from "@/lib/cloudinary";
+import { mypageHref } from "@/lib/mypage/mypage-query";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import { postsHref } from "@/lib/posts/posts-query";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
@@ -35,6 +38,7 @@ type LikeOverride = { attemptId: number; liked: boolean; likesCount: number };
  */
 export function AttemptDetail({ attemptId }: { attemptId: number }) {
   const auth = useAuth();
+  const router = useRouter();
   const [retryCount, setRetryCount] = useState(0);
   const requestKey = `${attemptId}#${retryCount}`;
   const [result, setResult] = useState<{ key: string; outcome: Outcome } | null>(null);
@@ -140,6 +144,14 @@ export function AttemptDetail({ attemptId }: { attemptId: number }) {
           >
             ダウンロード（PNG）
           </a>
+        )}
+        {isOwner && (
+          // 削除したら自分の挑戦タブへ。replace にして、「戻る」で消した挑戦の画面に戻さない（7-6b 設計書 決定 4）。
+          <DeleteAttemptButton
+            attemptId={attempt.id}
+            kind="attempt"
+            onDeleted={() => router.replace(mypageHref({ tab: "attempts" }))}
+          />
         )}
       </div>
     </article>

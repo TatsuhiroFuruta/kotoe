@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   attemptsSectionHref,
+  draftResumeHref,
+  parseDraftParam,
   parsePostDetailQuery,
   parsePostId,
   postDetailApiPath,
@@ -113,5 +115,43 @@ describe("postDetailApiPath", () => {
   it("画面の URL と同じ条件を API に渡す", () => {
     const query: PostDetailQuery = { sort: "likes", page: 2 };
     expect(paramsOf(postDetailApiPath(9, query))).toEqual(paramsOf(postDetailHref(9, query)));
+  });
+});
+
+describe("parseDraftParam", () => {
+  it.each([
+    ["1", 1],
+    ["34", 34],
+    ["007", 7],
+  ])("%j は %d", (raw, expected) => {
+    expect(parseDraftParam({ draft: raw })).toBe(expected);
+  });
+
+  it.each(["0", "-1", "1.5", "abc", "", "1e3", "99999999999999999999"])("%j は null", (raw) => {
+    expect(parseDraftParam({ draft: raw })).toBeNull();
+  });
+
+  it("無ければ null", () => {
+    expect(parseDraftParam({})).toBeNull();
+  });
+
+  it("複数あれば先頭（他のパラメータと同じ規則）", () => {
+    expect(parseDraftParam({ draft: ["3", "4"] })).toBe(3);
+  });
+});
+
+describe("draftResumeHref", () => {
+  it("draft だけを載せる", () => {
+    expect(draftResumeHref(12, 34)).toBe("/posts/12?draft=34");
+  });
+
+  it("parseDraftParam で元に戻る", () => {
+    expect(parseDraftParam(paramsOf(draftResumeHref(12, 34)))).toBe(34);
+  });
+});
+
+describe("postDetailHref は draft を載せない", () => {
+  it("並び替えのリンクに下書きが引き継がれない", () => {
+    expect(postDetailHref(12, { sort: "likes" })).toBe("/posts/12?sort=likes");
   });
 });

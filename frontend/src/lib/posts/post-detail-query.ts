@@ -33,6 +33,21 @@ export function parsePostDetailQuery(params: RawSearchParams): PostDetailQuery {
   return { sort, page };
 }
 
+/**
+ * 受け口（/posts/[id]?draft=<id>）の下書き id。正の安全な整数だけを受け付ける（7-6b 設計書 決定 2）。
+ *
+ * PostDetailQuery には入れない。入れると postDetailHref が組み立てる並び替え・ページ送りの
+ * リンクに下書きが引き継がれ、開けなくなった下書きを何度も開こうとする。
+ */
+export function parseDraftParam(params: RawSearchParams): number | null {
+  return parsePositiveInt(firstParam(params.draft));
+}
+
+/** マイページの下書きカードから受け口へのリンク。sort / page は持たない（既定の並びで開く）。 */
+export function draftResumeHref(postId: number, draftId: number): string {
+  return `/posts/${postId}?draft=${draftId}`;
+}
+
 /** 既定値のパラメータを省いたクエリ文字列。/posts/9?page=1&sort=recent ではなく /posts/9 にする。 */
 function toSearch({ sort, page }: PostDetailQuery): string {
   const params = new URLSearchParams();

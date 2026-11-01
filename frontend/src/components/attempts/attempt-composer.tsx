@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 
 import {
   GenerationPanel,
@@ -14,7 +14,9 @@ import {
   DESCRIPTION_MAX_LENGTH,
   descriptionFieldError,
   DRAFT_GONE_MESSAGE,
+  DRAFT_LOADING_PLACEHOLDER,
   DRAFT_SAVED_MESSAGE,
+  DRAFT_UNAVAILABLE_MESSAGE,
   EDIT_NOT_SAVED_MESSAGE,
   fallbackErrorMessage,
   GENERATE_TARGET_GONE_MESSAGE,
@@ -22,12 +24,18 @@ import {
   generationErrorMessage,
   POST_GONE_MESSAGE,
 } from "@/lib/attempts/attempt-messages";
+import {
+  draftResumeAction,
+  draftResumeFromError,
+  draftResumeFromResponse,
+  type DraftResumeOutcome,
+} from "@/lib/attempts/draft-resume";
 import { type PollOutcome, shouldConfirmGeneration } from "@/lib/attempts/poll-attempt";
 import { useAttemptPolling } from "@/lib/attempts/use-attempt-polling";
 import { useAuth } from "@/lib/auth/auth-context";
-import { postDetailHref } from "@/lib/posts/post-detail-query";
+import { draftResumeHref, postDetailHref } from "@/lib/posts/post-detail-query";
 import { toast } from "@/lib/toast/toast-store";
-import type { Attempt, AttemptResponse } from "@/types/api";
+import type { Attempt, AttemptResponse, AttemptShowResponse } from "@/types/api";
 
 /**
  * フォームの進行状態。状態遷移は reducer に切り出さない（7-3c 設計書「決定 7」）。
@@ -97,9 +105,15 @@ function announcementOf(phase: Phase): string {
 export function AttemptComposer({
   postId,
   onPublished,
+  resumeDraftId,
+  onResumeEnd,
 }: {
   postId: number;
   onPublished: () => void;
+  /** 受け口（?draft=<id>）の下書き id。無ければ null（7-6b 設計書 決定 2） */
+  resumeDraftId: number | null;
+  /** 受け口の ?draft= を URL から外す。開けなかったとき・生成が始まったときに呼ぶ */
+  onResumeEnd: () => void;
 }) {
   const auth = useAuth();
   const [text, setText] = useState("");
@@ -119,6 +133,73 @@ export function AttemptComposer({
 
   useAttemptPolling(phase.kind === "polling" ? phase : null, handlePollOutcome);
 
+  // 受け口の下書きを取得した結果。key は下書き id で、今の resumeDraftId と一致するものだけを見る。
+  const [resume, setResume] = useState<{ key: number; outcome: DraftResumeOutcome } | null>(null);
+  const userId = auth.status === "authenticated" ? auth.user.id : null;
+
+  // 認証が確定するまでは取得しない。下書きは本人にしか見えず、本人の確認に user.id が要る
+  // （unreachable は user を持たない）。直接ロードではハイドレーション中に loading を通るので、
+  // そこで「開けない」と決めてはいけない（7-1 の教訓）。
+  const resumePending =
+    resumeDraftId !== null &&
+    (auth.status === "loading" || (userId !== null && resume?.key !== resumeDraftId));
+
+  // 結果の適用。トーストと URL の書き換えは、取得の effect の依存に入れたくないので effect event にする
+  // （onResumeEnd は親の再描画のたびに作り直され、依存に入れると取り直しが走る）。
+  const applyResume = useEffectEvent((draftKey: number, outcome: DraftResumeOutcome) => {
+    const action = draftResumeAction({ previous: resume, draftKey, outcome, currentText: text });
+    if (action === "ignore") return;
+    if (action === "keep-text") {
+      // 読み込み中（resumePending）を終わらせるために結果だけは記録し、受け口を終える。
+      setResume({ key: draftKey, outcome });
+      onResumeEnd();
+      return;
+    }
+    setResume({ key: draftKey, outcome });
+    switch (outcome.kind) {
+      case "ready":
+        setDraftId(outcome.draftId);
+        setText(outcome.description);
+        setSavedText(outcome.description);
+        return;
+      case "unavailable":
+        toast.error(DRAFT_UNAVAILABLE_MESSAGE);
+        onResumeEnd();
+        return;
+      case "failed":
+        // ?draft= は残す。リロードで試し直せる。
+        toast.error(outcome.message);
+        return;
+      case "silent":
+        return;
+    }
+  });
+
+  useEffect(() => {
+    if (resumeDraftId === null || userId === null) return;
+    const controller = new AbortController();
+
+    apiFetch<AttemptShowResponse>(`/api/attempts/${resumeDraftId}`, { signal: controller.signal })
+      .then((data) =>
+        applyResume(resumeDraftId, draftResumeFromResponse(data, { postId, userId })),
+      )
+      .catch((error: unknown) => {
+        // 自分で中断した（下書き id が変わった／アンマウントした）ものは失敗ではない。
+        if (controller.signal.aborted) return;
+        applyResume(resumeDraftId, draftResumeFromError(error));
+      });
+
+    return () => controller.abort();
+  }, [resumeDraftId, userId, postId]);
+
+  // 生成が始まったら ?draft= を外す。生成後のリロードで、生成済みの下書きを開こうとして
+  // 「開けませんでした」が出るのを防ぐ。202 だけでなく、応答不明の確認と attempt_not_draft の合流も
+  // polling を通るので、ここ 1 か所で受ける（7-6b 設計書 決定 2「生成を始めたら」）。
+  const endResume = useEffectEvent(() => onResumeEnd());
+  useEffect(() => {
+    if (phase.kind === "polling" && resumeDraftId !== null) endResume();
+  }, [phase.kind, resumeDraftId]);
+
   // 打ち切り（まだ生成しているかもしれない）の間も押せなくする。下書きは捨ててあるので、
   // 押すと新しい下書きで二度目の生成になり、枠を二重に使う。やり直すときはパネルの
   // 「新しく描写する」を明示的に押してもらう。
@@ -126,7 +207,9 @@ export function AttemptComposer({
     phase.kind === "saving" ||
     phase.kind === "starting" ||
     phase.kind === "polling" ||
-    (phase.kind === "stalled" && phase.reason === "timed_out");
+    (phase.kind === "stalled" && phase.reason === "timed_out") ||
+    // 受け口の下書きを読み込んでいる間。押すと、届いた下書きとは別の下書きを作ってしまう。
+    resumePending;
   const isSaved = draftId !== null && text === savedText;
   const overLimit = text.length > DESCRIPTION_MAX_LENGTH;
   const panelState = panelStateOf(phase);
@@ -388,13 +471,16 @@ export function AttemptComposer({
           id={textareaId}
           ref={textareaRef}
           value={text}
+          // 受け口の下書きを読み込んでいる間は書かせない。書いた文面が届いた下書きで上書きされるため。
+          readOnly={resumePending}
+          aria-busy={resumePending || undefined}
           onChange={(event) => {
             setText(event.target.value);
             // 直している最中に、もう当てはまらないエラーと aria-invalid を残さない。
             if (fieldError !== null) setFieldError(null);
           }}
           rows={6}
-          placeholder={PLACEHOLDER}
+          placeholder={resumePending ? DRAFT_LOADING_PLACEHOLDER : PLACEHOLDER}
           aria-invalid={fieldError === null ? undefined : true}
           aria-describedby={describedBy}
           className="resize-y rounded-card border border-line bg-canvas px-3 py-2 text-ink outline-none focus:border-accent"
@@ -425,7 +511,10 @@ export function AttemptComposer({
       {auth.status === "unauthenticated" ? (
         <div className="flex sm:justify-end">
           <Link
-            href={`/login?next=${encodeURIComponent(postDetailHref(postId))}`}
+            // 受け口から来たときは、ログイン後に受け口へ戻して下書きを開く（7-6b 設計書 決定 2）。
+            href={`/login?next=${encodeURIComponent(
+              resumeDraftId === null ? postDetailHref(postId) : draftResumeHref(postId, resumeDraftId),
+            )}`}
             className={`${buttonClasses({ variant: "primary" })} text-center`}
           >
             ログインして描写する

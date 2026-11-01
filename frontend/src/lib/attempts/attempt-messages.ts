@@ -24,6 +24,22 @@ export const DRAFT_GONE_MESSAGE =
 /** 保存（PATCH）の attempt_not_draft。下書きは既に生成済みで、その結果を確かめに行く。 */
 export const EDIT_NOT_SAVED_MESSAGE =
   "この下書きは既に生成が始まっていたため、書き直した内容は保存されていません。始まっていた生成の結果を表示します";
+/**
+ * 受け口（/posts/[id]?draft=<id>）で下書きを開けなかったとき。他人の下書き・削除済み・生成済み・
+ * 別のお題を出し分けない（他人の下書きの存在を漏らさない。7-6b 設計書 決定 2）。
+ */
+export const DRAFT_UNAVAILABLE_MESSAGE = "この下書きは開けませんでした";
+
+/** 受け口の下書きを読み込んでいる間の入力欄の案内。書けない理由を見せる（その間は readOnly）。 */
+export const DRAFT_LOADING_PLACEHOLDER = "下書きを読み込んでいます…";
+
+export const ATTEMPT_DELETED_MESSAGE = "挑戦を削除しました";
+export const DRAFT_DELETED_MESSAGE = "下書きを削除しました";
+export const DELETE_ATTEMPT_TITLE = "この挑戦を削除しますか？";
+/** 生成回数は enqueue 時に消費し、削除しても戻らない（ドメインの重要ルール）。下書きはまだ使っていないので付けない。 */
+export const DELETE_ATTEMPT_NOTE = "削除しても、今日の生成回数は戻りません";
+export const DELETE_DRAFT_TITLE = "この下書きを削除しますか？";
+
 export const POST_GONE_MESSAGE = "このお題は削除されました";
 export const GENERATE_TARGET_GONE_MESSAGE = "この下書きは削除されたか、お題が削除されています";
 /**

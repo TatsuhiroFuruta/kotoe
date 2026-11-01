@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AttemptComposer } from "@/components/attempts/attempt-composer";
@@ -9,7 +10,11 @@ import { BestAttempts } from "@/components/attempts/best-attempts";
 import { PostHero } from "@/components/posts/post-hero";
 import { buttonClasses } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api";
-import { postDetailApiPath, type PostDetailQuery } from "@/lib/posts/post-detail-query";
+import {
+  postDetailApiPath,
+  postDetailHref,
+  type PostDetailQuery,
+} from "@/lib/posts/post-detail-query";
 import { postsHref } from "@/lib/posts/posts-query";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
 import type { PostDetailResponse } from "@/types/api";
@@ -35,7 +40,16 @@ type Outcome =
  * そのため auth.status の確定を待たずに取得を始めてよい。favorited は tokenStore の
  * トークンで判定されるので、確定を待たなくても正しい値が返る。
  */
-export function PostDetail({ postId, query }: { postId: number; query: PostDetailQuery }) {
+export function PostDetail({
+  postId,
+  query,
+  draftId,
+}: {
+  postId: number;
+  query: PostDetailQuery;
+  draftId: number | null;
+}) {
+  const router = useRouter();
   const apiPath = postDetailApiPath(postId, query);
   const [retryCount, setRetryCount] = useState(0);
   const requestKey = `${apiPath}#${retryCount}`;
@@ -73,6 +87,9 @@ export function PostDetail({ postId, query }: { postId: number; query: PostDetai
 
   const outcome = result?.key === requestKey ? result.outcome : null;
   const retry = () => setRetryCount((count) => count + 1);
+  // 受け口の ?draft= を外す（7-6b 設計書 決定 2）。sort / page は残し、描写フォームの位置から動かさない。
+  // apiPath は draft を含まないので、外しても詳細の取り直しは起きない。
+  const endResume = () => router.replace(postDetailHref(postId, query), { scroll: false });
 
   if (outcome?.kind === "not_found") return <PostNotFound />;
 
@@ -115,7 +132,12 @@ export function PostDetail({ postId, query }: { postId: number; query: PostDetai
         書きかけの文面と生成中のポーリングは並び替え・ページ送りをまたいで保たれる。
         公開されたら詳細を取り直して、表彰台とみんなの挑戦に反映する（7-3c 決定 6）。
       */}
-      <AttemptComposer postId={postId} onPublished={retry} />
+      <AttemptComposer
+        postId={postId}
+        onPublished={retry}
+        resumeDraftId={draftId}
+        onResumeEnd={endResume}
+      />
       <AttemptList postId={postId} query={query} state={listState} onRetry={retry} />
     </div>
   );

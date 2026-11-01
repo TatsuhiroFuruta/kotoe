@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PostDetail } from "@/components/posts/post-detail";
-import { parsePostDetailQuery, parsePostId } from "@/lib/posts/post-detail-query";
+import { parseDraftParam, parsePostDetailQuery, parsePostId } from "@/lib/posts/post-detail-query";
 import type { RawSearchParams } from "@/lib/search-params";
 
 // お題のタイトルを入れるにはサーバーでの取得（generateMetadata）が要り、
@@ -28,11 +28,14 @@ export default async function PostDetailPage({
   const postId = parsePostId((await params).id);
   if (postId === null) notFound();
 
-  const query = parsePostDetailQuery(await searchParams);
+  const rawSearchParams = await searchParams;
+  const query = parsePostDetailQuery(rawSearchParams);
+  // マイページの下書きカードからの受け口（7-6b）。描写フォームに文面を入れて開く。
+  const draftId = parseDraftParam(rawSearchParams);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-      <PostDetail postId={postId} query={query} />
+      <PostDetail postId={postId} query={query} draftId={draftId} />
     </main>
   );
 }
