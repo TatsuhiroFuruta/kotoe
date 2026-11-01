@@ -54,9 +54,11 @@ CI の bundler-audit は**脆弱性DBが更新された時点で落ちる**。�
 
 - **他の作業に混ぜず、単独の修正 PR を先に出す**。main を含む全ブランチのブロッカーになるため、Dependabot の週次PRは待たない。ブランチ名は `fix/<gem>-<version>` の形。
 - **原則 `Gemfile.lock` のみ更新**し、`Gemfile` の制約は変えない（`bundle update <gem>`）。`~> 8.1.3` のような指定はパッチ更新を許すため、多くの場合そのままで足りる。制約自体を上げないと解決できないときだけ `Gemfile` を触る。
+  - **`bundle update <gem> --patch --conservative` で更新する。** `Gemfile` に版の制約が無い gem は、オプションなしだと最新のメジャー版まで上がる（PR #144 では ransack が 4.4.1 → 6.0.1 になり、名前を挙げていない bigdecimal・uri も巻き込まれた）。`--patch` はパッチ版の範囲だけに、`--conservative` は名前を挙げた gem だけに絞る。advisory の対処がパッチ版で足りないとき（メジャー版・マイナー版を上げないと直らないとき）だけ `--patch` を外し、理由を PR に書く。
+  - 更新後は `git diff Gemfile.lock` で、**変わったのが狙った gem の行だけか**を確かめる。
 - **bundler-audit はローカル（開発コンテナ）では動かない**。脆弱性DBの取得に git が要るため。ローカルでは rspec / rubocop / brakeman と**アプリが実際に起動すること**まで確認し、脆弱性そのものの解消は**その PR の CI で確認する**。
 - PR には **CVE 番号・影響する gem・Kotoe が実際にその機能を使っているか**を書く。使っていなくても CI が落ちる以上は更新するが、緊急度の判断材料になる。
-- 前例：PR #52（rails-html-sanitizer の XSS）、PR #65（Rails 8.1.3.1 / CVE-2026-66066）。
+- 前例：PR #52（rails-html-sanitizer の XSS）、PR #65（Rails 8.1.3.1 / CVE-2026-66066）、PR #140（crass 1.0.8）、PR #144（rack 3.2.8・ransack 4.4.4）。
 
 ## コーディング規約
 
