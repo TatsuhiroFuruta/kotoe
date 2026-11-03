@@ -1,9 +1,11 @@
 import Link from "next/link";
 
 import { DeleteAttemptButton } from "@/components/attempts/delete-attempt-button";
+import { PostTitleText } from "@/components/posts/post-title-text";
 import { buttonClasses } from "@/components/ui/button";
 import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
 import { draftResumeHref } from "@/lib/posts/post-detail-query";
+import { postImageAlt } from "@/lib/posts/post-title";
 import type { MyAttempt } from "@/types/api";
 
 // PostCard と同じ変換にして、Cloudinary の派生画像を増やさない。
@@ -29,14 +31,14 @@ export function DraftCard({ draft, onDeleted }: { draft: MyAttempt; onDeleted: (
       {src === null ? (
         <div
           role="img"
-          aria-label={post.discarded ? "削除されたお題" : (post.title ?? "お題の画像")}
+          aria-label={post.discarded ? "削除されたお題" : postImageAlt(post.title)}
           className="aspect-4/3 w-full bg-line"
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
-          alt={post.title ?? "お題の画像"}
+          alt={postImageAlt(post.title)}
           loading="lazy"
           className="aspect-4/3 w-full bg-line object-cover"
         />
@@ -44,7 +46,9 @@ export function DraftCard({ draft, onDeleted }: { draft: MyAttempt; onDeleted: (
       <div className="p-4">
         {/* 公開 UGC。{value} のまま置く（React が自動でエスケープする）。 */}
         <p className="truncate text-sm text-ink-muted">
-          {post.discarded ? "お題は削除されました" : <>お題：{post.title}</>}
+          {post.discarded ? "お題は削除されました" : <>
+              お題：<PostTitleText title={post.title} />
+            </>}
         </p>
         <p className="mt-2 line-clamp-3 text-sm whitespace-pre-wrap wrap-break-word text-ink">
           {draft.description}

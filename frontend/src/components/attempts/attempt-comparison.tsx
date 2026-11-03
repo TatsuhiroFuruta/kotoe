@@ -1,4 +1,5 @@
 import { cloudinaryUrlOrNull, postImageUrlOrNull } from "@/lib/cloudinary";
+import { postImageAlt } from "@/lib/posts/post-title";
 import type { Attempt, PostSummary } from "@/types/api";
 
 // 再現画像はカード・結果パネルと、元画像はお題詳細のヒーローと同じ変換にし、Cloudinary の
@@ -22,7 +23,7 @@ export function AttemptComparison({ post, attempt }: { post: PostSummary; attemp
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <ComparisonFigure caption="お題" src={originalSrc} alt={post.title} fit="contain" />
+      <ComparisonFigure caption="お題" src={originalSrc} alt={postImageAlt(post.title)} fit="contain" />
       {/* alt に描写文を入れない。長文になりうるうえ、画像の中身ではなく「当てようとした言葉」のため（カードと同じ）。 */}
       <ComparisonFigure
         caption="再現"

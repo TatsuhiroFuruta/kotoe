@@ -49,7 +49,8 @@ export type PublicUser = {
  */
 export type PostSummary = {
   id: number;
-  title: string;
+  /** 無題なら null（3-3）。表示は PostTitleText / postImageAlt を通す */
+  title: string | null;
   /** Cloudinary の public_id。表示には必ず cloudinaryUrl() を通す */
   image_public_id: string;
   user: PublicUser;
@@ -111,7 +112,10 @@ export type Attempt = {
   created_at: string;
 };
 
-/** me/attempts・me/drafts の post。削除済みなら title と image_public_id は null（6-3） */
+/**
+ * me/attempts・me/drafts の post。削除済みなら title と image_public_id は null（6-3）。
+ * 削除済みでなくても、無題なら title は null（3-3）。削除済みかは title ではなく discarded で見る。
+ */
 export type AttemptPostSummary = {
   id: number;
   title: string | null;

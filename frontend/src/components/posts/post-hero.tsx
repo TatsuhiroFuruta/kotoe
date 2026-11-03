@@ -1,5 +1,7 @@
 import { FavoriteButton } from "@/components/posts/favorite-button";
+import { PostTitleText } from "@/components/posts/post-title-text";
 import { postImageUrlOrNull } from "@/lib/cloudinary";
+import { postImageAlt } from "@/lib/posts/post-title";
 import type { PostSummary } from "@/types/api";
 
 /**
@@ -31,12 +33,12 @@ export function PostHero({
         （ページの主役で、最初に見える画像のため）。
       */}
       {src === null ? (
-        <div role="img" aria-label={post.title} className="aspect-4/3 w-full rounded-card bg-line" />
+        <div role="img" aria-label={postImageAlt(post.title)} className="aspect-4/3 w-full rounded-card bg-line" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
-          alt={post.title}
+          alt={postImageAlt(post.title)}
           className="mx-auto block h-auto max-h-[70vh] w-auto max-w-full rounded-card"
         />
       )}
@@ -44,7 +46,7 @@ export function PostHero({
         <div className="min-w-0">
           {/* 公開 UGC。{value} のまま置く。長い英数字のタイトルがはみ出さないよう wrap-break-word。 */}
           <h1 className="text-2xl font-semibold tracking-tight wrap-break-word text-ink">
-            {post.title}
+            <PostTitleText title={post.title} />
           </h1>
           <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
             <div className="flex min-w-0 gap-1">

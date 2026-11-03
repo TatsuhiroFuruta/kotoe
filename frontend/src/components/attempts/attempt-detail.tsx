@@ -8,6 +8,7 @@ import { AttemptComparison } from "@/components/attempts/attempt-comparison";
 import { CopyLinkButton } from "@/components/attempts/copy-link-button";
 import { DeleteAttemptButton } from "@/components/attempts/delete-attempt-button";
 import { LikeButton } from "@/components/attempts/like-button";
+import { PostTitleText } from "@/components/posts/post-title-text";
 import { buttonClasses } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api";
 import { attemptDetailHref } from "@/lib/attempts/attempt-detail-query";
@@ -104,7 +105,7 @@ export function AttemptDetail({ attemptId }: { attemptId: number }) {
         </Link>
         {/* 公開 UGC。{value} のまま置く。長い英数字がはみ出さないよう wrap-break-word。 */}
         <h1 className="text-2xl font-semibold tracking-tight wrap-break-word text-ink">
-          {post.title}
+          <PostTitleText title={post.title} />
         </h1>
       </div>
 

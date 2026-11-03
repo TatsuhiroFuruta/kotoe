@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DeleteAttemptButton } from "@/components/attempts/delete-attempt-button";
+import { PostTitleText } from "@/components/posts/post-title-text";
 import { myAttemptCardLabel } from "@/lib/attempts/attempt-card-label";
 import { attemptDetailHref } from "@/lib/attempts/attempt-detail-query";
 import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
@@ -52,7 +53,8 @@ export function MyAttemptCard({
           {post.discarded ? (
             <span className="truncate">お題は削除されました</span>
           ) : (
-            <span className="truncate">お題：{post.title}</span>
+            <span className="truncate">お題：<PostTitleText title={post.title} />
+            </span>
           )}
           <span className="shrink-0">
             いいね <span className="font-medium text-ink">{attempt.likes_count}</span>
