@@ -385,7 +385,7 @@ User
 Post（お題画像）
   ├─ belongs_to :user
   ├─ image (Cloudinary)
-  ├─ title
+  ├─ title（任意・30字まで。空は NULL で、画面では「無題」）
   └─ has_many :attempts
 
 Attempt（再現挑戦）
