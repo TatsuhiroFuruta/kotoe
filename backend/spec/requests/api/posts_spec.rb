@@ -270,11 +270,10 @@ RSpec.describe "POST /api/posts", type: :request do
     expect(response.parsed_body).to eq("error" => "parameter_invalid")
   end
 
-  # multipart では数値が文字列になるので JSON で送る。画像は JSON で送れないが、
-  # 画像が無くても型の 400 が（画像の検証より先に）返ることを固定する。
-  it "title が数値（JSON）だと 400 parameter_invalid で、投稿せず画像もアップロードしない" do
-    expect(Images::Uploader).not_to receive(:call)
-
+  # multipart では数値が文字列になるので JSON で送る。画像は JSON で送れないので、
+  # 型の検査が画像の検証より先に走ることは、422（画像エラー）ではなく 400 が返ることで固定する。
+  # 画像を付けたときにアップロードしないことは、上の配列・ハッシュの例が押さえている。
+  it "title が数値（JSON）だと、画像の検証より先に 400 parameter_invalid を返し、投稿しない" do
     expect {
       post "/api/posts",
            params: { post: { title: 123 } }.to_json,

@@ -14,7 +14,7 @@ import {
   toTitleEditFailure,
 } from "@/lib/posts/post-messages";
 import { toast } from "@/lib/toast/toast-store";
-import type { PostSummary } from "@/types/api";
+import type { PostSummary, PostUpdateResponse } from "@/types/api";
 
 /**
  * マイページの「投稿したお題」で、お題のタイトルを変えるボタンとダイアログ（3-3）。
@@ -69,13 +69,14 @@ export function EditPostTitleButton({
     setFieldError(null);
     setFormError(null);
 
-    let updated: PostSummary;
+    // try は送信だけを包む（7-5 の post-form と同じ）。応答の取り出しまで包むと、保存は済んでいるのに
+    // そこで投げた例外が通信の失敗として表示される。
+    let response: PostUpdateResponse;
     try {
-      const response = await apiFetch<{ post: PostSummary }>(`/api/posts/${postId}`, {
+      response = await apiFetch<PostUpdateResponse>(`/api/posts/${postId}`, {
         method: "PATCH",
         body: JSON.stringify({ post: { title: value } }),
       });
-      updated = response.post;
     } catch (caught: unknown) {
       sendingRef.current = false;
       setPending(false);
@@ -103,7 +104,7 @@ export function EditPostTitleButton({
     setPending(false);
     close();
     toast.success(POST_TITLE_UPDATED_MESSAGE);
-    onUpdated(updated);
+    onUpdated(response.post);
   }
 
   return (

@@ -153,6 +153,11 @@ export type PostCreateResponse = {
   post: PostSummary;
 };
 
+/** PATCH /api/posts/:id（200）。タイトルの編集（3-3）。名前を分ける理由は PostCreateResponse と同じ */
+export type PostUpdateResponse = {
+  post: PostSummary;
+};
+
 /** POST /api/posts/:id/attempts・PATCH /api/attempts/:id・POST /api/attempts/:id/generate */
 export type AttemptResponse = {
   attempt: Attempt;
