@@ -12,9 +12,8 @@ import { checkImageFile } from "@/lib/posts/image-file-check";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
 import {
   imageErrorMessage,
-  isBlankTitle,
   POST_CREATED_MESSAGE,
-  titleErrorMessage,
+  TITLE_MAX_LENGTH,
   toLeftPageFailureMessage,
   toPostFormErrors,
   unconfirmedMessage,
@@ -127,14 +126,13 @@ export function PostForm() {
 
     setFormError(null);
     const missingImage = selection === null;
-    const blankTitle = isBlankTitle(title);
     // 画像のエラーは、選んだ時点で弾かれたもの（selection が null に戻っている）を上書きしない。
     if (missingImage && imageError === null) setImageError(imageErrorMessage("image_missing"));
-    setTitleError(blankTitle ? titleErrorMessage("blank") : null);
+    setTitleError(null);
     // missingImage ではなく selection を直接比べる。別名の条件だと、下の selection.file で
-    // null の可能性が型から消えないことがある。
-    if (selection === null || blankTitle) {
-      requestFocus(missingImage ? "image" : "title");
+    // null の可能性が型から消えないことがある。タイトルは任意なので止める理由にしない。
+    if (selection === null) {
+      requestFocus("image");
       return;
     }
 
@@ -236,8 +234,10 @@ export function PostForm() {
         <TextField
           id={titleInputId}
           ref={titleInputRef}
-          label="タイトル"
+          label="タイトル（任意）"
           type="text"
+          required={false}
+          counter={{ length: title.length, max: TITLE_MAX_LENGTH }}
           value={title}
           onChange={(value) => {
             setTitle(value);

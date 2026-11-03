@@ -5,7 +5,6 @@ import {
   UNKNOWN_FIELD_MESSAGE,
   UPLOAD_FAILED_MESSAGE,
   imageErrorMessage,
-  isBlankTitle,
   titleErrorMessage,
   toLeftPageFailureMessage,
   toPostFormErrors,
@@ -19,16 +18,6 @@ const unprocessable = (errors: unknown) => new ApiError(422, { errors });
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-describe("isBlankTitle", () => {
-  it.each(["", " ", "　", "\n\t ", " 　\n"])("%j は空として扱う（Rails の presence と同じ）", (title) => {
-    expect(isBlankTitle(title)).toBe(true);
-  });
-
-  it.each(["a", " 夕焼け ", "　海　"])("%j は空ではない", (title) => {
-    expect(isBlankTitle(title)).toBe(false);
-  });
 });
 
 describe("imageErrorMessage", () => {
@@ -47,11 +36,11 @@ describe("imageErrorMessage", () => {
 });
 
 describe("titleErrorMessage", () => {
-  it("blank を翻訳する", () => {
-    expect(titleErrorMessage("blank")).toBe("タイトルを入力してください");
+  it("too_long を翻訳する", () => {
+    expect(titleErrorMessage("too_long")).toBe("タイトルは30文字以内にしてください");
   });
 
-  it.each(["too_long", ...PROTOTYPE_KEYS])("未知のコード %s は汎用の文言にする", (code) => {
+  it.each(["blank", ...PROTOTYPE_KEYS])("未知のコード %s は汎用の文言にする", (code) => {
     expect(titleErrorMessage(code)).toBe("このタイトルは使えません");
   });
 });
@@ -60,16 +49,16 @@ describe("toPostFormErrors", () => {
   describe("422（rejected）", () => {
     it("画像とタイトルのエラーを、それぞれの欄に振り分ける", () => {
       expect(
-        toPostFormErrors(unprocessable({ image: ["image_too_large"], title: ["blank"] })),
+        toPostFormErrors(unprocessable({ image: ["image_too_large"], title: ["too_long"] })),
       ).toEqual({
         image: "画像は 5MB 以下にしてください",
-        title: "タイトルを入力してください",
+        title: "タイトルは30文字以内にしてください",
         form: null,
       });
     });
 
     it("欄の未知のコードは、その欄の汎用の文言にする", () => {
-      expect(toPostFormErrors(unprocessable({ title: ["too_long"] }))).toEqual({
+      expect(toPostFormErrors(unprocessable({ title: ["something_else"] }))).toEqual({
         image: null,
         title: "このタイトルは使えません",
         form: null,
@@ -79,7 +68,7 @@ describe("toPostFormErrors", () => {
     it.each([
       ["空の配列", []],
       ["文字列でないコード", [1]],
-      ["配列でない", "blank"],
+      ["配列でない", "too_long"],
     ])("コードが読めない（%s）ときも、その欄に汎用の文言を出す", (_label, codes) => {
       expect(toPostFormErrors(unprocessable({ title: codes })).title).toBe("このタイトルは使えません");
     });
@@ -199,7 +188,7 @@ describe("toLeftPageFailureMessage", () => {
 
   it.each([
     ["画像の欄", unprocessable({ image: ["image_type_not_allowed"] }), "JPEG・PNG・WebP・HEIC の画像を選んでください"],
-    ["タイトルの欄", unprocessable({ title: ["blank"] }), "タイトルを入力してください"],
+    ["タイトルの欄", unprocessable({ title: ["too_long"] }), "タイトルは30文字以内にしてください"],
     ["画像の保存の失敗", new ApiError(502, { error: "image_upload_failed" }), "画像の保存に失敗しました"],
     ["画面に無い欄", unprocessable({ user: ["x"] }), "入力内容が受け付けられませんでした"],
     ["その他の 4xx", new ApiError(413, null), "413"],

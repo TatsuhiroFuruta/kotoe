@@ -26,8 +26,11 @@ const IMAGE_MESSAGES: Record<string, string> = {
 };
 const IMAGE_FALLBACK_MESSAGE = "この画像は使えません";
 
+/** backend の Post::MAX_TITLE_LENGTH と揃える */
+export const TITLE_MAX_LENGTH = 30;
+
 const TITLE_MESSAGES: Record<string, string> = {
-  blank: "タイトルを入力してください",
+  too_long: `タイトルは${TITLE_MAX_LENGTH}文字以内にしてください`,
 };
 const TITLE_FALLBACK_MESSAGE = "このタイトルは使えません";
 
@@ -61,15 +64,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 function hasOwnKey(record: Record<string, string>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
-}
-
-/**
- * タイトルが空か。Rails の `presence`（`blank?`）は空白だけの文字列も空と判定するので、
- * ここで素通しすると 422 になる。JS の trim() と Ruby の [[:space:]] はどちらも
- * 全角スペース（U+3000）を空白として扱う。
- */
-export function isBlankTitle(title: string): boolean {
-  return title.trim() === "";
 }
 
 export function imageErrorMessage(code: string): string {
