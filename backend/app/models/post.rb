@@ -5,7 +5,15 @@ class Post < ApplicationRecord
   has_many :attempts, dependent: :restrict_with_exception
   has_many :favorites, dependent: :destroy
 
-  validates :title, presence: true
+  # 30 字はタイトルを「名前」にとどめるための値（設計書 決定 2）。DB の型は変えない。
+  # frontend の TITLE_MAX_LENGTH（lib/posts/post-messages.ts）と揃えること。
+  MAX_TITLE_LENGTH = 30
+
+  # 無題は必ず NULL にそろえる。空文字を保存すると「無題」が 2 通りになり、表示側が
+  # 両方を見分けなければならない。presence は blank? 判定なので全角スペースだけでも
+  # nil になる。strip はしない（前後の空白は入力どおりに残す＝設計書 決定 1）。
+  normalizes :title, with: ->(title) { title.presence }
+  validates :title, length: { maximum: MAX_TITLE_LENGTH }, allow_nil: true
   validates :image_public_id, presence: true
 
   # 一覧・詳細で返す挑戦数といいね合計。

@@ -212,6 +212,42 @@ RSpec.describe "POST /api/posts", type: :request do
     )
   end
 
+  it "タイトル無しで投稿すると 201 で title は null" do
+    expect {
+      post "/api/posts", params: { post: { image: image } }, headers: auth_headers(token)
+    }.to change(Post, :count).by(1)
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(Post.last.title).to be_nil
+  end
+
+  it "空文字のタイトルでも 201 で title は null" do
+    post "/api/posts", params: { post: { title: "", image: image } }, headers: auth_headers(token)
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(Post.last.title).to be_nil
+  end
+
+  it "30 字のタイトルは 201" do
+    post "/api/posts", params: { post: { title: "あ" * 30, image: image } }, headers: auth_headers(token)
+
+    expect(response).to have_http_status(:created)
+    expect(Post.last.title).to eq("あ" * 30)
+  end
+
+  it "31 字のタイトルは 422 too_long で、画像はアップロードしない" do
+    expect(Images::Uploader).not_to receive(:call)
+
+    expect {
+      post "/api/posts", params: { post: { title: "あ" * 31, image: image } }, headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq("title" => [ "too_long" ])
+  end
+
   it "投稿者は current_user になる（user_id を送っても無視する）" do
     other = create(:user)
 
@@ -223,18 +259,18 @@ RSpec.describe "POST /api/posts", type: :request do
     expect(Post.last.user).to eq(user)
   end
 
-  it "タイトルが空と画像が過大なとき、両方のエラーを一度に返す" do
+  it "タイトルが長すぎることと画像が過大なことを、一度に返す" do
     too_large = multipart_image(:jpeg, filename: "big.jpg", type: "image/jpeg", bytesize: 5.megabytes + 1)
 
     expect {
       post "/api/posts",
-        params: { post: { title: "", image: too_large } },
+        params: { post: { title: "あ" * 31, image: too_large } },
         headers: auth_headers(token)
     }.not_to change(Post, :count)
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.parsed_body["errors"]).to eq(
-      "title" => [ "blank" ],
+      "title" => [ "too_long" ],
       "image" => [ "image_too_large" ]
     )
   end
@@ -254,9 +290,7 @@ RSpec.describe "POST /api/posts", type: :request do
     post "/api/posts", params: { post: "foo" }, headers: auth_headers(token)
 
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body["errors"]).to eq(
-      "title" => [ "blank" ], "image" => [ "image_missing" ]
-    )
+    expect(response.parsed_body["errors"]).to eq("image" => [ "image_missing" ])
   end
 
   # 配列も dig に応答するため、respond_to?(:dig) では素通りしてしまう。
@@ -265,9 +299,7 @@ RSpec.describe "POST /api/posts", type: :request do
     post "/api/posts", params: { post: [ "foo" ] }, headers: auth_headers(token)
 
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body["errors"]).to eq(
-      "title" => [ "blank" ], "image" => [ "image_missing" ]
-    )
+    expect(response.parsed_body["errors"]).to eq("image" => [ "image_missing" ])
   end
 
   it "検証で落ちたときは Cloudinary へ上げない" do

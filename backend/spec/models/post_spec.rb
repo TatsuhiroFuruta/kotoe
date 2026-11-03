@@ -9,8 +9,41 @@ RSpec.describe Post, type: :model do
   it { is_expected.to have_many(:attempts).dependent(:restrict_with_exception) }
   it { is_expected.to have_many(:favorites).dependent(:destroy) }
 
-  it { is_expected.to validate_presence_of(:title) }
+  it { is_expected.to validate_length_of(:title).is_at_most(Post::MAX_TITLE_LENGTH) }
   it { is_expected.to validate_presence_of(:image_public_id) }
+
+  describe "title の正規化" do
+    it "nil のまま保存できる" do
+      expect(create(:post, title: nil).reload.title).to be_nil
+    end
+
+    it "空文字は nil にそろう" do
+      expect(create(:post, title: "").reload.title).to be_nil
+    end
+
+    it "空白だけ（全角スペースを含む）は nil にそろう" do
+      expect(create(:post, title: " 　\n").reload.title).to be_nil
+    end
+
+    it "前後の空白は削らない" do
+      expect(create(:post, title: " 夕暮れ ").reload.title).to eq(" 夕暮れ ")
+    end
+
+    it "30 字は通り、31 字は too_long" do
+      expect(build(:post, title: "あ" * 30)).to be_valid
+      post = build(:post, title: "あ" * 31)
+      expect(post).not_to be_valid
+      expect(post.errors.details[:title]).to include(a_hash_including(error: :too_long))
+    end
+  end
+
+  describe ".search_by_title（無題）" do
+    it "q を指定すると無題のお題はかからず、q が空なら出る" do
+      untitled = create(:post, title: nil)
+      expect(Post.search_by_title("お題")).not_to include(untitled)
+      expect(Post.search_by_title("")).to include(untitled)
+    end
+  end
 
   it "discard すると kept から外れ discarded に入る" do
     post = create(:post)
