@@ -6,6 +6,7 @@ import { buttonClasses } from "@/components/ui/button";
 import { ModalDialog } from "@/components/ui/modal-dialog";
 import { TextField } from "@/components/ui/text-field";
 import { apiFetch } from "@/lib/api";
+import { extractUpdatedPost } from "@/lib/mypage/replace-post-in-list";
 import {
   POST_GONE_MESSAGE,
   POST_TITLE_UPDATED_MESSAGE,
@@ -30,8 +31,8 @@ export function EditPostTitleButton({
 }: {
   postId: number;
   title: string | null;
-  /** 保存できたあと。応答のお題で一覧の該当カードを置き換える */
-  onUpdated: (post: PostSummary) => void;
+  /** 保存できたあと。応答のお題で該当カードを置き換える。応答から取り出せなければ null（一覧を取り直す） */
+  onUpdated: (post: PostSummary | null) => void;
   /** お題が削除されていたとき。一覧から外す */
   onGone: () => void;
 }) {
@@ -69,13 +70,13 @@ export function EditPostTitleButton({
     setFieldError(null);
     setFormError(null);
 
-    let updated: PostSummary;
+    let updated: PostSummary | null;
     try {
-      const response = await apiFetch<{ post: PostSummary }>(`/api/posts/${postId}`, {
+      const response = await apiFetch<unknown>(`/api/posts/${postId}`, {
         method: "PATCH",
         body: JSON.stringify({ post: { title: value } }),
       });
-      updated = response.post;
+      updated = extractUpdatedPost(response);
     } catch (caught: unknown) {
       sendingRef.current = false;
       setPending(false);

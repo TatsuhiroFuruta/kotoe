@@ -6,7 +6,7 @@ module Api
     include PostRendering
     include Paginating
 
-    # title が文字列でも nil でもない（配列・ハッシュ）とき。to_s された値を保存させない。
+    # title が文字列でも nil でもない（配列・ハッシュ・数値・真偽値）とき。to_s された値を保存させない。
     class InvalidTitle < StandardError; end
 
     before_action :authenticate_user!, only: %i[create update destroy]
@@ -37,7 +37,9 @@ module Api
     def create
       attributes = post_attributes
       image = attributes[:image]
-      post = current_user.posts.new(title: attributes[:title])
+      # 画像をアップロードする前に型を弾く。後から弾くと参照されない画像が Cloudinary に残る。
+      # title キーが無いのは「無題」という正当な指定なので、update と違って ParameterMissing にしない。
+      post = current_user.posts.new(title: checked_title(attributes))
 
       errors = collect_errors(post, Images::Validation.call(image))
       return render json: { errors: errors }, status: :unprocessable_content if errors.any?
@@ -107,12 +109,17 @@ module Api
     # title キーの有無を見て値を返す。nil / 空文字は「無題にする」という正当な指定なので、
     # params.require（nil・空文字を missing として弾く）は使えない。
     # キー自体が無い（post が無い・ハッシュでない場合も含む）ときは 400 parameter_missing。
-    # 値が配列・ハッシュのときは、そのまま update に渡すと to_s された文字列が保存されるので
-    # 400 parameter_invalid にする。
     def title_param
       attributes = post_attributes
       raise ActionController::ParameterMissing, :title unless attributes.key?(:title)
 
+      checked_title(attributes)
+    end
+
+    # 文字列か nil 以外（配列・ハッシュ・数値・真偽値）は、そのまま渡すと to_s された
+    # 文字列が保存されるので 400 parameter_invalid にする。create と update で共有する。
+    # キーが無いときは nil を返す（無題）。
+    def checked_title(attributes)
       title = attributes[:title]
       raise InvalidTitle unless title.nil? || title.is_a?(String)
 

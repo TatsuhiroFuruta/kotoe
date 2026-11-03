@@ -248,6 +248,28 @@ RSpec.describe "POST /api/posts", type: :request do
     expect(response.parsed_body["errors"]).to eq("title" => [ "too_long" ])
   end
 
+  it "title が配列だと 400 parameter_invalid で、投稿せず画像もアップロードしない" do
+    expect(Images::Uploader).not_to receive(:call)
+
+    expect {
+      post "/api/posts", params: { post: { title: [ "a" ], image: image } }, headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+  end
+
+  it "title がハッシュだと 400 parameter_invalid で、投稿せず画像もアップロードしない" do
+    expect(Images::Uploader).not_to receive(:call)
+
+    expect {
+      post "/api/posts", params: { post: { title: { a: "b" }, image: image } }, headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+  end
+
   it "投稿者は current_user になる（user_id を送っても無視する）" do
     other = create(:user)
 
@@ -748,6 +770,19 @@ RSpec.describe "PATCH /api/posts/:id", type: :request do
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body).to eq("error" => "parameter_invalid")
     expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  # multipart では数値・真偽値が文字列になるので、JSON で送る（apiFetch と同じ形）。
+  [ 123, true ].each do |value|
+    it "title が #{value.inspect}（JSON）だと 400 parameter_invalid で、値は変わらない" do
+      patch "/api/posts/#{post_record.id}",
+            params: { post: { title: value } }.to_json,
+            headers: auth_headers(token).merge("CONTENT_TYPE" => "application/json")
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("error" => "parameter_invalid")
+      expect(post_record.reload.title).to eq("元のタイトル")
+    end
   end
 end
 

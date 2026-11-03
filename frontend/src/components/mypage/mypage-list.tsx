@@ -98,8 +98,13 @@ export function MypageList({
    * DOM から外れ、ダイアログを閉じたときのフォーカスの戻り先が無くなる（設計書 決定 4）。
    * そこで応答のお題で該当カードだけをその場で置き換える。key はそのままなのでスケルトンは出ない。
    * 件数は変わらないので onItemDeleted（統計の取り直し）は呼ばない。
+   * 応答からお題を取り出せなかったとき（null）は、置き換えられないので一覧を取り直す。
    */
-  function handlePostUpdated(post: PostSummary) {
+  function handlePostUpdated(post: PostSummary | null) {
+    if (post === null) {
+      setRetryCount((count) => count + 1);
+      return;
+    }
     setResult((current) => {
       if (current === null || current.outcome.kind !== "success") return current;
       const { list } = current.outcome;
@@ -145,7 +150,7 @@ function ListResults({
   list: ListData;
   onDeleted: (itemCountOnPage: number) => void;
   /** お題のタイトルを変えたあと。応答のお題で該当カードを置き換える */
-  onPostUpdated: (post: PostSummary) => void;
+  onPostUpdated: (post: PostSummary | null) => void;
 }) {
   const meta = list.data.meta;
   const itemCount = list.kind === "posts" ? list.data.posts.length : list.data.attempts.length;

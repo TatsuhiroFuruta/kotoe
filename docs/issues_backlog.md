@@ -849,6 +849,20 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
   2. 8-6（スリープ対策）を入れると 3 は数百ミリ秒になる。8-6 の判断を待つかどうか
 - 完了条件：ログアウトを押したとき、どの画面でも失効の案内が出ず、すぐにトップへ戻る。別タブの新しいログインを消さない。
 
+### 🔵 7-2.11. apiFetch に Accept: application/json を付ける（Rails の例外応答を JSON にする）
+- GitHub：未作成
+- 依存：7-1
+- 背景（3-3 のレビューで判明）：`apiFetch` は `Accept` を送らない（ブラウザ既定の `*/*`）。Rails の例外応答
+  （`PublicExceptions`）は `Accept` が JSON のときしか JSON にならないため、例外由来の 400 は HTML/テキストで返る。
+  3-3 では PATCH の 400 を `PostsController` の `rescue_from` で個別に JSON にしたが、
+  壊れた JSON 本文の `ActionDispatch::Http::Parameters::ParseError` など、ほかの 400 は今も JSON にならない
+- 方針：`lib/api.ts` で `Accept: application/json` を付ける。devise を含む全 API への影響を確認する
+  （devise の failure app や認証失敗の応答の形が `Accept` で変わらないか。401 の本文を読んでいる箇所がないか）。
+  確認できたら、`PostsController` の個別 `rescue_from` が要るかも見直す
+- 完了条件：壊れた JSON 本文を送ったときも 400 の本文が JSON になる（request spec で `Accept` を付けずに確認）。
+  既存の認証まわりの spec と E2E が green のまま。
+- 着手はしない（積むだけ）。
+
 ### 🟢 7-3a. お題一覧・検索（/posts）
 - 依存：7-1, 3-2, **7-2.7**
 - 設計書：`docs/superpowers/specs/2026-09-23-issue-7-3a-posts-index-design.md`
