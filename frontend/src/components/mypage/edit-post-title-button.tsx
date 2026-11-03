@@ -69,8 +69,8 @@ export function EditPostTitleButton({
     setFieldError(null);
     setFormError(null);
 
-    // try は送信だけを包む（7-5 の post-form と同じ）。応答の取り出しまで包むと、保存は済んでいるのに
-    // そこで投げた例外が通信の失敗として表示される。
+    // try は送信だけを包む（7-5 の post-form と同じ形）。catch はリクエストの失敗を振り分ける場所なので、
+    // 成功後の処理を入れない。成功時の応答は必ず { post } を返す（request spec で固定）。
     let response: PostUpdateResponse;
     try {
       response = await apiFetch<PostUpdateResponse>(`/api/posts/${postId}`, {
