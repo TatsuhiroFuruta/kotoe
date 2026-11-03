@@ -9,7 +9,7 @@ class ApplicationController < ActionController::API
 
   protected
 
-  # 検証エラーは属性ごとの**エラーコード**の配列で返す（`{ errors: { title: ["blank"] } }`）。
+  # 検証エラーは属性ごとの**エラーコード**の配列で返す（`{ errors: { title: ["too_long"] } }`）。
   # 文言は返さない。翻訳・表示はフロントの辞書が担当する。
   def render_validation_errors(record)
     errors = record.errors.details.transform_values { |details| details.pluck(:error) }

@@ -30,8 +30,8 @@ export function EditPostTitleButton({
 }: {
   postId: number;
   title: string | null;
-  /** 保存できたあと。一覧を取り直してカードに反映する */
-  onUpdated: () => void;
+  /** 保存できたあと。応答のお題で一覧の該当カードを置き換える */
+  onUpdated: (post: PostSummary) => void;
   /** お題が削除されていたとき。一覧から外す */
   onGone: () => void;
 }) {
@@ -58,6 +58,7 @@ export function EditPostTitleButton({
     setFieldError(null);
     setFormError(null);
     // 「タイトルを編集」へのフォーカスの復元は <dialog> の close() に任せる（7-6b で確認済み）。
+    // 保存後も一覧を取り直さず置き換えるだけなので（MypageList）、このボタンは DOM に残り、戻り先になる。
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -68,11 +69,13 @@ export function EditPostTitleButton({
     setFieldError(null);
     setFormError(null);
 
+    let updated: PostSummary;
     try {
-      await apiFetch<{ post: PostSummary }>(`/api/posts/${postId}`, {
+      const response = await apiFetch<{ post: PostSummary }>(`/api/posts/${postId}`, {
         method: "PATCH",
         body: JSON.stringify({ post: { title: value } }),
       });
+      updated = response.post;
     } catch (caught: unknown) {
       sendingRef.current = false;
       setPending(false);
@@ -100,7 +103,7 @@ export function EditPostTitleButton({
     setPending(false);
     close();
     toast.success(POST_TITLE_UPDATED_MESSAGE);
-    onUpdated();
+    onUpdated(updated);
   }
 
   return (

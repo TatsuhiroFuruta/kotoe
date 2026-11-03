@@ -704,7 +704,7 @@ RSpec.describe "PATCH /api/posts/:id", type: :request do
     patch_title({ post: { foo: "x" } })
 
     expect(response).to have_http_status(:bad_request)
-    expect(response.media_type).to eq("application/json")
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
     expect(post_record.reload.title).to eq("元のタイトル")
   end
 
@@ -712,14 +712,42 @@ RSpec.describe "PATCH /api/posts/:id", type: :request do
     patch_title({})
 
     expect(response).to have_http_status(:bad_request)
-    expect(response.media_type).to eq("application/json")
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
   end
 
   it "post が文字列だと 400" do
     patch_title({ post: "x" })
 
     expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
+  end
+
+  # apiFetch は Accept を付けない（ブラウザ既定の */*）。as: :json は Accept も JSON にするので、
+  # それを使わずに送り、Accept によらず JSON が返ることを確かめる。
+  it "Accept が JSON でなくても 400 の本文は JSON" do
+    patch "/api/posts/#{post_record.id}",
+          params: { post: { foo: "x" } }.to_json,
+          headers: auth_headers(token).merge("CONTENT_TYPE" => "application/json")
+
+    expect(response).to have_http_status(:bad_request)
     expect(response.media_type).to eq("application/json")
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
+  end
+
+  it "title が配列だと 400 parameter_invalid で、値は変わらない" do
+    patch_title({ post: { title: [ "a" ] } })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "title がハッシュだと 400 parameter_invalid で、値は変わらない" do
+    patch_title({ post: { title: { a: "b" } } })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+    expect(post_record.reload.title).to eq("元のタイトル")
   end
 end
 

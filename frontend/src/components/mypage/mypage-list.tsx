@@ -15,8 +15,9 @@ import { Pagination } from "@/components/ui/pagination";
 import { RetryableError } from "@/components/ui/retryable-error";
 import { apiFetch } from "@/lib/api";
 import { mypageApiPath, mypageHref, type MypageQuery, type MypageTab } from "@/lib/mypage/mypage-query";
+import { replacePostInList } from "@/lib/mypage/replace-post-in-list";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
-import type { MyAttemptsResponse, PostsIndexResponse } from "@/types/api";
+import type { MyAttemptsResponse, PostSummary, PostsIndexResponse } from "@/types/api";
 
 /** 応答の形はタブで分かれる。tab から kind を決めて詰め、描画は kind で分岐する。 */
 type ListData =
@@ -92,6 +93,24 @@ export function MypageList({
     onItemDeleted();
   }
 
+  /**
+   * タイトルを変えたあと。取り直すとスケルトンに入れ替わって「タイトルを編集」ボタンが
+   * DOM から外れ、ダイアログを閉じたときのフォーカスの戻り先が無くなる（設計書 決定 4）。
+   * そこで応答のお題で該当カードだけをその場で置き換える。key はそのままなのでスケルトンは出ない。
+   * 件数は変わらないので onItemDeleted（統計の取り直し）は呼ばない。
+   */
+  function handlePostUpdated(post: PostSummary) {
+    setResult((current) => {
+      if (current === null || current.outcome.kind !== "success") return current;
+      const { list } = current.outcome;
+      if (list.kind !== "posts") return current;
+      return {
+        key: current.key,
+        outcome: { kind: "success", list: { kind: "posts", data: replacePostInList(list.data, post) } },
+      };
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* 挑戦カードの画像は正方形、お題・下書きのカードは 4:3。 */}
@@ -109,7 +128,7 @@ export function MypageList({
           query={query}
           list={outcome.list}
           onDeleted={handleDeleted}
-          onPostUpdated={() => setRetryCount((count) => count + 1)}
+          onPostUpdated={handlePostUpdated}
         />
       )}
     </div>
@@ -125,8 +144,8 @@ function ListResults({
   query: MypageQuery;
   list: ListData;
   onDeleted: (itemCountOnPage: number) => void;
-  /** お題のタイトルを変えたあと。取り直してカードに反映する */
-  onPostUpdated: () => void;
+  /** お題のタイトルを変えたあと。応答のお題で該当カードを置き換える */
+  onPostUpdated: (post: PostSummary) => void;
 }) {
   const meta = list.data.meta;
   const itemCount = list.kind === "posts" ? list.data.posts.length : list.data.attempts.length;
