@@ -6,7 +6,7 @@ module Api
     include PostRendering
     include Paginating
 
-    before_action :authenticate_user!, only: %i[create destroy]
+    before_action :authenticate_user!, only: %i[create update destroy]
 
     def index
       posts = Post.listing(q: params[:q], sort: params[:sort]).page(page_param)
@@ -58,6 +58,19 @@ module Api
       }
     end
 
+    # 変えられるのは title だけ。image_public_id などは title_param しか通さないので、
+    # 余計なキーを送られても書き換わらない。
+    def update
+      # destroy と同じく current_user.posts に限定し、他人・削除済み・存在しない ID は 404 にする。
+      post = current_user.posts.kept.find(params[:id])
+
+      if post.update(title: title_param)
+        render json: { post: post_json(post) }
+      else
+        render_validation_errors(post)
+      end
+    end
+
     def destroy
       # current_user.posts に限定することで、所有チェックの書き忘れが起こりようがない。
       # 他人のお題・存在しない ID・削除済みは、すべて RecordNotFound → 404 になる。
@@ -75,6 +88,16 @@ module Api
     # ["foo"][:title] が TypeError になる。受け取ってよい型だけを名指しする。
     def post_attributes
       params[:post].is_a?(ActionController::Parameters) ? params[:post] : {}
+    end
+
+    # title キーの有無を見て値を返す。nil / 空文字は「無題にする」という正当な指定なので、
+    # params.require（nil・空文字を missing として弾く）は使えない。
+    # キー自体が無い（post が無い・ハッシュでない場合も含む）ときだけ 400 にする。
+    def title_param
+      attributes = post_attributes
+      raise ActionController::ParameterMissing, :title unless attributes.key?(:title)
+
+      attributes[:title]
     end
 
     # 画像とタイトルのエラーをまとめて返す。片方ずつ返すと往復が増えるうえ、

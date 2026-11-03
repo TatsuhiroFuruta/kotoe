@@ -598,6 +598,131 @@ RSpec.describe "GET /api/posts/:id", type: :request do
   end
 end
 
+RSpec.describe "PATCH /api/posts/:id", type: :request do
+  let(:user) { create(:user) }
+  let(:token) { sign_in_and_get_token(user) }
+  let!(:post_record) { create(:post, user: user, title: "元のタイトル") }
+
+  def patch_title(params, id: post_record.id, headers: auth_headers(token))
+    patch "/api/posts/#{id}", params: params, headers: headers, as: :json
+  end
+
+  it "自分のお題のタイトルを変える" do
+    patch_title({ post: { title: "新しいタイトル" } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"].keys).to match_array(
+      %w[id title image_public_id user attempts_count likes_count favorited created_at]
+    )
+    expect(response.parsed_body["post"]["title"]).to eq("新しいタイトル")
+    expect(post_record.reload.title).to eq("新しいタイトル")
+  end
+
+  it "空文字を送ると無題（null）になる" do
+    patch_title({ post: { title: "" } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(post_record.reload.title).to be_nil
+  end
+
+  it "null を送ると無題になる" do
+    patch_title({ post: { title: nil } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(post_record.reload.title).to be_nil
+  end
+
+  it "30 字は 200" do
+    patch_title({ post: { title: "あ" * 30 } })
+
+    expect(response).to have_http_status(:ok)
+    expect(post_record.reload.title).to eq("あ" * 30)
+  end
+
+  it "31 字は 422 too_long で、値は変わらない" do
+    patch_title({ post: { title: "あ" * 31 } })
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq("title" => [ "too_long" ])
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "image を送っても image_public_id は変わらない" do
+    patch_title({ post: { title: "新", image_public_id: "evil", image: "x" } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"]["image_public_id"]).to eq("kotoe/sample_post")
+    expect(post_record.reload.image_public_id).to eq("kotoe/sample_post")
+  end
+
+  it "既存の挑戦は件数も内容も変わらない" do
+    attempt = create(:attempt, :published, post: post_record)
+    description = attempt.description
+
+    expect {
+      patch_title({ post: { title: "新" } })
+    }.not_to change { post_record.attempts.count }
+
+    expect(response.parsed_body["post"]["attempts_count"]).to eq(1)
+    expect(attempt.reload.description).to eq(description)
+  end
+
+  it "他人のお題は 404 で、値は変わらない" do
+    others = create(:post, title: "他人")
+
+    patch_title({ post: { title: "乗っ取り" } }, id: others.id)
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body["error"]).to eq("not_found")
+    expect(others.reload.title).to eq("他人")
+  end
+
+  it "削除済みのお題は 404" do
+    post_record.discard!
+
+    patch_title({ post: { title: "新" } })
+
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "存在しない ID は 404" do
+    patch_title({ post: { title: "新" } }, id: 0)
+
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "未認証は 401" do
+    patch_title({ post: { title: "新" } }, headers: {})
+
+    expect(response).to have_http_status(:unauthorized)
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "post に title キーが無いと 400 で、値は変わらない" do
+    patch_title({ post: { foo: "x" } })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.media_type).to eq("application/json")
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "post が無いと 400" do
+    patch_title({})
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.media_type).to eq("application/json")
+  end
+
+  it "post が文字列だと 400" do
+    patch_title({ post: "x" })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.media_type).to eq("application/json")
+  end
+end
+
 RSpec.describe "DELETE /api/posts/:id", type: :request do
   let(:user) { create(:user) }
   let(:token) { sign_in_and_get_token(user) }
