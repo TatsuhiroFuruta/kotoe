@@ -46,9 +46,13 @@ export function DraftCard({ draft, onDeleted }: { draft: MyAttempt; onDeleted: (
       <div className="p-4">
         {/* 公開 UGC。{value} のまま置く（React が自動でエスケープする）。 */}
         <p className="truncate text-sm text-ink-muted">
-          {post.discarded ? "お題は削除されました" : <>
+          {post.discarded ? (
+            "お題は削除されました"
+          ) : (
+            <>
               お題：<PostTitleText title={post.title} />
-            </>}
+            </>
+          )}
         </p>
         <p className="mt-2 line-clamp-3 text-sm whitespace-pre-wrap wrap-break-word text-ink">
           {draft.description}

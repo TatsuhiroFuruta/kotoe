@@ -53,7 +53,8 @@ export function MyAttemptCard({
           {post.discarded ? (
             <span className="truncate">お題は削除されました</span>
           ) : (
-            <span className="truncate">お題：<PostTitleText title={post.title} />
+            <span className="truncate">
+              お題：<PostTitleText title={post.title} />
             </span>
           )}
           <span className="shrink-0">

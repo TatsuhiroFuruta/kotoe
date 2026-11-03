@@ -199,7 +199,7 @@ export function PostForm() {
       <h1 className="text-xl font-semibold text-ink">お題を投稿</h1>
 
       {/*
-        noValidate：ブラウザ標準の吹き出し（TextField は required を付ける）ではなく、
+        noValidate：ブラウザ標準の吹き出し（TextField は既定で required を付ける。タイトル欄だけ任意なので外している）ではなく、
         欄の下に同じ見た目でエラーを出すため。画像とタイトルのエラーを同時に出せる。
       */}
       <form onSubmit={handleSubmit} noValidate className="mt-6 flex flex-col gap-5">

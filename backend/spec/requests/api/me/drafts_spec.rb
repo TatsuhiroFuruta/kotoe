@@ -49,6 +49,17 @@ RSpec.describe "GET /api/me/drafts", type: :request do
     expect(response.parsed_body["meta"]["total_count"]).to eq(0)
   end
 
+  it "無題のお題への下書きは title が null で discarded は false" do
+    post_record = create(:post, title: nil)
+    create(:attempt, post: post_record, user: user)
+
+    get "/api/me/drafts", headers: auth_headers(token)
+
+    summary = response.parsed_body["attempts"].first["post"]
+    expect(summary["title"]).to be_nil
+    expect(summary["discarded"]).to be false
+  end
+
   # ブリーフの下書きタブは「お題サムネイル＋描写文」を出す。
   it "下書きカードに描写文とお題サマリが入る" do
     post_record = create(:post, title: "夕暮れの商店街")
