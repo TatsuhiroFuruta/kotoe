@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractUpdatedPost, replacePostInList } from "@/lib/mypage/replace-post-in-list";
+import { replacePostInList } from "@/lib/mypage/replace-post-in-list";
 import type { PostSummary, PostsIndexResponse } from "@/types/api";
 
 function post(id: number, title: string | null): PostSummary {
@@ -63,25 +63,5 @@ describe("replacePostInList", () => {
     const next = replacePostInList(list, post(1, "新しい一"));
 
     expect(next.meta).toBe(list.meta);
-  });
-});
-
-describe("extractUpdatedPost", () => {
-  it("post を持つ応答からお題を取り出す", () => {
-    const updated = post(2, "新");
-    expect(extractUpdatedPost({ post: updated })).toBe(updated);
-  });
-
-  it.each([
-    ["undefined", undefined],
-    ["null", null],
-    ["空オブジェクト", {}],
-    ["post が null", { post: null }],
-    ["post が文字列", { post: "x" }],
-    ["post に id が無い", { post: { title: "新" } }],
-    ["id が数値でない", { post: { id: "2" } }],
-    ["形が違う（配列）", []],
-  ])("%s なら null", (_label, response) => {
-    expect(extractUpdatedPost(response)).toBeNull();
   });
 });

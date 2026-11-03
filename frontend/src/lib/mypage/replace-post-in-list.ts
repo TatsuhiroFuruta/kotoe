@@ -14,17 +14,3 @@ export function replacePostInList(list: PostsIndexResponse, post: PostSummary): 
     posts: list.posts.map((current) => (current.id === post.id ? post : current)),
   };
 }
-
-/**
- * PATCH の応答から更新後のお題を取り出す。取り出せない（空・形が違う）ときは null。
- * null のときは置き換えの代わりに一覧を取り直す。replacePostInList は id で突き合わせるので、
- * 数値の id を持つオブジェクトだけを受け入れる。
- */
-export function extractUpdatedPost(response: unknown): PostSummary | null {
-  if (typeof response !== "object" || response === null || !("post" in response)) return null;
-  const { post } = response;
-  if (typeof post !== "object" || post === null || !("id" in post)) return null;
-  if (typeof post.id !== "number") return null;
-  // id の存在と型は確かめた。残りの項目の形まではここで検査しない（サーバーが正）。
-  return post as PostSummary;
-}
