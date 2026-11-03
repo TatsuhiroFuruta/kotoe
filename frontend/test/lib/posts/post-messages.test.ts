@@ -2,14 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import {
+  TITLE_EDIT_UNKNOWN_MESSAGE,
   UNKNOWN_FIELD_MESSAGE,
   UPLOAD_FAILED_MESSAGE,
   imageErrorMessage,
   titleErrorMessage,
   toLeftPageFailureMessage,
   toPostFormErrors,
+  toTitleEditFailure,
   unconfirmedMessage,
 } from "@/lib/posts/post-messages";
+import { SERVER_MESSAGE, TIMEOUT_MESSAGE } from "@/lib/request-error-messages";
 
 /** Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値が返る */
 const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];
@@ -195,5 +198,39 @@ describe("toLeftPageFailureMessage", () => {
     ["欄と画面に無い欄の両方（欄を優先）", unprocessable({ image: ["image_missing"], user: ["x"] }), "画像を選んでください"],
   ])("%s は「投稿できませんでした」に理由を括弧で添える", (_label, error, reason) => {
     expect(leave(error)).toBe(`お題を投稿できませんでした（${reason}）`);
+  });
+});
+
+describe("toTitleEditFailure", () => {
+  it("422 の title は欄の下に出す文言にする", () => {
+    expect(toTitleEditFailure(unprocessable({ title: ["too_long"] }))).toEqual({
+      kind: "field",
+      message: "タイトルは30文字以内にしてください",
+    });
+  });
+
+  // 投稿フォームの UNKNOWN_FIELD_MESSAGE は「投稿できませんでした」なので、編集のダイアログには合わない。
+  it("欄の無い 422 はダイアログ上部の文言にする", () => {
+    expect(toTitleEditFailure(unprocessable({}))).toEqual({
+      kind: "form",
+      message: TITLE_EDIT_UNKNOWN_MESSAGE,
+    });
+  });
+
+  it("404 は削除済み", () => {
+    expect(toTitleEditFailure(new ApiError(404, { error: "not_found" }))).toEqual({ kind: "gone" });
+  });
+
+  it("401 は失効", () => {
+    expect(toTitleEditFailure(new ApiError(401, { error: "unauthorized" }))).toEqual({
+      kind: "session_expired",
+    });
+  });
+
+  it.each([
+    ["timeout", new ApiTimeoutError(15000), TIMEOUT_MESSAGE],
+    ["500", new ApiError(500, null), SERVER_MESSAGE],
+  ])("%s は通信の失敗の文言にする", (_label, error, message) => {
+    expect(toTitleEditFailure(error)).toEqual({ kind: "form", message });
   });
 });

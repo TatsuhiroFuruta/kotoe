@@ -10,6 +10,7 @@
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import { apiErrorCode, fallbackErrorMessage } from "@/lib/attempts/attempt-messages";
 import { IMAGE_MAX_BYTES } from "@/lib/posts/image-file-check";
+import { toRequestErrorMessage } from "@/lib/request-error-messages";
 
 export const POST_CREATED_MESSAGE = "お題を投稿しました";
 export const UPLOAD_FAILED_MESSAGE = "画像の保存に失敗しました。時間をおいて再度お試しください";
@@ -62,7 +63,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * 辞書に自前のキーとしてあるか。`record[key]` は Object.prototype から継承したキー
  * （toString など）にも値を返すので、それらを未知のコードとして扱うために使う。
  */
-function hasOwnKey(record: Record<string, string>, key: string): boolean {
+function hasOwnKey(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
@@ -179,4 +180,48 @@ export function toLeftPageFailureMessage(errors: PostFormErrors): string | null 
 
   const reason = errors.image ?? errors.title ?? errors.form?.reason ?? UNKNOWN_FIELD_REASON;
   return `${POST_FAILED_PREFIX}（${reason}）`;
+}
+
+export const POST_TITLE_UPDATED_MESSAGE = "タイトルを変更しました";
+export const POST_GONE_MESSAGE = "このお題は削除されています";
+export const TITLE_EDIT_HINT = "空欄にすると「無題」になります";
+/**
+ * タイトル編集の 422 のうち、title の欄が無いもの。UNKNOWN_FIELD_MESSAGE は「投稿できませんでした」で
+ * 編集のダイアログには合わないので、別に持つ。
+ */
+export const TITLE_EDIT_UNKNOWN_MESSAGE = "保存できませんでした。入力内容を確認してください";
+
+export type TitleEditFailure =
+  /** 入力欄の下に出す */
+  | { kind: "field"; message: string }
+  /** お題が削除されている。ダイアログを閉じ、一覧から外す */
+  | { kind: "gone" }
+  /** 文言はトーストで出す（api.ts、7-2.6）。ダイアログに残しても押し直せない */
+  | { kind: "session_expired" }
+  /** ダイアログ上部に出す。押し直せば通る見込みのあるもの */
+  | { kind: "form"; message: string };
+
+/**
+ * タイトル編集（PATCH /api/posts/:id）の失敗を、ダイアログでの見せ方に振り分ける。
+ *
+ * 投稿と違い「作られたか分からない」を分けない。タイトルの上書きは何度送っても結果が同じなので、
+ * 届いたか分からなくても押し直してもらえば足りる。
+ */
+export function toTitleEditFailure(error: unknown): TitleEditFailure {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return { kind: "session_expired" };
+    if (error.status === 404) return { kind: "gone" };
+    if (error.status === 422) {
+      const body = error.body;
+      if (isRecord(body) && isRecord(body.errors) && hasOwnKey(body.errors, "title")) {
+        const code = firstCode(body.errors.title);
+        return {
+          kind: "field",
+          message: code === null ? TITLE_FALLBACK_MESSAGE : titleErrorMessage(code),
+        };
+      }
+      return { kind: "form", message: TITLE_EDIT_UNKNOWN_MESSAGE };
+    }
+  }
+  return { kind: "form", message: toRequestErrorMessage(error) };
 }

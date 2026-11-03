@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DraftCard } from "@/components/mypage/draft-card";
+import { EditPostTitleButton } from "@/components/mypage/edit-post-title-button";
 import { MyAttemptCard } from "@/components/mypage/my-attempt-card";
 import { PostCard } from "@/components/posts/post-card";
 import { buttonClasses } from "@/components/ui/button";
@@ -104,7 +105,12 @@ export function MypageList({
       )}
 
       {outcome?.kind === "success" && (
-        <ListResults query={query} list={outcome.list} onDeleted={handleDeleted} />
+        <ListResults
+          query={query}
+          list={outcome.list}
+          onDeleted={handleDeleted}
+          onPostUpdated={() => setRetryCount((count) => count + 1)}
+        />
       )}
     </div>
   );
@@ -114,10 +120,13 @@ function ListResults({
   query,
   list,
   onDeleted,
+  onPostUpdated,
 }: {
   query: MypageQuery;
   list: ListData;
   onDeleted: (itemCountOnPage: number) => void;
+  /** お題のタイトルを変えたあと。取り直してカードに反映する */
+  onPostUpdated: () => void;
 }) {
   const meta = list.data.meta;
   const itemCount = list.kind === "posts" ? list.data.posts.length : list.data.attempts.length;
@@ -152,6 +161,18 @@ function ListResults({
           {list.data.posts.map((post) => (
             <li key={post.id}>
               <PostCard post={post} />
+              {/* お気に入りタブも同じ PostCard の一覧なので、自分のお題のタブにだけ置く。 */}
+              {query.tab === "posts" && (
+                <div className="mt-2 flex justify-end">
+                  <EditPostTitleButton
+                    postId={post.id}
+                    title={post.title}
+                    onUpdated={onPostUpdated}
+                    // お題が消えていたので、削除と同じく最後の 1 枚ならページを戻し、統計も取り直す。
+                    onGone={() => onDeleted(itemCount)}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>
