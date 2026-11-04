@@ -798,6 +798,19 @@ RSpec.describe "PATCH /api/posts/:id", type: :request do
       expect(post_record.reload.title).to eq("元のタイトル")
     end
   end
+
+  # 弾くのは JSON の型であって中身ではない。上の例の値と同じ綴りでも、文字列ならタイトルとして通る。
+  it "文字列の \"123\" と \"true\" はタイトルとして保存される" do
+    [ "123", "true" ].each do |title|
+      patch "/api/posts/#{post_record.id}",
+            params: { post: { title: title } }.to_json,
+            headers: auth_headers(token).merge("CONTENT_TYPE" => "application/json")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["post"]["title"]).to eq(title)
+      expect(post_record.reload.title).to eq(title)
+    end
+  end
 end
 
 RSpec.describe "DELETE /api/posts/:id", type: :request do
