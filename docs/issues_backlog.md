@@ -859,9 +859,19 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - 方針：`lib/api.ts` で `Accept: application/json` を付ける。devise を含む全 API への影響を確認する
   （devise の failure app や認証失敗の応答の形が `Accept` で変わらないか。401 の本文を読んでいる箇所がないか）。
   確認できたら、`PostsController` の個別 `rescue_from` が要るかも見直す
-- 完了条件：壊れた JSON 本文を送ったときも 400 の本文が JSON になる（request spec で `Accept` を付けずに確認）。
-  既存の認証まわりの spec と E2E が green のまま。
-- 着手はしない（積むだけ）。
+- あわせて検討すること：**成功（2xx）なのに本文が空の応答**。`parseBody` は空の本文を `null` で返すが、
+  `apiFetch<T>` の型は `T` のままなので、呼び出し側は気づかない。たとえばタイトル編集は 200 で本文が空だと、
+  成功のトーストを出したあとに `response.post` の読み取りで例外になる（`edit-post-title-button.tsx`）。
+  Rails は成功時に必ず `{ post }` を返すので（request spec で固定）、今は起きない想定で、コードを読んで判断した
+  段階（実測はしていない）。呼び出し側ごとに逃げ道を足すと、ほとんど通らない分岐が増えて別の不具合を生むので
+  （3-3 のレビューで一度入れて撤回した）、直すなら `apiFetch` の層で扱いを決める
+- 完了条件：`apiFetch` が `Accept: application/json` を送る（Vitest で確認）。その `Accept` で壊れた JSON 本文を
+  送ると 400 の本文が JSON になる（request spec で確認）。既存の認証まわりの spec と E2E が green のまま。
+  本文が空の応答の扱いを決めて、この issue に記録する（直さない判断でもよい）。
+- 着手の目安：**8-2b（MVP）の後**。今の画面には実害が見当たらず、MVP に必要ない変更を、全 API が通る
+  `api.ts` に入れないため。E2E（8-1）で認証まわりを確認できるようになってから、単独の PR で出す。
+- 優先度を上げる条件：API を画面以外（外部クライアントなど）からも使うようになったとき。または、新しい API で
+  `params.require` / `params.expect` を使い始めたとき（その 400 も JSON にならないため）。
 
 ### 🟢 7-3a. お題一覧・検索（/posts）
 - 依存：7-1, 3-2, **7-2.7**
