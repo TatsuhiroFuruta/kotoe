@@ -21,8 +21,8 @@ Rails.application.routes.draw do
     get "me/drafts"    => "me#drafts"
     get "me/favorites" => "me#favorites"
 
-    # お題（issue 3-2）。一覧・詳細は認証不要、投稿・削除は要ログイン。
-    resources :posts, only: %i[index create show destroy] do
+    # お題（issue 3-2）。一覧・詳細は認証不要、投稿・タイトル変更・削除は要ログイン。
+    resources :posts, only: %i[index create show update destroy] do
       resources :attempts, only: %i[create]
 
       # お気に入り（issue 5-2）。単数リソースなので /api/posts/:post_id/favorite の

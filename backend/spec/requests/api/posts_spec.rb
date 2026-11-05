@@ -212,6 +212,78 @@ RSpec.describe "POST /api/posts", type: :request do
     )
   end
 
+  it "タイトル無しで投稿すると 201 で title は null" do
+    expect {
+      post "/api/posts", params: { post: { image: image } }, headers: auth_headers(token)
+    }.to change(Post, :count).by(1)
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(Post.last.title).to be_nil
+  end
+
+  it "空文字のタイトルでも 201 で title は null" do
+    post "/api/posts", params: { post: { title: "", image: image } }, headers: auth_headers(token)
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(Post.last.title).to be_nil
+  end
+
+  it "30 字のタイトルは 201" do
+    post "/api/posts", params: { post: { title: "あ" * 30, image: image } }, headers: auth_headers(token)
+
+    expect(response).to have_http_status(:created)
+    expect(Post.last.title).to eq("あ" * 30)
+  end
+
+  it "31 字のタイトルは 422 too_long で、画像はアップロードしない" do
+    expect(Images::Uploader).not_to receive(:call)
+
+    expect {
+      post "/api/posts", params: { post: { title: "あ" * 31, image: image } }, headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq("title" => [ "too_long" ])
+  end
+
+  it "title が配列だと 400 parameter_invalid で、投稿せず画像もアップロードしない" do
+    expect(Images::Uploader).not_to receive(:call)
+
+    expect {
+      post "/api/posts", params: { post: { title: [ "a" ], image: image } }, headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+  end
+
+  it "title がハッシュだと 400 parameter_invalid で、投稿せず画像もアップロードしない" do
+    expect(Images::Uploader).not_to receive(:call)
+
+    expect {
+      post "/api/posts", params: { post: { title: { a: "b" }, image: image } }, headers: auth_headers(token)
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+  end
+
+  # multipart では数値が文字列になるので JSON で送る。画像は JSON で送れないので、
+  # 型の検査が画像の検証より先に走ることは、422（画像エラー）ではなく 400 が返ることで固定する。
+  # 画像を付けたときにアップロードしないことは、上の配列・ハッシュの例が押さえている。
+  it "title が数値（JSON）だと、画像の検証より先に 400 parameter_invalid を返し、投稿しない" do
+    expect {
+      post "/api/posts",
+           params: { post: { title: 123 } }.to_json,
+           headers: auth_headers(token).merge("CONTENT_TYPE" => "application/json")
+    }.not_to change(Post, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+  end
+
   it "投稿者は current_user になる（user_id を送っても無視する）" do
     other = create(:user)
 
@@ -223,18 +295,18 @@ RSpec.describe "POST /api/posts", type: :request do
     expect(Post.last.user).to eq(user)
   end
 
-  it "タイトルが空と画像が過大なとき、両方のエラーを一度に返す" do
+  it "タイトルが長すぎることと画像が過大なことを、一度に返す" do
     too_large = multipart_image(:jpeg, filename: "big.jpg", type: "image/jpeg", bytesize: 5.megabytes + 1)
 
     expect {
       post "/api/posts",
-        params: { post: { title: "", image: too_large } },
+        params: { post: { title: "あ" * 31, image: too_large } },
         headers: auth_headers(token)
     }.not_to change(Post, :count)
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.parsed_body["errors"]).to eq(
-      "title" => [ "blank" ],
+      "title" => [ "too_long" ],
       "image" => [ "image_too_large" ]
     )
   end
@@ -254,9 +326,7 @@ RSpec.describe "POST /api/posts", type: :request do
     post "/api/posts", params: { post: "foo" }, headers: auth_headers(token)
 
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body["errors"]).to eq(
-      "title" => [ "blank" ], "image" => [ "image_missing" ]
-    )
+    expect(response.parsed_body["errors"]).to eq("image" => [ "image_missing" ])
   end
 
   # 配列も dig に応答するため、respond_to?(:dig) では素通りしてしまう。
@@ -265,9 +335,7 @@ RSpec.describe "POST /api/posts", type: :request do
     post "/api/posts", params: { post: [ "foo" ] }, headers: auth_headers(token)
 
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body["errors"]).to eq(
-      "title" => [ "blank" ], "image" => [ "image_missing" ]
-    )
+    expect(response.parsed_body["errors"]).to eq("image" => [ "image_missing" ])
   end
 
   it "検証で落ちたときは Cloudinary へ上げない" do
@@ -563,6 +631,185 @@ RSpec.describe "GET /api/posts/:id", type: :request do
 
     expect(response).to have_http_status(:not_found)
     expect(response.parsed_body["error"]).to eq("not_found")
+  end
+end
+
+RSpec.describe "PATCH /api/posts/:id", type: :request do
+  let(:user) { create(:user) }
+  let(:token) { sign_in_and_get_token(user) }
+  let!(:post_record) { create(:post, user: user, title: "元のタイトル") }
+
+  def patch_title(params, id: post_record.id, headers: auth_headers(token))
+    patch "/api/posts/#{id}", params: params, headers: headers, as: :json
+  end
+
+  it "自分のお題のタイトルを変える" do
+    patch_title({ post: { title: "新しいタイトル" } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"].keys).to match_array(
+      %w[id title image_public_id user attempts_count likes_count favorited created_at]
+    )
+    expect(response.parsed_body["post"]["title"]).to eq("新しいタイトル")
+    expect(post_record.reload.title).to eq("新しいタイトル")
+  end
+
+  it "空文字を送ると無題（null）になる" do
+    patch_title({ post: { title: "" } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(post_record.reload.title).to be_nil
+  end
+
+  it "null を送ると無題になる" do
+    patch_title({ post: { title: nil } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"]["title"]).to be_nil
+    expect(post_record.reload.title).to be_nil
+  end
+
+  it "30 字は 200" do
+    patch_title({ post: { title: "あ" * 30 } })
+
+    expect(response).to have_http_status(:ok)
+    expect(post_record.reload.title).to eq("あ" * 30)
+  end
+
+  it "31 字は 422 too_long で、値は変わらない" do
+    patch_title({ post: { title: "あ" * 31 } })
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["errors"]).to eq("title" => [ "too_long" ])
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "image を送っても image_public_id は変わらない" do
+    patch_title({ post: { title: "新", image_public_id: "evil", image: "x" } })
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["post"]["image_public_id"]).to eq("kotoe/sample_post")
+    expect(post_record.reload.image_public_id).to eq("kotoe/sample_post")
+  end
+
+  it "既存の挑戦は件数も内容も変わらない" do
+    attempt = create(:attempt, :published, post: post_record)
+    description = attempt.description
+
+    expect {
+      patch_title({ post: { title: "新" } })
+    }.not_to change { post_record.attempts.count }
+
+    expect(response.parsed_body["post"]["attempts_count"]).to eq(1)
+    expect(attempt.reload.description).to eq(description)
+  end
+
+  it "他人のお題は 404 で、値は変わらない" do
+    others = create(:post, title: "他人")
+
+    patch_title({ post: { title: "乗っ取り" } }, id: others.id)
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body["error"]).to eq("not_found")
+    expect(others.reload.title).to eq("他人")
+  end
+
+  it "削除済みのお題は 404" do
+    post_record.discard!
+
+    patch_title({ post: { title: "新" } })
+
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "存在しない ID は 404" do
+    patch_title({ post: { title: "新" } }, id: 0)
+
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "未認証は 401" do
+    patch_title({ post: { title: "新" } }, headers: {})
+
+    expect(response).to have_http_status(:unauthorized)
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "post に title キーが無いと 400 で、値は変わらない" do
+    patch_title({ post: { foo: "x" } })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "post が無いと 400" do
+    patch_title({})
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
+  end
+
+  it "post が文字列だと 400" do
+    patch_title({ post: "x" })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
+  end
+
+  # apiFetch は Accept を付けない（ブラウザ既定の */*）。as: :json は Accept も JSON にするので、
+  # それを使わずに送り、Accept によらず JSON が返ることを確かめる。
+  it "Accept が JSON でなくても 400 の本文は JSON" do
+    patch "/api/posts/#{post_record.id}",
+          params: { post: { foo: "x" } }.to_json,
+          headers: auth_headers(token).merge("CONTENT_TYPE" => "application/json")
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.media_type).to eq("application/json")
+    expect(response.parsed_body).to eq("error" => "parameter_missing")
+  end
+
+  it "title が配列だと 400 parameter_invalid で、値は変わらない" do
+    patch_title({ post: { title: [ "a" ] } })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  it "title がハッシュだと 400 parameter_invalid で、値は変わらない" do
+    patch_title({ post: { title: { a: "b" } } })
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq("error" => "parameter_invalid")
+    expect(post_record.reload.title).to eq("元のタイトル")
+  end
+
+  # multipart では数値・真偽値が文字列になるので、JSON で送る（apiFetch と同じ形）。
+  [ 123, true ].each do |value|
+    it "title が #{value.inspect}（JSON）だと 400 parameter_invalid で、値は変わらない" do
+      patch "/api/posts/#{post_record.id}",
+            params: { post: { title: value } }.to_json,
+            headers: auth_headers(token).merge("CONTENT_TYPE" => "application/json")
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("error" => "parameter_invalid")
+      expect(post_record.reload.title).to eq("元のタイトル")
+    end
+  end
+
+  # 弾くのは JSON の型であって中身ではない。上の例の値と同じ綴りでも、文字列ならタイトルとして通る。
+  it "文字列の \"123\" と \"true\" はタイトルとして保存される" do
+    [ "123", "true" ].each do |title|
+      patch "/api/posts/#{post_record.id}",
+            params: { post: { title: title } }.to_json,
+            headers: auth_headers(token).merge("CONTENT_TYPE" => "application/json")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["post"]["title"]).to eq(title)
+      expect(post_record.reload.title).to eq(title)
+    end
   end
 end
 

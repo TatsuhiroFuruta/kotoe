@@ -62,6 +62,17 @@ RSpec.describe "GET /api/me/attempts", type: :request do
     )
   end
 
+  it "無題のお題への挑戦は title が null で discarded は false" do
+    post_record = create(:post, title: nil)
+    create(:attempt, :published, post: post_record, user: user)
+
+    get "/api/me/attempts", headers: auth_headers(token)
+
+    summary = response.parsed_body["attempts"].first["post"]
+    expect(summary["title"]).to be_nil
+    expect(summary["discarded"]).to be false
+  end
+
   # Post#discard は挑戦にカスケードしない。片付ける手段（DELETE /api/attempts/:id）に
   # 画面から辿り着けるよう、出したうえで discarded で描き分けさせる（4-4 案A の前提）。
   #

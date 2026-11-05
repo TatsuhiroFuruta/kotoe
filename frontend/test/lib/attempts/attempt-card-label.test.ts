@@ -60,20 +60,24 @@ describe("attemptCardLabel", () => {
 });
 
 describe("myAttemptCardLabel", () => {
-  const mine = (title: string | null) => ({
+  const mine = (title: string | null, discarded = false) => ({
     user: { name: "taro" },
     description: "赤い太陽",
-    likes_count: 5,
-    post: { id: 1, title, image_public_id: null, discarded: false },
+    likes_count: 3,
+    post: { id: 1, title, image_public_id: null, discarded },
   });
 
   it("描写文・お題・いいね数の順で並べ、見えていない自分の名前は含めない", () => {
-    const label = myAttemptCardLabel(mine("夕焼けの海"));
-    expect(label).toBe("赤い太陽、お題：夕焼けの海、いいね 5");
+    const label = myAttemptCardLabel(mine("夕暮れ"));
+    expect(label).toBe("赤い太陽、お題：夕暮れ、いいね 3");
     expect(label).not.toContain("taro");
   });
 
-  it("お題の題名が null のときは null と読ませず、お題の部分を省く", () => {
-    expect(myAttemptCardLabel(mine(null))).toBe("赤い太陽、いいね 5");
+  it("無題のお題は「お題：無題」と読む（title が null でも削除済みではない）", () => {
+    expect(myAttemptCardLabel(mine(null))).toBe("赤い太陽、お題：無題、いいね 3");
+  });
+
+  it("削除済みのお題は、null と読ませず、お題の部分を省く", () => {
+    expect(myAttemptCardLabel(mine(null, true))).toBe("赤い太陽、いいね 3");
   });
 });

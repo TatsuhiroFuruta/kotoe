@@ -6,7 +6,21 @@ module Api
     include PostRendering
     include Paginating
 
-    before_action :authenticate_user!, only: %i[create destroy]
+    # title が文字列でも nil でもない（配列・ハッシュ・数値・真偽値）とき。to_s された値を保存させない。
+    class InvalidTitle < StandardError; end
+
+    before_action :authenticate_user!, only: %i[create update destroy]
+
+    # 既定の 400 は Rails の PublicExceptions が返し、Accept が JSON のときしか JSON にならない。
+    # apiFetch は Accept を付けない（ブラウザ既定の */*）ので、ここで JSON に揃える。
+    # ApplicationController 全体にしないのは、devise のコントローラにも波及しうるため。
+    rescue_from ActionController::ParameterMissing do
+      render json: { error: "parameter_missing" }, status: :bad_request
+    end
+
+    rescue_from InvalidTitle do
+      render json: { error: "parameter_invalid" }, status: :bad_request
+    end
 
     def index
       posts = Post.listing(q: params[:q], sort: params[:sort]).page(page_param)
@@ -23,7 +37,9 @@ module Api
     def create
       attributes = post_attributes
       image = attributes[:image]
-      post = current_user.posts.new(title: attributes[:title])
+      # 画像をアップロードする前に型を弾く。後から弾くと参照されない画像が Cloudinary に残る。
+      # title キーが無いのは「無題」という正当な指定なので、update と違って ParameterMissing にしない。
+      post = current_user.posts.new(title: checked_title(attributes))
 
       errors = collect_errors(post, Images::Validation.call(image))
       return render json: { errors: errors }, status: :unprocessable_content if errors.any?
@@ -58,6 +74,19 @@ module Api
       }
     end
 
+    # 変えられるのは title だけ。image_public_id などは title_param しか通さないので、
+    # 余計なキーを送られても書き換わらない。
+    def update
+      # destroy と同じく current_user.posts に限定し、他人・削除済み・存在しない ID は 404 にする。
+      post = current_user.posts.kept.find(params[:id])
+
+      if post.update(title: title_param)
+        render json: { post: post_json(post) }
+      else
+        render_validation_errors(post)
+      end
+    end
+
     def destroy
       # current_user.posts に限定することで、所有チェックの書き忘れが起こりようがない。
       # 他人のお題・存在しない ID・削除済みは、すべて RecordNotFound → 404 になる。
@@ -77,8 +106,28 @@ module Api
       params[:post].is_a?(ActionController::Parameters) ? params[:post] : {}
     end
 
+    # title キーの有無を見て値を返す。nil / 空文字は「無題にする」という正当な指定なので、
+    # params.require（nil・空文字を missing として弾く）は使えない。
+    # キー自体が無い（post が無い・ハッシュでない場合も含む）ときは 400 parameter_missing。
+    def title_param
+      attributes = post_attributes
+      raise ActionController::ParameterMissing, :title unless attributes.key?(:title)
+
+      checked_title(attributes)
+    end
+
+    # 文字列か nil 以外（配列・ハッシュ・数値・真偽値）は、そのまま渡すと to_s された
+    # 文字列が保存されるので 400 parameter_invalid にする。create と update で共有する。
+    # キーが無いときは nil を返す（無題）。
+    def checked_title(attributes)
+      title = attributes[:title]
+      raise InvalidTitle unless title.nil? || title.is_a?(String)
+
+      title
+    end
+
     # 画像とタイトルのエラーをまとめて返す。片方ずつ返すと往復が増えるうえ、
-    # 先にアップロードしてからタイトル未入力に気づくと、誰からも参照されない
+    # 先にアップロードしてからタイトルの検証エラーに気づくと、誰からも参照されない
     # 画像が Cloudinary に残る。
     #
     # 形は { field => [code] }。Api::Auth::RegistrationsController と揃えてある。

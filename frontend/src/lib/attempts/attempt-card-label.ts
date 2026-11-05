@@ -10,6 +10,7 @@
  * 区切りは「、」にする（括弧は読み上げの設定によって「かっこ」と読まれる）。
  */
 
+import { postTitleText } from "@/lib/posts/post-title";
 import { charactersOf } from "@/lib/text/graphemes";
 import type { Attempt, MyAttempt } from "@/types/api";
 
@@ -44,15 +45,15 @@ export function attemptCardLabel(attempt: {
 /**
  * マイページの挑戦カードの読み上げ名。投稿者は常に本人で名前は画面に出ていないので、
  * 名前の代わりに、どのお題への挑戦かを読む（見えている「お題：…」と同じ順）。
- * 題名が無いときはお題の部分ごと省く。
+ * お題が削除済みのときはお題の部分ごと省く。無題（title が null）は削除済みではないので「無題」と読む。
  */
 export function myAttemptCardLabel(attempt: {
   description: MyAttempt["description"];
   likes_count: MyAttempt["likes_count"];
-  post: Pick<MyAttempt["post"], "title">;
+  post: Pick<MyAttempt["post"], "title" | "discarded">;
 }): string {
   const parts = [excerptOf(attempt.description)];
-  if (attempt.post.title !== null) parts.push(`お題：${attempt.post.title}`);
+  if (!attempt.post.discarded) parts.push(`お題：${postTitleText(attempt.post.title)}`);
   parts.push(`いいね ${attempt.likes_count}`);
   return parts.join("、");
 }

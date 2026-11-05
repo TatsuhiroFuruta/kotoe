@@ -2,15 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, ApiTimeoutError } from "@/lib/api";
 import {
+  TITLE_EDIT_UNKNOWN_MESSAGE,
   UNKNOWN_FIELD_MESSAGE,
   UPLOAD_FAILED_MESSAGE,
   imageErrorMessage,
-  isBlankTitle,
   titleErrorMessage,
   toLeftPageFailureMessage,
   toPostFormErrors,
+  toTitleEditFailure,
   unconfirmedMessage,
 } from "@/lib/posts/post-messages";
+import { SERVER_MESSAGE, TIMEOUT_MESSAGE } from "@/lib/request-error-messages";
 
 /** Object.prototype から継承したキー。辞書を素朴に引くと文言ではない値が返る */
 const PROTOTYPE_KEYS = ["toString", "constructor", "__proto__"];
@@ -19,16 +21,6 @@ const unprocessable = (errors: unknown) => new ApiError(422, { errors });
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-describe("isBlankTitle", () => {
-  it.each(["", " ", "　", "\n\t ", " 　\n"])("%j は空として扱う（Rails の presence と同じ）", (title) => {
-    expect(isBlankTitle(title)).toBe(true);
-  });
-
-  it.each(["a", " 夕焼け ", "　海　"])("%j は空ではない", (title) => {
-    expect(isBlankTitle(title)).toBe(false);
-  });
 });
 
 describe("imageErrorMessage", () => {
@@ -47,11 +39,11 @@ describe("imageErrorMessage", () => {
 });
 
 describe("titleErrorMessage", () => {
-  it("blank を翻訳する", () => {
-    expect(titleErrorMessage("blank")).toBe("タイトルを入力してください");
+  it("too_long を翻訳する", () => {
+    expect(titleErrorMessage("too_long")).toBe("タイトルは30文字以内にしてください");
   });
 
-  it.each(["too_long", ...PROTOTYPE_KEYS])("未知のコード %s は汎用の文言にする", (code) => {
+  it.each(["blank", ...PROTOTYPE_KEYS])("未知のコード %s は汎用の文言にする", (code) => {
     expect(titleErrorMessage(code)).toBe("このタイトルは使えません");
   });
 });
@@ -60,16 +52,16 @@ describe("toPostFormErrors", () => {
   describe("422（rejected）", () => {
     it("画像とタイトルのエラーを、それぞれの欄に振り分ける", () => {
       expect(
-        toPostFormErrors(unprocessable({ image: ["image_too_large"], title: ["blank"] })),
+        toPostFormErrors(unprocessable({ image: ["image_too_large"], title: ["too_long"] })),
       ).toEqual({
         image: "画像は 5MB 以下にしてください",
-        title: "タイトルを入力してください",
+        title: "タイトルは30文字以内にしてください",
         form: null,
       });
     });
 
     it("欄の未知のコードは、その欄の汎用の文言にする", () => {
-      expect(toPostFormErrors(unprocessable({ title: ["too_long"] }))).toEqual({
+      expect(toPostFormErrors(unprocessable({ title: ["something_else"] }))).toEqual({
         image: null,
         title: "このタイトルは使えません",
         form: null,
@@ -79,7 +71,7 @@ describe("toPostFormErrors", () => {
     it.each([
       ["空の配列", []],
       ["文字列でないコード", [1]],
-      ["配列でない", "blank"],
+      ["配列でない", "too_long"],
     ])("コードが読めない（%s）ときも、その欄に汎用の文言を出す", (_label, codes) => {
       expect(toPostFormErrors(unprocessable({ title: codes })).title).toBe("このタイトルは使えません");
     });
@@ -199,12 +191,46 @@ describe("toLeftPageFailureMessage", () => {
 
   it.each([
     ["画像の欄", unprocessable({ image: ["image_type_not_allowed"] }), "JPEG・PNG・WebP・HEIC の画像を選んでください"],
-    ["タイトルの欄", unprocessable({ title: ["blank"] }), "タイトルを入力してください"],
+    ["タイトルの欄", unprocessable({ title: ["too_long"] }), "タイトルは30文字以内にしてください"],
     ["画像の保存の失敗", new ApiError(502, { error: "image_upload_failed" }), "画像の保存に失敗しました"],
     ["画面に無い欄", unprocessable({ user: ["x"] }), "入力内容が受け付けられませんでした"],
     ["その他の 4xx", new ApiError(413, null), "413"],
     ["欄と画面に無い欄の両方（欄を優先）", unprocessable({ image: ["image_missing"], user: ["x"] }), "画像を選んでください"],
   ])("%s は「投稿できませんでした」に理由を括弧で添える", (_label, error, reason) => {
     expect(leave(error)).toBe(`お題を投稿できませんでした（${reason}）`);
+  });
+});
+
+describe("toTitleEditFailure", () => {
+  it("422 の title は欄の下に出す文言にする", () => {
+    expect(toTitleEditFailure(unprocessable({ title: ["too_long"] }))).toEqual({
+      kind: "field",
+      message: "タイトルは30文字以内にしてください",
+    });
+  });
+
+  // 投稿フォームの UNKNOWN_FIELD_MESSAGE は「投稿できませんでした」なので、編集のダイアログには合わない。
+  it("欄の無い 422 はダイアログ上部の文言にする", () => {
+    expect(toTitleEditFailure(unprocessable({}))).toEqual({
+      kind: "form",
+      message: TITLE_EDIT_UNKNOWN_MESSAGE,
+    });
+  });
+
+  it("404 は削除済み", () => {
+    expect(toTitleEditFailure(new ApiError(404, { error: "not_found" }))).toEqual({ kind: "gone" });
+  });
+
+  it("401 は失効", () => {
+    expect(toTitleEditFailure(new ApiError(401, { error: "unauthorized" }))).toEqual({
+      kind: "session_expired",
+    });
+  });
+
+  it.each([
+    ["timeout", new ApiTimeoutError(15000), TIMEOUT_MESSAGE],
+    ["500", new ApiError(500, null), SERVER_MESSAGE],
+  ])("%s は通信の失敗の文言にする", (_label, error, message) => {
+    expect(toTitleEditFailure(error)).toEqual({ kind: "form", message });
   });
 });

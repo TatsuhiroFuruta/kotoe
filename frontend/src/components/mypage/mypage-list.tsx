@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DraftCard } from "@/components/mypage/draft-card";
+import { EditPostTitleButton } from "@/components/mypage/edit-post-title-button";
 import { MyAttemptCard } from "@/components/mypage/my-attempt-card";
 import { PostCard } from "@/components/posts/post-card";
 import { buttonClasses } from "@/components/ui/button";
@@ -14,8 +15,9 @@ import { Pagination } from "@/components/ui/pagination";
 import { RetryableError } from "@/components/ui/retryable-error";
 import { apiFetch } from "@/lib/api";
 import { mypageApiPath, mypageHref, type MypageQuery, type MypageTab } from "@/lib/mypage/mypage-query";
+import { replacePostInList } from "@/lib/mypage/replace-post-in-list";
 import { toRequestErrorMessage } from "@/lib/request-error-messages";
-import type { MyAttemptsResponse, PostsIndexResponse } from "@/types/api";
+import type { MyAttemptsResponse, PostSummary, PostsIndexResponse } from "@/types/api";
 
 /** 応答の形はタブで分かれる。tab から kind を決めて詰め、描画は kind で分岐する。 */
 type ListData =
@@ -91,6 +93,24 @@ export function MypageList({
     onItemDeleted();
   }
 
+  /**
+   * タイトルを変えたあと。取り直すとスケルトンに入れ替わって「タイトルを編集」ボタンが
+   * DOM から外れ、ダイアログを閉じたときのフォーカスの戻り先が無くなる（設計書 決定 4）。
+   * そこで応答のお題で該当カードだけをその場で置き換える。key はそのままなのでスケルトンは出ない。
+   * 件数は変わらないので onItemDeleted（統計の取り直し）は呼ばない。
+   */
+  function handlePostUpdated(post: PostSummary) {
+    setResult((current) => {
+      if (current === null || current.outcome.kind !== "success") return current;
+      const { list } = current.outcome;
+      if (list.kind !== "posts") return current;
+      return {
+        key: current.key,
+        outcome: { kind: "success", list: { kind: "posts", data: replacePostInList(list.data, post) } },
+      };
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* 挑戦カードの画像は正方形、お題・下書きのカードは 4:3。 */}
@@ -104,7 +124,12 @@ export function MypageList({
       )}
 
       {outcome?.kind === "success" && (
-        <ListResults query={query} list={outcome.list} onDeleted={handleDeleted} />
+        <ListResults
+          query={query}
+          list={outcome.list}
+          onDeleted={handleDeleted}
+          onPostUpdated={handlePostUpdated}
+        />
       )}
     </div>
   );
@@ -114,10 +139,13 @@ function ListResults({
   query,
   list,
   onDeleted,
+  onPostUpdated,
 }: {
   query: MypageQuery;
   list: ListData;
   onDeleted: (itemCountOnPage: number) => void;
+  /** お題のタイトルを変えたあと。応答のお題で該当カードを置き換える */
+  onPostUpdated: (post: PostSummary) => void;
 }) {
   const meta = list.data.meta;
   const itemCount = list.kind === "posts" ? list.data.posts.length : list.data.attempts.length;
@@ -152,6 +180,18 @@ function ListResults({
           {list.data.posts.map((post) => (
             <li key={post.id}>
               <PostCard post={post} />
+              {/* お気に入りタブも同じ PostCard の一覧なので、自分のお題のタブにだけ置く。 */}
+              {query.tab === "posts" && (
+                <div className="mt-2 flex justify-end">
+                  <EditPostTitleButton
+                    postId={post.id}
+                    title={post.title}
+                    onUpdated={onPostUpdated}
+                    // お題が消えていたので、削除と同じく最後の 1 枚ならページを戻し、統計も取り直す。
+                    onGone={() => onDeleted(itemCount)}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

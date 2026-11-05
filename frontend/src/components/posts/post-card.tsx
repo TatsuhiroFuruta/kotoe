@@ -1,7 +1,9 @@
 import Link from "next/link";
 
+import { PostTitleText } from "@/components/posts/post-title-text";
 import { cloudinaryUrlOrNull } from "@/lib/cloudinary";
 import { postDetailHref } from "@/lib/posts/post-detail-query";
+import { postImageAlt } from "@/lib/posts/post-title";
 import type { PostSummary } from "@/types/api";
 
 // カードは最大 3 列・幅 320px 程度。Retina でも 640px の 1 本で足りる。
@@ -27,12 +29,12 @@ export function PostCard({ post }: { post: PostSummary }) {
           アプリ全体が落ち、1 件の不正なデータで一覧ごと見られなくなるため。
         */}
         {src === null ? (
-          <div role="img" aria-label={post.title} className="aspect-4/3 w-full bg-line" />
+          <div role="img" aria-label={postImageAlt(post.title)} className="aspect-4/3 w-full bg-line" />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}
-            alt={post.title}
+            alt={postImageAlt(post.title)}
             loading="lazy"
             className="aspect-4/3 w-full bg-line object-cover"
           />
@@ -42,7 +44,9 @@ export function PostCard({ post }: { post: PostSummary }) {
             公開 UGC。{value} のまま置く（React が自動でエスケープする）。
             wrap-break-word は、空白を含まない長い英数字のタイトルがカードの外へはみ出さないため。
           */}
-          <h2 className="line-clamp-2 font-semibold wrap-break-word text-ink">{post.title}</h2>
+          <h2 className="line-clamp-2 font-semibold wrap-break-word text-ink">
+            <PostTitleText title={post.title} />
+          </h2>
           <p className="mt-1 truncate text-sm text-ink-muted">{post.user.name}</p>
           <dl className="mt-3 flex gap-4 text-sm text-ink-muted">
             <div className="flex gap-1">
