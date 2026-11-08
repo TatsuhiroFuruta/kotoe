@@ -78,7 +78,7 @@ GitHub Actions は public リポジトリなので無料・時間の上限なし
    API（`POST /api/auth/sign_up`・`POST /api/posts`）で用意する。テストの速さと安定のため。
    公開されている API を使うだけなので、アプリ本体に近道は足さない。
    - 呼ぶのはアプリのフロントではなく **Playwright のテストコード**（ブラウザを開かずに HTTP を送る `request` の仕組み）。
-     「ユーザーを作る」「お題を投稿する」といった準備の関数は、E2E 用の補助ファイル（例：`frontend/e2e/support/` の下）に
+     「ユーザーを作る」「お題を投稿する」といった準備の関数は、E2E 用の補助ファイル（`e2e/support/` の下。決定 13）に
      まとめ、テストごとに直接 `fetch` を散らさない。お題の画像は小さなテスト用の画像ファイルを E2E 側に置く。
      どれもアプリのビルドには含めない
    - 選ばなかった案：準備も画面で操作する（遅く、確かめたい流れと関係ないところで落ちる）。Rails の seed・FactoryBot・
@@ -94,6 +94,25 @@ GitHub Actions は public リポジトリなので無料・時間の上限なし
     成果物にトークンが写り込みうる（trace はリクエストヘッダーと `localStorage` を含む）。テスト用の使い捨て
     ユーザーのトークンで、E2E の DB と一緒に捨てられるので許容する。**Cloudinary のキーは写らない**こと
     （ブラウザには渡らない。CLAUDE.md のとおりキーは Rails 側だけ）を確認する
+
+### ユーザーが決めたこと（続き、2026-11-08）
+
+13. **E2E はリポジトリ直下の `e2e/` に置き、専用の `package.json` を持たせる。** frontend の下には置かない。
+    E2E は Rails と Next.js をまたぐテストなので、両方と並べる。frontend に Playwright を入れると、frontend の
+    コンテナ（`node_modules` のボリューム）の作り直しと、Vercel のビルドでの余分なインストールが起き、frontend の
+    eslint・`tsc --noEmit` から E2E を除外する設定も要るため
+    ```
+    e2e/
+    ├── package.json          （@playwright/test と、型検査・lint に要るものだけ）
+    ├── playwright.config.ts
+    ├── auth.spec.ts          … E2E①
+    ├── core-loop.spec.ts     … E2E②
+    └── support/              … 前提データを作る関数（決定 9）とテスト用の画像
+    ```
+    - ファイル名と細かい分け方はビルダーに任せる
+    - フロントの型（API の応答の型）を使い回すなら相対パスで読む。無理に共有せず、E2E に要る分だけ書いてもよい
+    - **この issue で一緒に更新するもの**：CLAUDE.md の「リポジトリ構成」と「テスト戦略」（E2E の置き場と実行コマンド）、
+      `.github/dependabot.yml` に `/e2e` の npm を足す（既存の `/frontend` と同じ形）、ルート README の実行手順
 
 ## シナリオ
 
@@ -134,7 +153,7 @@ backlog 8-1 のタスク欄から写したもの。**太字の項目は、これ
 - コマンド 1 本で、DB の作り直し → サーバー起動 → テスト → 後片付けまで進むこと。手順は README（ルート）の
   ローカル開発の節に足す
 - ホストに Ruby が無くても回せること（今の開発は全部 Docker 越し）。Playwright 本体とブラウザをホストに入れるか
-  コンテナで動かすかはビルダーに任せる。どちらにしても frontend のコンテナは Debian ベースのまま（メモ：alpine は不可）
+  コンテナで動かすかはビルダーに任せる。コンテナにするなら Debian ベースにする（メモ：alpine は不可）
 - Cloudinary のキーは今の `backend/.env.development` と同じものを使ってよい（同じアカウント。保存先のフォルダだけ分ける）
 
 ### CI（GitHub Actions）
