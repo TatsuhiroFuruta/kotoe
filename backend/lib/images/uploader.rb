@@ -13,13 +13,16 @@ module Images
     # 本番の資産と混ざらない（同じ Cloudinary アカウントを共用する運用のため）。
     # KOTOE_CLOUDINARY_FOLDER は E2E が実行ごとの保存先を分けるためのもので、
     # 本番では無視する（環境変数の設定ミスで本番の保存先が変わるのを防ぐ）。
-    # 本番以外では、後片付け（E2e::CloudinaryCleanup）が消せる kotoe/e2e/<実行ID> の形だけを
-    # 受け付け、それ以外は ArgumentError にする。黙って kotoe/development に上げると
-    # E2E の画像が消されずに残るため。
+    # 本番以外では E2E_FOLDER（kotoe/e2e/<実行ID>）の形だけを受け付け、それ以外は
+    # ArgumentError にする。黙って kotoe/development に上げると E2E の画像が消されずに残るため。
     FOLDERS = {
       post: "posts",          # お題画像（issue 3-2）
       generated: "generated"  # 再現画像（issue 4-2）
     }.freeze
+
+    # E2E の実行ごとの保存先の形。後片付け（E2e::CloudinaryCleanup）も、消してよい接頭辞の
+    # 判定にこれを使う。上げる側と消す側で同じ形を使い、消されない画像を残さないため。
+    E2E_FOLDER = %r{\Akotoe/e2e/[A-Za-z0-9_-]+\z}
 
     def self.call(file, kind:) = new(file, kind: kind).call
 
@@ -52,7 +55,7 @@ module Images
 
       override = ENV["KOTOE_CLOUDINARY_FOLDER"].to_s.strip.presence
       return default unless override
-      return override if E2e::CloudinaryCleanup::ALLOWED_PREFIX.match?(override)
+      return override if E2E_FOLDER.match?(override)
 
       raise ArgumentError, "KOTOE_CLOUDINARY_FOLDER は kotoe/e2e/<実行ID> の形にしてください"
     end
