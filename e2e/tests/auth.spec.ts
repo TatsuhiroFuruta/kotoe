@@ -10,6 +10,22 @@ function accountNav(page: Page) {
   return page.getByRole("navigation", { name: "アカウント" });
 }
 
+// 呼んだ時点からのメインフレームの遷移先 URL を記録する。同一ドキュメント内の遷移
+// （router.replace による履歴の書き換え）も framenavigated で拾える。
+// 最終状態だけを見る toHaveURL / toBeVisible は、/login を経由して元の場所へ戻る往復を
+// 見逃す（ログイン済みの人は /login から next へ送り返されるため）。経由した事実を直接見る。
+function recordNavigations(page: Page): string[] {
+  const urls: string[] = [];
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) urls.push(frame.url());
+  });
+  return urls;
+}
+
+function expectNeverOnLogin(urls: string[]) {
+  expect(urls.filter((url) => new URL(url).pathname === "/login")).toEqual([]);
+}
+
 test("登録 → ログイン → ログアウト", async ({ page }) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const name = `e2e-signup-${suffix}`;
@@ -36,22 +52,23 @@ test("登録 → ログイン → ログアウト", async ({ page }) => {
   await expect(accountNav(page).getByRole("link", { name })).toBeVisible();
 });
 
-test("未ログインでガード付きページを開くと /login?next= へ送られ、ログイン後に戻る", async ({
-  page,
-  request,
-}) => {
-  const user = await createUser(request);
+for (const guarded of ["/mypage", "/posts/new"]) {
+  test(`未ログインで ${guarded} を開くと /login?next= へ送られ、ログイン後に戻る`, async ({
+    page,
+    request,
+  }) => {
+    const user = await createUser(request);
 
-  await page.goto("/mypage");
-  await expect(page).toHaveURL(/\/login\?next=%2Fmypage$/);
+    await page.goto(guarded);
+    await expect(page).toHaveURL(`${APP_BASE_URL}/login?next=${encodeURIComponent(guarded)}`);
 
-  await page.getByLabel("メールアドレス").fill(user.email);
-  await page.getByLabel("パスワード", { exact: true }).fill(user.password);
-  await page.getByRole("button", { name: "ログイン", exact: true }).click();
+    await page.getByLabel("メールアドレス").fill(user.email);
+    await page.getByLabel("パスワード", { exact: true }).fill(user.password);
+    await page.getByRole("button", { name: "ログイン", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/mypage$/);
-  await expect(page.getByRole("heading", { level: 1, name: user.name })).toBeVisible();
-});
+    await expect(page).toHaveURL(`${APP_BASE_URL}${guarded}`);
+  });
+}
 
 test("ログイン済みでガード付きページを直接ロード・リロードしても /login へ飛ばされない", async ({
   page,
@@ -59,6 +76,7 @@ test("ログイン済みでガード付きページを直接ロード・リロ�
 }) => {
   const user = await createUser(request);
   await loginViaUi(page, user);
+  const urls = recordNavigations(page);
 
   // Link を使わない（クライアント遷移ではハイドレーション経路が露出しない）。
   await page.goto("/mypage");
@@ -76,6 +94,8 @@ test("ログイン済みでガード付きページを直接ロード・リロ�
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: "お題を投稿" })).toBeVisible();
   await expect(page).toHaveURL(/\/posts\/new$/);
+
+  expectNeverOnLogin(urls);
 });
 
 test("ログアウトしたトークンを戻すと 401 になり、フロントが破棄する", async ({
@@ -98,7 +118,7 @@ test("ログアウトしたトークンを戻すと 401 になり、フロント
 
   await writeToken(page, oldToken!);
   await page.goto("/mypage");
-  await expect(page).toHaveURL(/\/login/);
+  await expect(page).toHaveURL(/\/login\?reason=expired&next=%2Fmypage$/);
   await expect.poll(() => readToken(page)).toBeNull();
 });
 
@@ -110,20 +130,26 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
     const user = await createUser(request);
     await loginViaUi(page, user);
     await blockApi(page);
+    const urls = recordNavigations(page);
     await page.goto("/mypage");
-    return user;
+    return { user, urls };
   }
 
   test("(a) /login へ飛ばされず、ヘッダーに「再試行」が出る", async ({ page, request }) => {
-    await reachUnreachable(page, request);
+    const { urls } = await reachUnreachable(page, request);
 
+    // ヘッダーの「再試行」はレイアウトにあり、/login に飛ばされた後にも出る。/mypage の
+    // RequireAuth だけが描く本文側の表示で、/mypage に留まっていることを確かめる。
+    await expect(page.getByText("サーバーの応答がありません。")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("button", { name: "再試行" })).toBeVisible();
     await expect(accountNav(page).getByRole("button", { name: "再試行" })).toBeVisible();
     await expect(page).toHaveURL(/\/mypage$/);
     expect(await readToken(page)).not.toBeNull();
+    expectNeverOnLogin(urls);
   });
 
   test("(b) ヘッダーの「再試行」でログイン状態へ戻る", async ({ page, request }) => {
-    const user = await reachUnreachable(page, request);
+    const { user } = await reachUnreachable(page, request);
     await expect(accountNav(page).getByRole("button", { name: "再試行" })).toBeVisible();
 
     await page.unroute(`${API_BASE_URL}/**`);
@@ -134,7 +160,7 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
   });
 
   test("(b) ページ側の「再試行」でもログイン状態へ戻る", async ({ page, request }) => {
-    const user = await reachUnreachable(page, request);
+    const { user } = await reachUnreachable(page, request);
     const pageRetry = page.getByRole("main").getByRole("button", { name: "再試行" });
     await expect(pageRetry).toBeVisible();
 
@@ -155,7 +181,7 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
     await accountNav(page).getByRole("button", { name: "ログアウト" }).click();
 
     await expect(accountNav(page).getByRole("link", { name: "ログイン" })).toBeVisible();
-    expect(await readToken(page)).toBeNull();
+    await expect.poll(() => readToken(page)).toBeNull();
   });
 });
 
