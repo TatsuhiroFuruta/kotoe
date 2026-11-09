@@ -165,17 +165,23 @@ jobs:
           --health-retries 5
 
     # ローカルの E2E（e2e/scripts/run-local.sh の backend-e2e）と同じく、Rails は development 環境で
-    # 動かし、Solid Queue は Puma の中で動かす。画像生成はダミー（本番以外の既定）。
+    # 動かし、Solid Queue は Puma の中で動かす。
+    #
+    # CLOUDINARY_URL（本番と共用のアカウントの管理キー）はジョブ全体の env に置かない。
+    # npm ci の postinstall・next build・Playwright のインストールなど、依存のコードを動かす手順に
+    # 渡さないためで、Rails の起動と後片付けの手順にだけ渡す。また、バックグラウンドで動く Rails の
+    # 環境変数は後続の手順（同じユーザー）から /proc/<pid>/environ で読めるため、依存のコードを動かす
+    # 手順（npm ci / next build / next start / playwright install / 型検査）はすべて Rails の起動より前に置く。
     env:
       RAILS_ENV: development
       TZ: Asia/Tokyo
       DATABASE_URL: postgresql://postgres:password@localhost:5432/kotoe_e2e
       CORS_ALLOWED_ORIGINS: http://localhost:3101
       JWT_SECRET_KEY: dummy-jwt-secret-for-e2e-do-not-use-in-production
-      # 値はログに出さない（run: の中で echo しない）。
-      CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
       # この実行で Cloudinary に上げた画像の保存先。後片付けでこの接頭辞の下だけを消す。
       KOTOE_CLOUDINARY_FOLDER: kotoe/e2e/ci-${{ github.run_id }}-${{ github.run_attempt }}
+      # 本番以外の既定もダミーだが、本物の画像生成 API（課金される）を呼ばないよう明示する。
+      KOTOE_IMAGE_PROVIDER: dummy
       SOLID_QUEUE_IN_PUMA: "true"
 
     steps:
@@ -187,15 +193,6 @@ jobs:
           bundler-cache: true
           working-directory: backend
 
-      # development の db:prepare は test 用 DB（kotoe_test）も作る。同じサーバー上なので問題ない。
-      - name: E2E 用DBを用意する
-        working-directory: backend
-        run: bin/rails db:prepare
-
-      - name: Rails を起動する（ポート 3100）
-        working-directory: backend
-        run: bin/rails server -p 3100 > "$RUNNER_TEMP/rails.log" 2>&1 &
-
       - name: Node のセットアップ（npm はキャッシュする）
         uses: actions/setup-node@v4
         with:
@@ -204,6 +201,8 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             e2e/package-lock.json
+
+      # ---- ここから Rails の起動までは、依存のコードを動かす手順。CLOUDINARY_URL はまだ無い。----
 
       - name: フロントの依存のインストール
         working-directory: frontend
@@ -215,12 +214,6 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
           NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${{ vars.CLOUDINARY_CLOUD_NAME }}
         run: npx next build
-
-      - name: フロントを起動する（ポート 3101）
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
-        run: npx next start -p 3101 > "$RUNNER_TEMP/next.log" 2>&1 &
 
       - name: E2E の依存のインストール
         working-directory: e2e
@@ -235,12 +228,36 @@ jobs:
         working-directory: e2e
         run: npm run typecheck
 
+      - name: フロントを起動する（ポート 3101）
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
+        run: npx next start -p 3101 > "$RUNNER_TEMP/next.log" 2>&1 &
+
+      # development の db:prepare は test 用 DB（kotoe_test）も作る。同じサーバー上なので問題ない。
+      - name: E2E 用DBを用意する
+        working-directory: backend
+        run: bin/rails db:prepare
+
+      # ---- ここから CLOUDINARY_URL を持つ Rails が動く。----
+
+      - name: Rails を起動する（ポート 3100）
+        working-directory: backend
+        env:
+          # 値はログに出さない（run: の中で echo しない）。
+          CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
+        run: bin/rails server -p 3100 > "$RUNNER_TEMP/rails.log" 2>&1 &
+
       # ビルドは別手順で済んでいるので、待つのは Rails の起動と next start だけ。
       - name: 起動を待つ
         run: |
           curl --retry 90 --retry-delay 2 --retry-max-time 180 --retry-all-errors -fsS -o /dev/null http://localhost:3100/api/health
           curl --retry 90 --retry-delay 2 --retry-max-time 180 --retry-all-errors -fsS -o /dev/null http://localhost:3101/
 
+      # 残るリスク：Playwright（テストランナーとブラウザ）は Rails の起動後に動かすしかなく、
+      # 同じユーザーなので Rails の環境変数（CLOUDINARY_URL）を読める。依存の更新（Dependabot の PR を含む）で
+      # 悪意あるコードが入れば、ここから管理キーが漏れうる。根本の対策は CI 専用の Cloudinary キー
+      # （E2E のフォルダだけを扱う）に分けることで、別途行う。
       - name: E2E（playwright）
         working-directory: e2e
         run: npm test
@@ -249,7 +266,14 @@ jobs:
       - name: Cloudinary の E2E 画像を消す
         if: always()
         working-directory: backend
+        env:
+          CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
         run: bin/rails e2e:cleanup_cloudinary
+
+      # 失敗時はサーバーのログが見えないと原因が追えないので、末尾を出す。
+      - name: 失敗時にサーバーのログを出す
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/rails.log" "$RUNNER_TEMP/next.log" || true
 
       # 失敗時だけ、trace / スクリーンショット / レポートを残す。
       - name: 失敗時の成果物をアップロードする
