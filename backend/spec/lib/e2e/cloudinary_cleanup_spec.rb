@@ -27,6 +27,15 @@ RSpec.describe E2e::CloudinaryCleanup do
     expect(Cloudinary::Api).not_to have_received(:delete_resources_by_prefix)
   end
 
+  # 2 つの定数はわざと独立させている（削除の範囲がアップロードの規則に連動して広がらないように）。
+  # 実際に使う保存先（CI・run-local.sh・compose の既定値）が、上げる側と消す側の両方で通ることを確かめる。
+  it "実際に使う保存先の形は、アップロード側と後片付け側の両方で受け付ける" do
+    [ "kotoe/e2e/ci-123456-1", "kotoe/e2e/local-1731050000", "kotoe/e2e/manual" ].each do |folder|
+      expect(Images::Uploader::E2E_FOLDER).to match(folder), "アップロード側が #{folder} を受け付けない"
+      expect(described_class::ALLOWED_PREFIX).to match(folder), "後片付け側が #{folder} を受け付けない"
+    end
+  end
+
   it "応答が partial（次ページあり）なら next_cursor を渡して繰り返し、合計件数を返す" do
     allow(Cloudinary::Api).to receive(:delete_resources_by_prefix).and_return(
       { "deleted" => { "a" => "deleted", "b" => "deleted" }, "partial" => true, "next_cursor" => "cur1" },
