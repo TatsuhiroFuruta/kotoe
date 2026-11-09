@@ -104,6 +104,65 @@ services:
     # HTTP を受けないのでポートは公開しない。
     command: bundle exec bin/jobs
 
+  # ---- E2E 専用（profile: e2e）。`docker compose up` の既定では起動しない。----
+  # e2e/scripts/run-local.sh から使う。開発環境（backend :3000 / frontend :3001 / DB kotoe_development）
+  # には触れず、別ポート・別 DB（kotoe_e2e）・別 Cloudinary フォルダで動かす。
+  backend-e2e:
+    profiles: ["e2e"]
+    # backend と同じイメージを使い回す（同じ Dockerfile.dev なので、別名で再ビルドすると
+    # apt / gem の取得がもう一度走る）。backend のイメージが無いときだけここで build される。
+    image: kotoe-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env.development
+      - backend/.env.development
+    environment:
+      RAILS_ENV: development
+      TZ: Asia/Tokyo
+      CORS_ALLOWED_ORIGINS: http://localhost:3101
+      # E2E ではワーカーを別に立てず、Puma 内で Solid Queue を動かす。
+      SOLID_QUEUE_IN_PUMA: "true"
+      RAILS_LOG_TO_STDOUT: "true"
+      # 未設定でも compose 全体が読めるよう既定値を置く（:? で必須にすると通常の docker compose が全部落ちる）。
+      # 通常は run-local.sh が実行ごとの値を export する。
+      KOTOE_CLOUDINARY_FOLDER: ${KOTOE_CLOUDINARY_FOLDER:-kotoe/e2e/manual}
+    ports:
+      - "3100:3000"
+    volumes:
+      - ./backend:/app
+      - bundle:/usr/local/bundle
+    depends_on:
+      db:
+        condition: service_healthy
+    # entrypoint.dev.sh は共有の tmp/pids/server.pid を消す。開発の backend の pid を
+    # 巻き添えにしないよう entrypoint を差し替え、pid ファイルは /tmp に置く。
+    entrypoint: []
+    # DATABASE_URL の DB 名を kotoe_e2e に置き換える（config/database.yml の test と同じ置換）。
+    command:
+      - sh
+      - -c
+      - |
+        export DATABASE_URL="$$(printf '%s' "$$DATABASE_URL" | sed -E 's#/[^/?]+(\?|$$)#/kotoe_e2e\1#')"
+        exec bin/rails server -b 0.0.0.0 -p 3000 -P /tmp/server.pid
+
+  # ソースは COPY して本番ビルドする。バインドマウントしないので、ホストの .next と
+  # 開発用の frontend には触れない。
+  frontend-e2e:
+    profiles: ["e2e"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    env_file:
+      - frontend/.env.development
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
+      TZ: Asia/Tokyo
+    ports:
+      - "3101:3000"
+    command: sh -c "npx next build && npx next start -p 3000"
+
 volumes:
   db_data:
   bundle:
