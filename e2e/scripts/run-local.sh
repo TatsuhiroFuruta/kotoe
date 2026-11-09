@@ -12,19 +12,16 @@ export KOTOE_CLOUDINARY_FOLDER="kotoe/e2e/local-$(date +%s)"
 
 COMPOSE=(docker compose --profile e2e)
 STATUS=0
-# テストを始めたか。始める前に失敗したときは、画像は上がっていないので Cloudinary の後片付けを飛ばす。
-TESTS_STARTED=false
 
 cleanup() {
   # テストの終了コードを保つ。後片付けの失敗で結果を隠さず、残りの後片付けも止めない。
   # 先にサーバーを止める。backend-e2e は Puma の中で Solid Queue を動かしており、動いたままだと
   # 画像の削除の後に生成ジョブが同じフォルダへ上げ、その画像が消されずに残る。
   "${COMPOSE[@]}" stop backend-e2e frontend-e2e || true
-  if [ "$TESTS_STARTED" = true ]; then
-    # 止めたサービスではなく、使い捨てのコンテナで消す（同じ環境変数・同じ entrypoint）。
-    # KOTOE_CLOUDINARY_FOLDER は上で export した値が compose の補間で渡る。
-    "${COMPOSE[@]}" run --rm --no-deps backend-e2e bin/rails e2e:cleanup_cloudinary || true
-  fi
+  # 止めたサービスではなく、使い捨てのコンテナで消す（同じ環境変数・同じ entrypoint）。
+  # -e で、compose の補間に頼らずこの実行の接頭辞を確実に渡す。
+  "${COMPOSE[@]}" run --rm --no-deps -e KOTOE_CLOUDINARY_FOLDER="$KOTOE_CLOUDINARY_FOLDER" \
+    backend-e2e bin/rails e2e:cleanup_cloudinary || true
   "${COMPOSE[@]}" rm -f backend-e2e frontend-e2e || true
   exit "$STATUS"
 }
@@ -53,5 +50,4 @@ curl --retry 150 --retry-delay 2 --retry-max-time 300 --retry-all-errors -fsS -o
 curl --retry 150 --retry-delay 2 --retry-max-time 300 --retry-all-errors -fsS -o /dev/null http://localhost:3101/
 
 cd e2e
-TESTS_STARTED=true
 npx playwright test "$@"
