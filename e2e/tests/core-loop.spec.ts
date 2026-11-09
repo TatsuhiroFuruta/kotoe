@@ -11,6 +11,10 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
   request,
   browser,
 }) => {
+  // 既定のテストタイムアウト（30 秒）は、生成完了を待つ 60 秒の expect より短く、そちらに届く前に
+  // テスト全体が打ち切られる。生成を通すのはこのテストだけなので、設定全体ではなくここで延ばす。
+  test.setTimeout(120_000);
+
   // 前提データは API で作る（出題者・お題・挑戦者）。検証したい流れだけを画面で操作する。
   const owner = await createUser(request);
   const title = `E2E ${Date.now()}`;
@@ -52,6 +56,14 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
   await expect(generated).toBeVisible();
   await expect(original).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
   await expect(generated).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
+  // URL の形だけでは、Cloudinary に画像が無い（404）ときも通ってしまう。実際に読み込めたかを見る。
+  // 比較ビューの <img> は loading="lazy" ではないが、念のため表示領域に入れてから確かめる。
+  for (const img of [original, generated]) {
+    await img.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0))
+      .toBe(true);
+  }
 
   // 別のユーザー（出題者）として、同じ挑戦にいいねする。自分の挑戦には押せない（422）ため。
   const context = await browser.newContext();

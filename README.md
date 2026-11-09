@@ -58,7 +58,8 @@ e2e/scripts/run-local.sh
 
 開発環境（3000/3001）は止めずに並べて動く。専用の Rails（3100）・Next.js の本番ビルド（3101）・
 DB（`kotoe_e2e`、毎回作り直す）を立て、終わると片付ける。開発用イメージ（`kotoe-backend`）を
-再利用するので、先に一度 `docker compose build backend` が済んでいること。
+再利用するので、先に一度 `docker compose build backend` が済んでいること。E2E 用の Rails は
+`bundle install` を走らせないため、Gemfile を変えたら先に開発の backend を一度起動して gem を入れておく。
 CI でも PR ごとに回る（Dependabot の PR は Dependabot 用の Secret `CLOUDINARY_URL` を使う）。
 
 ## 暗号化クレデンシャルの差分表示（任意・clone ごとに一度）

@@ -101,6 +101,7 @@ CI の bundler-audit は**脆弱性DBが更新された時点で落ちる**。�
   - 置き場は **`e2e/tests/`**（専用の `package.json`）。ローカルは **`e2e/scripts/run-local.sh [playwright の引数]`**。開発環境（3000/3001）と並べて、専用の Rails（3100）と Next.js 本番ビルド（3101）・専用 DB（`kotoe_e2e`、毎回作り直す）を立てて回す。Cloudinary は `kotoe/e2e/local-<時刻>` に上げ、終了時に消す。
   - **CI でも PR ごと・main への push ごとに回る**（ジョブ `e2e (playwright)`）。fork の PR は Secrets が渡らないので飛ばす。Dependabot の PR は Dependabot 用の Secret `CLOUDINARY_URL`（Settings → Secrets and variables → Dependabot）を使う。
   - 初回だけ `cd e2e && npm ci && npx playwright install chromium chromium-headless-shell`（1.65 は両方必要）。
+  - `run-local.sh` の前提：開発用イメージ `kotoe-backend` があること（無ければ一度 `docker compose build backend`）。backend-e2e は entrypoint を差し替えて `bundle install` を走らせないため、**Gemfile を変えたら先に開発の backend を一度起動して**（`docker compose up -d backend`）gem を入れておく。
 - **フロント単体テスト**：**MVP では導入しない**（フロントは表示と配線が中心で、単体テストが独自に守れる領域が薄いため）。ただし、UIから切り出せる純粋なロジック（例：生成ステータスのポーリング処理のカスタムフック、ユーティリティ関数）が生まれたら、**その部分にだけ Vitest** を後付けする（issue 7-1 で導入済み）。**Jest は採用しない**。React Testing Library でのコンポーネント結合テストも E2E と役割が被るため見送り。
   - 置き場所は **`frontend/test/`** に集約し、**`src/` の構造を写す**（`src/lib/auth/token-store.ts` → `test/lib/auth/token-store.test.ts`）。ソースへの併置ではなく分離ツリーにするのは、backend の `spec/` が `app/` を写しているのと揃えるため。対象の指定は `frontend/vitest.config.mts` の `include`。
   - `window` が無い状態（SSR）を検査するテストは、ファイル先頭に `// @vitest-environment node` を書いて node 環境に切り替える（既定は jsdom）。

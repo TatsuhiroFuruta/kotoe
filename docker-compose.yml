@@ -125,6 +125,9 @@ services:
       # E2E ではワーカーを別に立てず、Puma 内で Solid Queue を動かす。
       SOLID_QUEUE_IN_PUMA: "true"
       RAILS_LOG_TO_STDOUT: "true"
+      # backend/.env.development で openai に切り替えていても、E2E では本物の画像生成 API を
+      # 呼ばない（課金される）。environment は env_file より優先される。
+      KOTOE_IMAGE_PROVIDER: dummy
       # 未設定でも compose 全体が読めるよう既定値を置く（:? で必須にすると通常の docker compose が全部落ちる）。
       # 通常は run-local.sh が実行ごとの値を export する。
       KOTOE_CLOUDINARY_FOLDER: ${KOTOE_CLOUDINARY_FOLDER:-kotoe/e2e/manual}
