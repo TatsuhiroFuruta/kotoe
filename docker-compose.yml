@@ -4,6 +4,11 @@
 # 初回セットアップ:
 #   cp .env.example .env.development
 #   cp frontend/.env.example frontend/.env.development
+
+# プロジェクト名を固定する。backend-e2e は backend のイメージを名前（kotoe-backend）で
+# 使い回すため、ディレクトリ名から決まる既定のプロジェクト名に頼らない。
+name: kotoe
+
 services:
   db:
     image: postgres:16
@@ -136,19 +141,17 @@ services:
     volumes:
       - ./backend:/app
       - bundle:/usr/local/bundle
+      # 下の entrypoint。読み取り専用で載せる。
+      - ./e2e/docker/backend-e2e-env.sh:/e2e/backend-e2e-env.sh:ro
     depends_on:
       db:
         condition: service_healthy
     # entrypoint.dev.sh は共有の tmp/pids/server.pid を消す。開発の backend の pid を
     # 巻き添えにしないよう entrypoint を差し替え、pid ファイルは /tmp に置く。
-    entrypoint: []
-    # DATABASE_URL の DB 名を kotoe_e2e に置き換える（config/database.yml の test と同じ置換）。
-    command:
-      - sh
-      - -c
-      - |
-        export DATABASE_URL="$$(printf '%s' "$$DATABASE_URL" | sed -E 's#/[^/?]+(\?|$$)#/kotoe_e2e\1#')"
-        exec bin/rails server -b 0.0.0.0 -p 3000 -P /tmp/server.pid
+    # 差し替え先は DATABASE_URL の DB 名を kotoe_e2e にしてからコマンドを実行する。
+    # run-local.sh の DB の作り直しと後片付け（docker compose run）も同じ entrypoint を通る。
+    entrypoint: ["sh", "/e2e/backend-e2e-env.sh"]
+    command: ["bin/rails", "server", "-b", "0.0.0.0", "-p", "3000", "-P", "/tmp/server.pid"]
 
   # ソースは COPY して本番ビルドする。バインドマウントしないので、ホストの .next と
   # 開発用の frontend には触れない。

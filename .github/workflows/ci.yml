@@ -167,11 +167,13 @@ jobs:
     # ローカルの E2E（e2e/scripts/run-local.sh の backend-e2e）と同じく、Rails は development 環境で
     # 動かし、Solid Queue は Puma の中で動かす。
     #
-    # CLOUDINARY_URL（本番と共用のアカウントの管理キー）はジョブ全体の env に置かない。
-    # npm ci の postinstall・next build・Playwright のインストールなど、依存のコードを動かす手順に
-    # 渡さないためで、Rails の起動と後片付けの手順にだけ渡す。また、バックグラウンドで動く Rails の
-    # 環境変数は後続の手順（同じユーザー）から /proc/<pid>/environ で読めるため、依存のコードを動かす
-    # 手順（npm ci / next build / next start / playwright install / 型検査）はすべて Rails の起動より前に置く。
+    # CLOUDINARY_URL（本番と共用のアカウントの管理キー）はジョブ全体の env に置かず、Rails の起動と
+    # 後片付けの手順にだけ渡す。npm ci の postinstall・next build などの手順の環境変数には入らない。
+    # ただし、これでキーが依存のコードから隔離されるわけではない。バックグラウンドで動く Rails の
+    # 環境変数は、同じユーザーのプロセスから /proc/<pid>/environ で読める。Rails の起動後も
+    # next start（フロントの依存のコード）は常駐して動き続け、npm ci の postinstall などが
+    # バックグラウンドに残したプロセスがあれば、それも動き続ける。手順の並び順では防げない。
+    # 根本の対策は CI 専用の Cloudinary キー（E2E のフォルダだけを扱う）に分けることで、別途行う。
     env:
       RAILS_ENV: development
       TZ: Asia/Tokyo
@@ -234,7 +236,8 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
         run: npx next start -p 3101 > "$RUNNER_TEMP/next.log" 2>&1 &
 
-      # development の db:prepare は test 用 DB（kotoe_test）も作る。同じサーバー上なので問題ない。
+      # DATABASE_URL があると、development の db:prepare は test 用 DB を対象に加えない
+      # （activerecord の DatabaseTasks#each_current_environment）。作るのは kotoe_e2e だけ。
       - name: E2E 用DBを用意する
         working-directory: backend
         run: bin/rails db:prepare
@@ -246,7 +249,10 @@ jobs:
         env:
           # 値はログに出さない（run: の中で echo しない）。
           CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
-        run: bin/rails server -p 3100 > "$RUNNER_TEMP/rails.log" 2>&1 &
+        # 後片付けの前に止めるため、PID を残す。
+        run: |
+          bin/rails server -p 3100 > "$RUNNER_TEMP/rails.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/rails.pid"
 
       # ビルドは別手順で済んでいるので、待つのは Rails の起動と next start だけ。
       - name: 起動を待つ
@@ -254,13 +260,31 @@ jobs:
           curl --retry 90 --retry-delay 2 --retry-max-time 180 --retry-all-errors -fsS -o /dev/null http://localhost:3100/api/health
           curl --retry 90 --retry-delay 2 --retry-max-time 180 --retry-all-errors -fsS -o /dev/null http://localhost:3101/
 
-      # 残るリスク：Playwright（テストランナーとブラウザ）は Rails の起動後に動かすしかなく、
-      # 同じユーザーなので Rails の環境変数（CLOUDINARY_URL）を読める。依存の更新（Dependabot の PR を含む）で
-      # 悪意あるコードが入れば、ここから管理キーが漏れうる。根本の対策は CI 専用の Cloudinary キー
+      # 残るリスク：Playwright（テストランナーとブラウザ）と、先に起動した next start は、Rails と
+      # 同じユーザーで動くので Rails の環境変数（CLOUDINARY_URL）を読める。依存の更新（Dependabot の PR を
+      # 含む）で悪意あるコードが入れば、ここから管理キーが漏れうる。根本の対策は CI 専用の Cloudinary キー
       # （E2E のフォルダだけを扱う）に分けることで、別途行う。
       - name: E2E（playwright）
         working-directory: e2e
         run: npm test
+
+      # 後片付けの前に Rails を止める。Puma の中の Solid Queue が動いたままだと、画像の削除の後に
+      # 生成ジョブが同じフォルダへ上げ、その画像が消されずに残る。solid_queue の Puma プラグインは
+      # Puma の停止時に Solid Queue のプロセスを止め、終わるのを待つので、Puma の終了を待てば足りる。
+      - name: Rails を止める
+        if: always()
+        run: |
+          pid_file="$RUNNER_TEMP/rails.pid"
+          [ -f "$pid_file" ] || exit 0
+          pid="$(cat "$pid_file")"
+          kill -TERM "$pid" 2>/dev/null || exit 0
+          for _ in $(seq 60); do
+            kill -0 "$pid" 2>/dev/null || exit 0
+            sleep 1
+          done
+          echo "::error::Rails（PID $pid）が 60 秒で止まらなかった"
+          kill -KILL "$pid" 2>/dev/null || true
+          exit 1
 
       # 失敗しても、Cloudinary に上げた画像は消す。
       - name: Cloudinary の E2E 画像を消す
