@@ -3,6 +3,12 @@ require "rails_helper"
 RSpec.describe Images::Uploader do
   let(:file) { StringIO.new("dummy") }
 
+  # シェルに残った KOTOE_CLOUDINARY_FOLDER で既定フォルダの例が壊れないよう、既定では未設定にする。
+  before do
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("KOTOE_CLOUDINARY_FOLDER").and_return(nil)
+  end
+
   describe ".call" do
     it "public_id を返す" do
       allow(Cloudinary::Uploader).to receive(:upload).and_return(
@@ -91,6 +97,26 @@ RSpec.describe Images::Uploader do
         allow(Rails.env).to receive(:production?).and_return(true)
 
         expect(uploaded_folder { described_class.call(file, kind: :post) }).to eq("kotoe/test/posts")
+      end
+
+      # 本番では値を見ないので、不正な値でも落とさない（設定ミスで本番のアップロードを止めない）。
+      it "本番では不正な値でも無視する" do
+        stub_folder_env("kotoe/development")
+        allow(Rails.env).to receive(:production?).and_return(true)
+
+        expect(uploaded_folder { described_class.call(file, kind: :post) }).to eq("kotoe/test/posts")
+      end
+
+      # 後片付けが消せない場所に黙って上げず、設定ミスとして落とす。
+      [ "kotoe/development", "kotoe/e2e/run-1/", "kotoe/e2e", "kotoe/e2e/run 1", "kotoe/e2e/a/b" ].each do |value|
+        it "#{value.inspect} は ArgumentError で落とし、アップロードしない" do
+          stub_folder_env(value)
+          allow(Cloudinary::Uploader).to receive(:upload)
+
+          expect { described_class.call(file, kind: :post) }
+            .to raise_error(ArgumentError, /KOTOE_CLOUDINARY_FOLDER/)
+          expect(Cloudinary::Uploader).not_to have_received(:upload)
+        end
       end
 
       it "空白だけの値は未設定として扱う" do
