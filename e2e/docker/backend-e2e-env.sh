@@ -1,7 +1,9 @@
 #!/bin/sh
 # docker-compose.yml の backend-e2e の entrypoint。
 # DATABASE_URL の DB 名だけを kotoe_e2e に差し替えてから、渡されたコマンドを実行する
-# （config/database.yml の test が kotoe_test に差し替えるのと同じ置換）。
+# 考え方は config/database.yml の test（DB 名を kotoe_test に差し替える）と同じだが、こちらの方が厳しい。
+# database.yml の置換は DB 名の無い URL を拒まない（postgresql://u:p@db:5432 は
+# postgresql://kotoe_test になる）。ここでは DB 名の無い URL を拒む。
 # サーバーの起動も、run-local.sh の DB の作り直し・後片付けも、ここを通る。
 # DATABASE_URL が無い、または scheme://authority/DB名[?query] の形でないときは、
 # 開発の DB に向かないよう、何も実行せずに止める。

@@ -249,9 +249,11 @@ jobs:
         env:
           # 値はログに出さない（run: の中で echo しない）。
           CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
-        # 後片付けの前に Puma と、そこから fork される Solid Queue のプロセスをまとめて止めるため、
         # setsid で専用のプロセスグループに入れ、その ID を残す。sh は setsid の後に動くので
-        # $$ がグループの ID になり、exec で同じ PID のまま Rails に置き換わる。
+        # $$ がグループの ID になり、exec で同じ PID のまま Rails（Puma）に置き換わる。
+        # 止める手順（下の「Rails を止める」）での使い方：通常の停止は Puma への TERM で行い、
+        # solid_queue の Puma プラグインが Solid Queue の supervisor を止める。グループは、
+        # プロセスが残っていないかの確認と、KILL の最後の手段（Puma が先に消えていたときの TERM も）に使う。
         run: |
           # $$ と $RUNNER_TEMP は内側の sh で展開させる（意図した単一引用符）。
           # shellcheck disable=SC2016
@@ -283,7 +285,8 @@ jobs:
           [ -f "$pgid_file" ] || exit 0
           pgid="$(cat "$pgid_file")"
           case "$pgid" in
-            '' | *[!0-9]* | 0*)
+            # 1 は拒む。kill -- -1 は、このユーザーが送れる全プロセスへのシグナルになる。
+            '' | *[!0-9]* | 0* | 1)
               echo "::error::Rails のプロセスグループ ID が読めない（$pgid_file）"
               exit 1
               ;;
@@ -301,7 +304,12 @@ jobs:
           }
           # Puma（グループの先頭。sh が exec したので PID がグループ ID と同じ）にだけ TERM を送る。
           # solid_queue の Puma プラグインが Solid Queue を止め、終わるのを待ってから Puma が終わる。
-          kill -TERM "$pgid" 2>/dev/null || true
+          # Puma が既にいないときは、プラグインが止めてくれないので、グループ全体に TERM を送る。
+          if kill -0 "$pgid" 2>/dev/null; then
+            kill -TERM "$pgid" 2>/dev/null || true
+          else
+            kill -TERM -- "-$pgid" 2>/dev/null || true
+          fi
           for _ in $(seq 60); do
             group_alive || exit 0
             sleep 1
