@@ -23,8 +23,10 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
 
   await loginViaUi(page, challenger);
 
-  // お題の一覧 → 詳細
-  await page.goto("/posts");
+  // トップ → 「お題を探す」→ お題の一覧 → 詳細
+  await page.goto("/");
+  await page.getByRole("link", { name: "お題を探す" }).click();
+  await expect(page).toHaveURL(`${APP_BASE_URL}/posts`);
   // カードは <a> の中に <article> が入る形で、リンク自体にはアクセシブルネームが付かない。
   // タイトルの見出しを含むリンクを選ぶ。
   await page
