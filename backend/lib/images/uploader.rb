@@ -11,6 +11,8 @@ module Images
 
     # 保存先フォルダ。パスに Rails.env を含めるので、ローカルの検証画像が
     # 本番の資産と混ざらない（同じ Cloudinary アカウントを共用する運用のため）。
+    # KOTOE_CLOUDINARY_FOLDER は E2E が実行ごとの保存先を分けるためのもので、
+    # 本番では無視する（環境変数の設定ミスで本番の保存先が変わるのを防ぐ）。
     FOLDERS = {
       post: "posts",          # お題画像（issue 3-2）
       generated: "generated"  # 再現画像（issue 4-2）
@@ -38,7 +40,14 @@ module Images
     private
 
     def folder
-      "kotoe/#{Rails.env}/#{FOLDERS.fetch(@kind)}"
+      "#{folder_prefix}/#{FOLDERS.fetch(@kind)}"
+    end
+
+    def folder_prefix
+      override = ENV["KOTOE_CLOUDINARY_FOLDER"].to_s.strip.presence
+      return override if override && !Rails.env.production?
+
+      "kotoe/#{Rails.env}"
     end
 
     # 例外クラスは SDK のバージョンや失敗の種類（HTTP エラー・タイムアウト）で

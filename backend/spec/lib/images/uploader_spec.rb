@@ -57,6 +57,49 @@ RSpec.describe Images::Uploader do
       end
     end
 
+    # E2E は本物の Cloudinary に上げるため、実行ごとのフォルダに隔離して後で掃除できるようにする。
+    context "KOTOE_CLOUDINARY_FOLDER があるとき" do
+      def stub_folder_env(value)
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with("KOTOE_CLOUDINARY_FOLDER").and_return(value)
+      end
+
+      def uploaded_folder
+        folder = nil
+        allow(Cloudinary::Uploader).to receive(:upload) do |_uploaded, options|
+          folder = options[:folder]
+          { "public_id" => "#{folder}/stubbed" }
+        end
+        yield
+        folder
+      end
+
+      it "未設定なら kotoe/<Rails.env>/posts に上げる" do
+        stub_folder_env(nil)
+
+        expect(uploaded_folder { described_class.call(file, kind: :post) }).to eq("kotoe/test/posts")
+      end
+
+      it "設定されていればその下に上げる" do
+        stub_folder_env("kotoe/e2e/run-1")
+
+        expect(uploaded_folder { described_class.call(file, kind: :generated) }).to eq("kotoe/e2e/run-1/generated")
+      end
+
+      it "本番では無視する" do
+        stub_folder_env("kotoe/e2e/run-1")
+        allow(Rails.env).to receive(:production?).and_return(true)
+
+        expect(uploaded_folder { described_class.call(file, kind: :post) }).to eq("kotoe/test/posts")
+      end
+
+      it "空白だけの値は未設定として扱う" do
+        stub_folder_env("  ")
+
+        expect(uploaded_folder { described_class.call(file, kind: :post) }).to eq("kotoe/test/posts")
+      end
+    end
+
     # 省略すると既定が "auto" になり、動画や任意のバイナリまで受け付けてしまう。
     it "resource_type を image に固定する" do
       described_class.call(file, kind: :post)
