@@ -14,9 +14,14 @@ export type TestUser = {
 
 const POST_IMAGE_PATH = path.join(__dirname, "fixtures", "post-image.png");
 
+// ユーザー名・メールアドレスを実行ごと・呼び出しごとに別にするための接尾辞。
+export function uniqueSuffix(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 // 実行ごとに新しいユーザーを作る（1 人 1 日の生成上限に繰り返しの実行が当たらないように）。
 export async function createUser(request: APIRequestContext): Promise<TestUser> {
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix = uniqueSuffix();
   const name = `e2e-${suffix}`;
   const email = `e2e-${suffix}@example.com`;
   const password = "password123";

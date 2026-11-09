@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { loginViaUi, readToken, writeToken } from "../support/auth";
+import { loginViaUi, readToken, submitLogin, writeToken } from "../support/auth";
 import { API_BASE_URL, APP_BASE_URL } from "../support/env";
-import { createUser } from "../support/factories";
+import { createUser, uniqueSuffix } from "../support/factories";
 
 // ヘッダー右側のナビ（aria-label="アカウント"）。loading 以外では常に存在するので、
 // 中身（ユーザー名のリンク・ログアウト・再試行）で状態を見分ける。
@@ -27,7 +27,7 @@ function expectNeverOnLogin(urls: string[]) {
 }
 
 test("登録 → ログイン → ログアウト", async ({ page }) => {
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix = uniqueSuffix();
   const name = `e2e-signup-${suffix}`;
   const email = `e2e-signup-${suffix}@example.com`;
   const password = "password123";
@@ -46,9 +46,7 @@ test("登録 → ログイン → ログアウト", async ({ page }) => {
   expect(await readToken(page)).toBeNull();
 
   await page.goto("/login");
-  await page.getByLabel("メールアドレス").fill(email);
-  await page.getByLabel("パスワード", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "ログイン", exact: true }).click();
+  await submitLogin(page, { email, password });
   await expect(accountNav(page).getByRole("link", { name })).toBeVisible();
 });
 
@@ -62,9 +60,7 @@ for (const guarded of ["/mypage", "/posts/new"]) {
     await page.goto(guarded);
     await expect(page).toHaveURL(`${APP_BASE_URL}/login?next=${encodeURIComponent(guarded)}`);
 
-    await page.getByLabel("メールアドレス").fill(user.email);
-    await page.getByLabel("パスワード", { exact: true }).fill(user.password);
-    await page.getByRole("button", { name: "ログイン", exact: true }).click();
+    await submitLogin(page, user);
 
     await expect(page).toHaveURL(`${APP_BASE_URL}${guarded}`);
   });
@@ -190,9 +186,7 @@ for (const next of ["//evil.example", "%2F%09%2Fevil.example"]) {
     const user = await createUser(request);
 
     await page.goto(`/login?next=${next}`);
-    await page.getByLabel("メールアドレス").fill(user.email);
-    await page.getByLabel("パスワード", { exact: true }).fill(user.password);
-    await page.getByRole("button", { name: "ログイン", exact: true }).click();
+    await submitLogin(page, user);
 
     await expect(accountNav(page).getByRole("link", { name: user.name })).toBeVisible();
     await expect(page).toHaveURL(`${APP_BASE_URL}/`);

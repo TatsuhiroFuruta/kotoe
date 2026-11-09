@@ -17,12 +17,20 @@ export async function writeToken(page: Page, token: string): Promise<void> {
   ]);
 }
 
-// /login で入力して送信し、ヘッダーにユーザー名のリンクが出る（ログイン状態になる）まで待つ。
-export async function loginViaUi(page: Page, user: TestUser): Promise<void> {
-  await page.goto("/login");
+// 開いているログインフォームに入力して送信する。送信後の状態は待たない（呼び出し側が確かめる）。
+export async function submitLogin(
+  page: Page,
+  user: Pick<TestUser, "email" | "password">,
+): Promise<void> {
   await page.getByLabel("メールアドレス").fill(user.email);
   await page.getByLabel("パスワード", { exact: true }).fill(user.password);
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
+}
+
+// /login で入力して送信し、ヘッダーにユーザー名のリンクが出る（ログイン状態になる）まで待つ。
+export async function loginViaUi(page: Page, user: TestUser): Promise<void> {
+  await page.goto("/login");
+  await submitLogin(page, user);
   await page
     .getByRole("navigation", { name: "アカウント" })
     .getByRole("link", { name: user.name })
