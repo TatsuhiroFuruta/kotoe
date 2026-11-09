@@ -20,8 +20,8 @@ module Images
       generated: "generated"  # 再現画像（issue 4-2）
     }.freeze
 
-    # E2E の実行ごとの保存先の形。後片付け（E2e::CloudinaryCleanup）も、消してよい接頭辞の
-    # 判定にこれを使う。上げる側と消す側で同じ形を使い、消されない画像を残さないため。
+    # E2E の実行ごとの保存先の形。後片付け（E2e::CloudinaryCleanup::ALLOWED_PREFIX）が
+    # 消せる形と揃えておく（揃っていないと、上げた画像が消されずに残る）。
     E2E_FOLDER = %r{\Akotoe/e2e/[A-Za-z0-9_-]+\z}
 
     def self.call(file, kind:) = new(file, kind: kind).call
