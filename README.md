@@ -46,6 +46,21 @@ docker compose exec backend bundle exec rubocop
 docker compose exec frontend npm run lint
 ```
 
+## E2E テスト（Playwright）
+
+```bash
+# 初回だけ（Playwright 1.65 は両方のブラウザが要る）
+cd e2e && npm ci && npx playwright install chromium chromium-headless-shell && cd ..
+
+# 実行（引数は playwright にそのまま渡る。例: e2e/scripts/run-local.sh tests/auth.spec.ts）
+e2e/scripts/run-local.sh
+```
+
+開発環境（3000/3001）は止めずに並べて動く。専用の Rails（3100）・Next.js の本番ビルド（3101）・
+DB（`kotoe_e2e`、毎回作り直す）を立て、終わると片付ける。開発用イメージ（`kotoe-backend`）を
+再利用するので、先に一度 `docker compose build backend` が済んでいること。
+CI でも PR ごとに回る（Dependabot の PR は Dependabot 用の Secret `CLOUDINARY_URL` を使う）。
+
 ## 暗号化クレデンシャルの差分表示（任意・clone ごとに一度）
 
 `config/credentials.yml.enc` は暗号化されているため、そのままでは `git diff` が
