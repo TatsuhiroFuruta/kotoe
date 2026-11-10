@@ -64,9 +64,9 @@ RSpec.describe Images::Uploader do
     end
 
     # E2E は本物の Cloudinary に上げるため、実行ごとのフォルダに隔離して後で掃除できるようにする。
-    context "KOTOE_CLOUDINARY_FOLDER があるとき" do
+    context "KOTOE_CLOUDINARY_FOLDER の扱い" do
+      # ほかのキーを本物のまま返す設定は、ファイル冒頭の before で済んでいる。
       def stub_folder_env(value)
-        allow(ENV).to receive(:[]).and_call_original
         allow(ENV).to receive(:[]).with("KOTOE_CLOUDINARY_FOLDER").and_return(value)
       end
 
