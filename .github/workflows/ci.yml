@@ -173,7 +173,9 @@ jobs:
     # 環境変数は、同じユーザーのプロセスから /proc/<pid>/environ で読める。Rails の起動後も
     # next start（フロントの依存のコード）は常駐して動き続け、npm ci の postinstall などが
     # バックグラウンドに残したプロセスがあれば、それも動き続ける。手順の並び順では防げない。
-    # 根本の対策は CI 専用の Cloudinary キー（E2E のフォルダだけを扱う）に分けることで、別途行う。
+    # そのため Secrets の CLOUDINARY_URL（Actions と Dependabot の両方）には、本番（Render）とは別の
+    # CI 専用キーを入れている。漏れたときはそのキーだけを無効にすれば、本番のキーは影響を受けない。
+    # ただし権限は全権限（Master Admin）のままで、扱えるフォルダは絞っていない。
     env:
       RAILS_ENV: development
       TZ: Asia/Tokyo
@@ -267,8 +269,8 @@ jobs:
 
       # 残るリスク：Playwright（テストランナーとブラウザ）と、先に起動した next start は、Rails と
       # 同じユーザーで動くので Rails の環境変数（CLOUDINARY_URL）を読める。依存の更新（Dependabot の PR を
-      # 含む）で悪意あるコードが入れば、ここから管理キーが漏れうる。根本の対策は CI 専用の Cloudinary キー
-      # （E2E のフォルダだけを扱う）に分けることで、別途行う。
+      # 含む）で悪意あるコードが入れば、ここからキーが漏れうる。漏れるのは CI 専用キー（ジョブの env の
+      # コメント参照）なので、そのキーを無効にすれば本番のキーは守れる。
       - name: E2E（playwright）
         working-directory: e2e
         run: npm test
