@@ -181,6 +181,25 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
   });
 });
 
+// ログイン済みの人がフォームのページへ来たら、フォームに留まらせず戻り先へ送る
+// （login-form.tsx・signup/page.tsx の router.replace(resolveNextPath())）。
+test("ログイン済みで /login・/signup を開くと戻り先へ送られる", async ({ page, request }) => {
+  const user = await createUser(request);
+  await loginViaUi(page, user);
+
+  await page.goto("/login");
+  await expect(page).toHaveURL(`${APP_BASE_URL}/`);
+  await expect(page.getByRole("heading", { level: 1, name: "ログイン" })).toHaveCount(0);
+
+  await page.goto("/login?next=%2Fmypage");
+  await expect(page).toHaveURL(`${APP_BASE_URL}/mypage`);
+  await expect(page.getByRole("heading", { level: 1, name: user.name })).toBeVisible();
+
+  await page.goto("/signup");
+  await expect(page).toHaveURL(`${APP_BASE_URL}/`);
+  await expect(page.getByRole("heading", { level: 1, name: "新規登録" })).toHaveCount(0);
+});
+
 for (const next of ["//evil.example", "%2F%09%2Fevil.example"]) {
   test(`?next=${next} でログインしても外へ出ない`, async ({ page, request }) => {
     const user = await createUser(request);

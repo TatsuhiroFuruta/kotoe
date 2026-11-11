@@ -132,6 +132,10 @@ backlog 8-1 のタスク欄から写したもの。**太字の項目は、これ
    - (c) ヘッダーの「ログアウト」で、バックエンドに届かないままでも未ログインへ抜けられる
 6. **`?next=` のオープンリダイレクト防御**：`/login?next=//evil.example` と `/login?next=%2F%09%2Fevil.example`
    でログインし、`/` に着地する
+7. **ログイン済みで `/login`・`/signup` を開くと、フォームのページに留まらず戻り先へ送られる**
+   （`/login` と `/signup` は `/`、`/login?next=%2Fmypage` は `/mypage`）。2026-11-11 にユーザーの判断で追加。
+   この送り返し（`login-form.tsx` の `router.replace(resolveNextPath())`）はシナリオ 3 で 7-1 のバグを
+   隠した動きでもあり、それ自体が壊れていないかを直接確かめる
 
 ### E2E②：コアループ
 
