@@ -12,7 +12,7 @@ export type TestUser = {
   token: string;
 };
 
-const POST_IMAGE_PATH = path.join(__dirname, "fixtures", "post-image.png");
+export const POST_IMAGE_PATH = path.join(__dirname, "fixtures", "post-image.png");
 
 // ユーザー名・メールアドレスを実行ごと・呼び出しごとに別にするための接尾辞。
 export function uniqueSuffix(): string {

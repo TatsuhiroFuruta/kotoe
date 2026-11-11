@@ -1,10 +1,41 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 import { loginViaUi } from "../support/auth";
 import { APP_BASE_URL } from "../support/env";
-import { createPost, createUser } from "../support/factories";
+import { createPost, createUser, POST_IMAGE_PATH, uniqueSuffix } from "../support/factories";
 
 const CLOUDINARY_PREFIX = "https://res.cloudinary.com/";
+
+// 画像が Cloudinary から実際に読み込めたか。URL の形だけでは 404 でも通ってしまう。
+async function expectImageLoaded(img: Locator) {
+  await img.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0))
+    .toBe(true);
+}
+
+// お題の投稿画面（/posts/new）。コアループの前提となるお題を、画面から作れることを確かめる。
+// 2026-11-11 にユーザーの判断で追加（設計書のシナリオ E2E② の補足）。
+test("ヘッダーの「お題を投稿」から画像とタイトルでお題を投稿できる", async ({ page, request }) => {
+  const owner = await createUser(request);
+  const title = `E2E 投稿 ${uniqueSuffix()}`.slice(0, 30);
+
+  await loginViaUi(page, owner);
+  await page.getByRole("link", { name: "お題を投稿" }).click();
+  await expect(page).toHaveURL(`${APP_BASE_URL}/posts/new`);
+
+  await page.getByLabel(/画像を選ぶ/).setInputFiles(POST_IMAGE_PATH);
+  await expect(page.getByRole("img", { name: "選んだ画像のプレビュー" })).toBeVisible();
+  await page.getByLabel("タイトル（任意）").fill(title);
+  await page.getByRole("button", { name: "投稿する" }).click();
+
+  await expect(page.getByText("お題を投稿しました")).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`^${APP_BASE_URL}/posts/\\d+$`));
+  await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
+  const hero = page.getByRole("img", { name: title, exact: true });
+  await expect(hero).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
+  await expectImageLoaded(hero);
+});
 
 test("お題を見て描写し、生成して公開され、別のユーザーがいいねする", async ({
   page,
@@ -58,14 +89,7 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
   await expect(generated).toBeVisible();
   await expect(original).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
   await expect(generated).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
-  // URL の形だけでは、Cloudinary に画像が無い（404）ときも通ってしまう。実際に読み込めたかを見る。
-  // 比較ビューの <img> は loading="lazy" ではないが、念のため表示領域に入れてから確かめる。
-  for (const img of [original, generated]) {
-    await img.scrollIntoViewIfNeeded();
-    await expect
-      .poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0))
-      .toBe(true);
-  }
+  for (const img of [original, generated]) await expectImageLoaded(img);
 
   // 別のユーザー（出題者）として、同じ挑戦にいいねする。自分の挑戦には押せない（422）ため。
   const context = await browser.newContext();
