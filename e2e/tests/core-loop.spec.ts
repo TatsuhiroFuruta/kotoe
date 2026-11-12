@@ -4,7 +4,8 @@ import { loginViaUi } from "../support/auth";
 import { APP_BASE_URL } from "../support/env";
 import { createPost, createUser, POST_IMAGE_PATH, uniqueSuffix } from "../support/factories";
 
-const CLOUDINARY_PREFIX = "https://res.cloudinary.com/";
+// Cloudinary の配信 URL で始まること。ドットはエスケープする（素のままだと任意の 1 文字に一致する）。
+const CLOUDINARY_SRC = /^https:\/\/res\.cloudinary\.com\//;
 
 // 画像が Cloudinary から実際に読み込めたか。URL の形だけでは 404 でも通ってしまう。
 async function expectImageLoaded(img: Locator) {
@@ -33,7 +34,7 @@ test("ヘッダーの「お題を投稿」から画像とタイトルでお題�
   await expect(page).toHaveURL(new RegExp(`^${APP_BASE_URL}/posts/\\d+$`));
   await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
   const hero = page.getByRole("img", { name: title, exact: true });
-  await expect(hero).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
+  await expect(hero).toHaveAttribute("src", CLOUDINARY_SRC);
   await expectImageLoaded(hero);
 });
 
@@ -87,8 +88,8 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
   const generated = page.getByRole("img", { name: `${challenger.name} さんの再現画像` });
   await expect(original).toBeVisible();
   await expect(generated).toBeVisible();
-  await expect(original).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
-  await expect(generated).toHaveAttribute("src", new RegExp(`^${CLOUDINARY_PREFIX}`));
+  await expect(original).toHaveAttribute("src", CLOUDINARY_SRC);
+  await expect(generated).toHaveAttribute("src", CLOUDINARY_SRC);
   for (const img of [original, generated]) await expectImageLoaded(img);
 
   // 別のユーザー（出題者）として、同じ挑戦にいいねする。自分の挑戦には押せない（422）ため。
