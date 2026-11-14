@@ -1,14 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { loginViaUi, readToken, submitLogin, writeToken } from "../support/auth";
+import { accountNav, loginViaUi, readToken, submitLogin, writeToken } from "../support/auth";
 import { API_BASE_URL, APP_BASE_URL } from "../support/env";
 import { createUser, uniqueSuffix } from "../support/factories";
-
-// ヘッダー右側のナビ（aria-label="アカウント"）。loading 以外では常に存在するので、
-// 中身（ユーザー名のリンク・ログアウト・再試行）で状態を見分ける。
-function accountNav(page: Page) {
-  return page.getByRole("navigation", { name: "アカウント" });
-}
 
 // 呼んだ時点からのメインフレームの遷移先 URL を記録する。同一ドキュメント内の遷移
 // （router.replace による履歴の書き換え）も framenavigated で拾える。
@@ -189,7 +183,7 @@ test("ログイン済みで /login・/signup を開くと戻り先へ送られ�
 
   // 着地先の中身まで確かめる（URL だけでなく、そのページが描かれていること）。
   const topHeading = page.getByRole("heading", { level: 1, name: "言葉だけで、その絵を伝えられますか。" });
-  const mypageHeading = page.getByRole("heading", { level: 1, name: user.name });
+  const mypageHeading = page.getByRole("heading", { level: 1, name: user.name, exact: true });
 
   await page.goto("/login");
   await expect(page).toHaveURL(`${APP_BASE_URL}/`);

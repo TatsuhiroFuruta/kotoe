@@ -167,8 +167,9 @@ jobs:
     # ローカルの E2E（e2e/scripts/run-local.sh の backend-e2e）と同じく、Rails は development 環境で
     # 動かし、Solid Queue は Puma の中で動かす。
     #
-    # CLOUDINARY_URL（本番と同じ Cloudinary アカウントの、CI 専用の管理キー）はジョブ全体の env に置かず、Rails の起動と
-    # 後片付けの手順にだけ渡す。npm ci の postinstall・next build などの手順の環境変数には入らない。
+    # CLOUDINARY_URL（本番と同じ Cloudinary アカウントの、CI 専用の管理キー）はジョブ全体の env に
+    # 置かず、Rails の起動と後片付けの手順にだけ渡す。npm ci の postinstall・next build などの
+    # 手順の環境変数には入らない。
     # ただし、これでキーが依存のコードから隔離されるわけではない。バックグラウンドで動く Rails の
     # 環境変数は、同じユーザーのプロセスから /proc/<pid>/environ で読める。Rails の起動後も
     # next start（フロントの依存のコード）は常駐して動き続け、npm ci の postinstall などが

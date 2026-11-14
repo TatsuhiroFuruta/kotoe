@@ -1,17 +1,23 @@
 import { expect, test, type Locator } from "@playwright/test";
 
-import { loginViaUi } from "../support/auth";
+import { accountNav, loginViaUi } from "../support/auth";
 import { APP_BASE_URL } from "../support/env";
 import { createPost, createUser, POST_IMAGE_PATH, uniqueSuffix } from "../support/factories";
 
 // Cloudinary の配信 URL で始まること。ドットはエスケープする（素のままだと任意の 1 文字に一致する）。
 const CLOUDINARY_SRC = /^https:\/\/res\.cloudinary\.com\//;
 
-// Cloudinary を通る待ち（アップロード・初回の変換画像の生成）の上限。既定の 5 秒では足りない。
-// アプリ側の投稿の待ち上限（post-form.tsx の POST_TIMEOUT_MS）より短く、テストの上限より短くする。
+// Cloudinary を通る 1 回の待ち（アップロード・初回の変換画像の生成）の上限。既定の 5 秒では足りない。
+// アプリ側の投稿の待ち上限（post-form.tsx の POST_TIMEOUT_MS = 120 秒）より短いのは意図的：
+// E2E では 1 枚の小さな画像のアップロードに 60 秒以上かかること自体を異常とみなして赤くする。
 const CLOUDINARY_WAIT_MS = 60_000;
+// 生成ジョブの完了をポーリングで待つ上限。
+const GENERATION_WAIT_MS = 60_000;
+// 上の待ち以外（ユーザー作成・ログイン・画面遷移など）にかかる時間の見込み。
+const OTHER_STEPS_MS = 30_000;
 
-// 正規表現の中で特別な意味を持つ文字をエスケープする（APP_BASE_URL のドットなど）。
+// 正規表現の中で特別な意味を持つ文字をエスケープする。今の APP_BASE_URL（http://localhost:3101）には
+// 該当する文字が無いが、文字列から正規表現を組み立てるときの決まりとして通す。
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -29,16 +35,16 @@ async function expectImageLoaded(img: Locator) {
 // お題の投稿画面（/posts/new）。コアループの前提となるお題を、画面から作れることを確かめる。
 // 2026-11-11 にユーザーの判断で追加（設計書のシナリオ E2E② の補足）。
 test("ヘッダーの「お題を投稿」から画像とタイトルでお題を投稿できる", async ({ page, request }) => {
-  // 既定のテストタイムアウト（30 秒）は、Cloudinary を通る待ち（CLOUDINARY_WAIT_MS）より短い。
-  test.setTimeout(120_000);
+  // 既定のテストタイムアウト（30 秒）では足りない。待ちの合計（トースト・お題の画像）から決める。
+  test.setTimeout(OTHER_STEPS_MS + 2 * CLOUDINARY_WAIT_MS);
 
   const owner = await createUser(request);
   // お題のタイトルの上限は 30 文字（backend の Post・frontend の TITLE_MAX_LENGTH）。今は 27 文字で収まる。
   const title = `E2E 投稿 ${uniqueSuffix()}`.slice(0, 30);
 
   await loginViaUi(page, owner);
-  // ページ本文に同じ名前のリンク（トップの CTA など）ができても取り違えないよう、ヘッダーの中に絞る。
-  await page.getByRole("banner").getByRole("link", { name: "お題を投稿" }).click();
+  // ページ本文に同じ名前のリンク（トップの CTA など）ができても取り違えないよう、ヘッダーのアカウント欄に絞る。
+  await accountNav(page).getByRole("link", { name: "お題を投稿" }).click();
   await expect(page).toHaveURL(`${APP_BASE_URL}/posts/new`);
 
   await page.getByLabel(/画像を選ぶ/).setInputFiles(POST_IMAGE_PATH);
@@ -60,9 +66,9 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
   request,
   browser,
 }) => {
-  // 既定のテストタイムアウト（30 秒）は、生成完了を待つ 60 秒の expect より短く、そちらに届く前に
-  // テスト全体が打ち切られる。生成を通すのはこのテストだけなので、設定全体ではなくここで延ばす。
-  test.setTimeout(120_000);
+  // 既定のテストタイムアウト（30 秒）では、生成の待ちと画像の読み込みの待ちに届く前に打ち切られる。
+  // 待ちの合計（生成・比較ビューの画像 2 枚）から決める。設定全体ではなく、このテストだけ延ばす。
+  test.setTimeout(OTHER_STEPS_MS + GENERATION_WAIT_MS + 2 * CLOUDINARY_WAIT_MS);
 
   // 前提データは API で作る（出題者・お題・挑戦者）。検証したい流れだけを画面で操作する。
   const owner = await createUser(request);
@@ -93,7 +99,7 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
   await page.getByRole("button", { name: "画像を生成" }).click();
   await expect(page.getByText("生成中…").first()).toBeVisible();
   await expect(page.getByText("画像が完成し、みんなの挑戦に公開されました")).toBeVisible({
-    timeout: 60_000,
+    timeout: GENERATION_WAIT_MS,
   });
 
   // 比較ビュー

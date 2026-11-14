@@ -17,6 +17,12 @@ export async function writeToken(page: Page, token: string): Promise<void> {
   ]);
 }
 
+// ヘッダー右側のナビ（aria-label="アカウント"）。ユーザー名のリンク・「お題を投稿」・ログアウト・
+// 再試行が入る。loading 以外では常に存在するので、中身で状態を見分ける。
+export function accountNav(page: Page) {
+  return page.getByRole("navigation", { name: "アカウント" });
+}
+
 // 開いているログインフォームに入力して送信する。送信後の状態は待たない（呼び出し側が確かめる）。
 export async function submitLogin(
   page: Page,
@@ -31,8 +37,7 @@ export async function submitLogin(
 export async function loginViaUi(page: Page, user: TestUser): Promise<void> {
   await page.goto("/login");
   await submitLogin(page, user);
-  await page
-    .getByRole("navigation", { name: "アカウント" })
+  await accountNav(page)
     .getByRole("link", { name: user.name })
     .waitFor();
 }
