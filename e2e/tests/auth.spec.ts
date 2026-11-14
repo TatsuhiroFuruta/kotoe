@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { accountNav, loginViaUi, readToken, submitLogin, writeToken } from "../support/auth";
 import { API_BASE_URL, APP_BASE_URL } from "../support/env";
-import { createUser, uniqueSuffix } from "../support/factories";
+import { createUser, uniqueSuffix, type TestUser } from "../support/factories";
 
 // 呼んだ時点からのメインフレームの遷移先 URL を記録する。同一ドキュメント内の遷移
 // （router.replace による履歴の書き換え）も framenavigated で拾える。
@@ -14,6 +14,11 @@ function recordNavigations(page: Page): string[] {
     if (frame === page.mainFrame()) urls.push(frame.url());
   });
   return urls;
+}
+
+// マイページの見出し（ProfileHeader の <h1>{name}</h1>）。ユーザー名で完全一致させる。
+function mypageHeading(page: Page, user: Pick<TestUser, "name">) {
+  return page.getByRole("heading", { level: 1, name: user.name, exact: true });
 }
 
 function expectNeverOnLogin(urls: string[]) {
@@ -70,11 +75,11 @@ test("ログイン済みでガード付きページを直接ロード・リロ�
 
   // Link を使わない（クライアント遷移ではハイドレーション経路が露出しない）。
   await page.goto("/mypage");
-  await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
+  await expect(mypageHeading(page, user)).toBeVisible();
   await expect(page).toHaveURL(/\/mypage$/);
 
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
+  await expect(mypageHeading(page, user)).toBeVisible();
   await expect(page).toHaveURL(/\/mypage$/);
 
   await page.goto("/posts/new");
@@ -146,7 +151,7 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
     await accountNav(page).getByRole("button", { name: "再試行" }).click();
 
     await expect(accountNav(page).getByRole("link", { name: user.name })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
+    await expect(mypageHeading(page, user)).toBeVisible();
   });
 
   test("(b) ページ側の「再試行」でもログイン状態へ戻る", async ({ page, request }) => {
@@ -157,7 +162,7 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
     await page.unroute(`${API_BASE_URL}/**`);
     await pageRetry.click();
 
-    await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
+    await expect(mypageHeading(page, user)).toBeVisible();
     await expect(accountNav(page).getByRole("link", { name: user.name })).toBeVisible();
   });
 
@@ -183,7 +188,6 @@ test("ログイン済みで /login・/signup を開くと戻り先へ送られ�
 
   // 着地先の中身まで確かめる（URL だけでなく、そのページが描かれていること）。
   const topHeading = page.getByRole("heading", { level: 1, name: "言葉だけで、その絵を伝えられますか。" });
-  const mypageHeading = page.getByRole("heading", { level: 1, name: user.name, exact: true });
 
   await page.goto("/login");
   await expect(page).toHaveURL(`${APP_BASE_URL}/`);
@@ -191,7 +195,7 @@ test("ログイン済みで /login・/signup を開くと戻り先へ送られ�
 
   await page.goto("/login?next=%2Fmypage");
   await expect(page).toHaveURL(`${APP_BASE_URL}/mypage`);
-  await expect(mypageHeading).toBeVisible();
+  await expect(mypageHeading(page, user)).toBeVisible();
 
   await page.goto("/signup");
   await expect(page).toHaveURL(`${APP_BASE_URL}/`);
@@ -200,7 +204,7 @@ test("ログイン済みで /login・/signup を開くと戻り先へ送られ�
   // /signup も ?next= を読んで戻り先へ送る（signup/page.tsx の resolveNextPath）。
   await page.goto("/signup?next=%2Fmypage");
   await expect(page).toHaveURL(`${APP_BASE_URL}/mypage`);
-  await expect(mypageHeading).toBeVisible();
+  await expect(mypageHeading(page, user)).toBeVisible();
 });
 
 for (const next of ["//evil.example", "%2F%09%2Fevil.example"]) {
