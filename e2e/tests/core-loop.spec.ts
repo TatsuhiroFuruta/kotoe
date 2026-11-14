@@ -8,16 +8,17 @@ import { createPost, createUser, POST_IMAGE_PATH, uniqueSuffix } from "../suppor
 const CLOUDINARY_SRC = /^https:\/\/res\.cloudinary\.com\//;
 
 // Cloudinary を通る 1 回の待ち（アップロード・初回の変換画像の生成）の上限。既定の 5 秒では足りない。
-// アプリ側の投稿の待ち上限（post-form.tsx の POST_TIMEOUT_MS = 120 秒）より短いのは意図的：
+// アプリ側の投稿の待ち上限（post-form.tsx の POST_TIMEOUT_MS）より短いのは意図的：
 // E2E では 1 枚の小さな画像のアップロードに 60 秒以上かかること自体を異常とみなして赤くする。
 const CLOUDINARY_WAIT_MS = 60_000;
 // 生成ジョブの完了をポーリングで待つ上限。
 const GENERATION_WAIT_MS = 60_000;
-// 上の待ち以外（ユーザー作成・ログイン・画面遷移など）にかかる時間の見込み。
-const OTHER_STEPS_MS = 30_000;
+// 上の待ち以外（ユーザー作成・ログイン・画面遷移・既定 5 秒の expect など）にかかる時間の見込み。
+// 冷えた CI でも、個々の待ちが上限に届く前にテスト全体が打ち切られないよう、余裕を多めに取る。
+const OTHER_STEPS_MS = 60_000;
 
-// 正規表現の中で特別な意味を持つ文字をエスケープする。今の APP_BASE_URL（http://localhost:3101）には
-// 該当する文字が無いが、文字列から正規表現を組み立てるときの決まりとして通す。
+// 正規表現の中で特別な意味を持つ文字をエスケープする。文字列（APP_BASE_URL など）から正規表現を
+// 組み立てるときの決まりとして通す。
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

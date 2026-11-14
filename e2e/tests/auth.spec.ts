@@ -70,11 +70,11 @@ test("ログイン済みでガード付きページを直接ロード・リロ�
 
   // Link を使わない（クライアント遷移ではハイドレーション経路が露出しない）。
   await page.goto("/mypage");
-  await expect(page.getByRole("heading", { level: 1, name: user.name })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/mypage$/);
 
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: user.name })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/mypage$/);
 
   await page.goto("/posts/new");
@@ -146,7 +146,7 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
     await accountNav(page).getByRole("button", { name: "再試行" }).click();
 
     await expect(accountNav(page).getByRole("link", { name: user.name })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1, name: user.name })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
   });
 
   test("(b) ページ側の「再試行」でもログイン状態へ戻る", async ({ page, request }) => {
@@ -157,7 +157,7 @@ test.describe("バックエンドに届かない状態からの復帰", () => {
     await page.unroute(`${API_BASE_URL}/**`);
     await pageRetry.click();
 
-    await expect(page.getByRole("heading", { level: 1, name: user.name })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: user.name, exact: true })).toBeVisible();
     await expect(accountNav(page).getByRole("link", { name: user.name })).toBeVisible();
   });
 

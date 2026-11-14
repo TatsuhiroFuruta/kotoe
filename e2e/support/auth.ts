@@ -18,7 +18,8 @@ export async function writeToken(page: Page, token: string): Promise<void> {
 }
 
 // ヘッダー右側のナビ（aria-label="アカウント"）。ユーザー名のリンク・「お題を投稿」・ログアウト・
-// 再試行が入る。loading 以外では常に存在するので、中身で状態を見分ける。
+// 再試行が入る。nav 自体は loading の間もスケルトンを入れて常に描画されるので、nav が見えることは
+// ログインやハイドレーションの完了の合図にならない。中身（ユーザー名のリンクなど）で状態を見分ける。
 export function accountNav(page: Page) {
   return page.getByRole("navigation", { name: "アカウント" });
 }
