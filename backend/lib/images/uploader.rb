@@ -11,10 +11,18 @@ module Images
 
     # 保存先フォルダ。パスに Rails.env を含めるので、ローカルの検証画像が
     # 本番の資産と混ざらない（同じ Cloudinary アカウントを共用する運用のため）。
+    # KOTOE_CLOUDINARY_FOLDER は E2E が実行ごとの保存先を分けるためのもので、
+    # 本番では無視する（環境変数の設定ミスで本番の保存先が変わるのを防ぐ）。
+    # 本番以外では E2E_FOLDER（kotoe/e2e/<実行ID>）の形だけを受け付け、それ以外は
+    # ArgumentError にする。黙って kotoe/development に上げると E2E の画像が消されずに残るため。
     FOLDERS = {
       post: "posts",          # お題画像（issue 3-2）
       generated: "generated"  # 再現画像（issue 4-2）
     }.freeze
+
+    # E2E の実行ごとの保存先の形。後片付け（E2e::CloudinaryCleanup::ALLOWED_PREFIX）が
+    # 消せる形と揃えておく（揃っていないと、上げた画像が消されずに残る）。
+    E2E_FOLDER = %r{\Akotoe/e2e/[A-Za-z0-9_-]+\z}
 
     def self.call(file, kind:) = new(file, kind: kind).call
 
@@ -38,7 +46,18 @@ module Images
     private
 
     def folder
-      "kotoe/#{Rails.env}/#{FOLDERS.fetch(@kind)}"
+      "#{folder_prefix}/#{FOLDERS.fetch(@kind)}"
+    end
+
+    def folder_prefix
+      default = "kotoe/#{Rails.env}"
+      return default if Rails.env.production?
+
+      override = ENV["KOTOE_CLOUDINARY_FOLDER"].to_s.strip.presence
+      return default unless override
+      return override if E2E_FOLDER.match?(override)
+
+      raise ArgumentError, "KOTOE_CLOUDINARY_FOLDER は kotoe/e2e/<実行ID> の形にしてください"
     end
 
     # 例外クラスは SDK のバージョンや失敗の種類（HTTP エラー・タイムアウト）で

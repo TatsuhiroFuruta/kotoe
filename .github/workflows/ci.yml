@@ -135,3 +135,223 @@ jobs:
 
       - name: vitest
         run: npm run test
+
+  e2e:
+    name: e2e (playwright)
+    runs-on: ubuntu-latest
+    # fork からの PR には Secrets（CLOUDINARY_URL）が渡らないので走らせない。
+    # Dependabot の PR は同じリポジトリのブランチなのでここでは飛ばさず、E2E を回す。
+    # Dependabot が起動した実行には Dependabot 用の Secrets（CLOUDINARY_URL）が渡る。
+    # 一方 `vars.*`（CLOUDINARY_CLOUD_NAME）が渡るかは未確認。渡らないと
+    # NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME が空になり、next build が
+    # （frontend/src/lib/build/required-public-env.ts で）失敗する。Dependabot の PR で
+    # この手順が落ちたら、まずここを疑う。
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push'
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: kotoe_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    # ローカルの E2E（e2e/scripts/run-local.sh の backend-e2e）と同じく、Rails は development 環境で
+    # 動かし、Solid Queue は Puma の中で動かす。
+    #
+    # CLOUDINARY_URL（本番と同じ Cloudinary アカウントの、CI 専用の管理キー）はジョブ全体の env に
+    # 置かず、Rails の起動と後片付けの手順にだけ渡す。npm ci の postinstall・next build などの
+    # 手順の環境変数には入らない。
+    # ただし、これでキーが依存のコードから隔離されるわけではない。バックグラウンドで動く Rails の
+    # 環境変数は、同じユーザーのプロセスから /proc/<pid>/environ で読める。Rails の起動後も
+    # next start（フロントの依存のコード）は常駐して動き続け、npm ci の postinstall などが
+    # バックグラウンドに残したプロセスがあれば、それも動き続ける。手順の並び順では防げない。
+    # そのため Secrets の CLOUDINARY_URL（Actions と Dependabot の両方）には、本番（Render）とは別の
+    # CI 専用キーを入れている。漏れたときはそのキーだけを無効にすれば、本番のキーは影響を受けない。
+    # ただし権限は全権限（Master Admin）のままで、扱えるフォルダは絞っていない。漏れたキーを無効にする
+    # までの間は、同じアカウントにある本番の画像（kotoe/production/）も読み書き・削除されうる。
+    # 守れるのは本番のキーであって、本番の画像ではない。
+    env:
+      RAILS_ENV: development
+      TZ: Asia/Tokyo
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/kotoe_e2e
+      CORS_ALLOWED_ORIGINS: http://localhost:3101
+      JWT_SECRET_KEY: dummy-jwt-secret-for-e2e-do-not-use-in-production
+      # この実行で Cloudinary に上げた画像の保存先。後片付けでこの接頭辞の下だけを消す。
+      KOTOE_CLOUDINARY_FOLDER: kotoe/e2e/ci-${{ github.run_id }}-${{ github.run_attempt }}
+      # 本番以外の既定もダミーだが、本物の画像生成 API（課金される）を呼ばないよう明示する。
+      KOTOE_IMAGE_PROVIDER: dummy
+      SOLID_QUEUE_IN_PUMA: "true"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ruby のセットアップ（gem はキャッシュする）
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: backend
+
+      - name: Node のセットアップ（npm はキャッシュする）
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      # ---- ここから Rails の起動までは、依存のコードを動かす手順。CLOUDINARY_URL はまだ無い。----
+
+      - name: フロントの依存のインストール
+        working-directory: frontend
+        run: npm ci
+
+      - name: フロントをビルドする
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
+          NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${{ vars.CLOUDINARY_CLOUD_NAME }}
+        run: npx next build
+
+      - name: E2E の依存のインストール
+        working-directory: e2e
+        run: npm ci
+
+      # Playwright 1.65 は headless 実行に chromium と chromium-headless-shell の両方を使う。
+      - name: Playwright のブラウザをインストールする
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium chromium-headless-shell
+
+      - name: E2E の型検査
+        working-directory: e2e
+        run: npm run typecheck
+
+      - name: フロントを起動する（ポート 3101）
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
+        run: npx next start -p 3101 > "$RUNNER_TEMP/next.log" 2>&1 &
+
+      # DATABASE_URL があると、development の db:prepare は test 用 DB を対象に加えない
+      # （activerecord の DatabaseTasks#each_current_environment）。作るのは kotoe_e2e だけ。
+      - name: E2E 用DBを用意する
+        working-directory: backend
+        run: bin/rails db:prepare
+
+      # ---- ここから CLOUDINARY_URL を持つ Rails が動く。----
+
+      - name: Rails を起動する（ポート 3100）
+        working-directory: backend
+        env:
+          # 値はログに出さない（run: の中で echo しない）。
+          CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
+        # setsid で専用のプロセスグループに入れ、その ID を残す。sh は setsid の後に動くので
+        # $$ がグループの ID になり、exec で同じ PID のまま Rails（Puma）に置き換わる。
+        # 止める手順（下の「Rails を止める」）での使い方：通常の停止は Puma への TERM で行い、
+        # solid_queue の Puma プラグインが Solid Queue の supervisor を止める。グループは、
+        # プロセスが残っていないかの確認と、KILL の最後の手段（Puma が先に消えていたときの TERM も）に使う。
+        run: |
+          # $$ と $RUNNER_TEMP は内側の sh で展開させる（意図した単一引用符）。
+          # shellcheck disable=SC2016
+          setsid sh -c 'echo "$$" > "$RUNNER_TEMP/rails.pgid"; exec bin/rails server -p 3100' > "$RUNNER_TEMP/rails.log" 2>&1 &
+
+      # ビルドは別手順で済んでいるので、待つのは Rails の起動と next start だけ。
+      - name: 起動を待つ
+        run: |
+          curl --retry 90 --retry-delay 2 --retry-max-time 180 --retry-all-errors -fsS -o /dev/null http://localhost:3100/api/health
+          curl --retry 90 --retry-delay 2 --retry-max-time 180 --retry-all-errors -fsS -o /dev/null http://localhost:3101/
+
+      # 残るリスク：Playwright（テストランナーとブラウザ）と、先に起動した next start は、Rails と
+      # 同じユーザーで動くので Rails の環境変数（CLOUDINARY_URL）を読める。依存の更新（Dependabot の PR を
+      # 含む）で悪意あるコードが入れば、ここからキーが漏れうる。漏れるのは CI 専用キー（ジョブの env の
+      # コメント参照）なので、そのキーを無効にすれば本番のキーは守れる。無効にするまでの間は、本番の画像も
+      # 操作されうる（同じアカウントで、フォルダを絞っていないため）。
+      - name: E2E（playwright）
+        working-directory: e2e
+        run: npm test
+
+      # 後片付けの前に Rails を止める。Puma の中の Solid Queue が動いたままだと、画像の削除の後に
+      # 生成ジョブが同じフォルダへ上げ、その画像が消されずに残る。Puma に TERM を送り、プロセスグループに
+      # （ゾンビ以外の）プロセスが 1 つも残っていないことを確かめてから次へ進む。60 秒で残っていれば
+      # グループごと KILL する。
+      - name: Rails を止める
+        if: always()
+        run: |
+          pgid_file="$RUNNER_TEMP/rails.pgid"
+          # 起動の手順まで進まなかった（Rails を起動していない）。
+          [ -f "$pgid_file" ] || exit 0
+          pgid="$(cat "$pgid_file")"
+          case "$pgid" in
+            # 1 は拒む。kill -- -1 は、このユーザーが送れる全プロセスへのシグナルになる。
+            '' | *[!0-9]* | 0* | 1)
+              echo "::error::Rails のプロセスグループ ID が読めない（$pgid_file）"
+              exit 1
+              ;;
+          esac
+          # グループに、ゾンビ（終了済みで回収待ち）以外のプロセスが残っているか。
+          group_alive() {
+            local stat line
+            for stat in /proc/[0-9]*/stat; do
+              line="$(cat "$stat" 2>/dev/null)" || continue
+              # comm の後ろ: state ppid pgrp ...
+              read -r state _ppid pgrp _ <<< "${line##*) }"
+              [ "$pgrp" = "$pgid" ] && [ "$state" != Z ] && return 0
+            done
+            return 1
+          }
+          # Puma（グループの先頭。sh が exec したので PID がグループ ID と同じ）にだけ TERM を送る。
+          # solid_queue の Puma プラグインが Solid Queue を止め、終わるのを待ってから Puma が終わる。
+          # Puma が既にいないときは、プラグインが止めてくれないので、グループ全体に TERM を送る。
+          if kill -0 "$pgid" 2>/dev/null; then
+            kill -TERM "$pgid" 2>/dev/null || true
+          else
+            kill -TERM -- "-$pgid" 2>/dev/null || true
+          fi
+          for _ in $(seq 60); do
+            group_alive || exit 0
+            sleep 1
+          done
+          kill -KILL -- "-$pgid" 2>/dev/null || true
+          for _ in $(seq 10); do
+            if ! group_alive; then
+              echo "::warning::Rails のプロセスグループ（$pgid）が 60 秒で止まらず、KILL で止めた"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::KILL の後も Rails のプロセスグループ（$pgid）が残っている"
+          exit 1
+
+      # 失敗しても、Cloudinary に上げた画像は消す。
+      - name: Cloudinary の E2E 画像を消す
+        if: always()
+        working-directory: backend
+        env:
+          CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
+        run: bin/rails e2e:cleanup_cloudinary
+
+      # 失敗時はサーバーのログが見えないと原因が追えないので、末尾を出す。
+      - name: 失敗時にサーバーのログを出す
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/rails.log" "$RUNNER_TEMP/next.log" || true
+
+      # 失敗時だけ、trace / スクリーンショット / レポートを残す。
+      - name: 失敗時の成果物をアップロードする
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

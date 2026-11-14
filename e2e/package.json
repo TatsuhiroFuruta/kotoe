@@ -1,0 +1,16 @@
+{
+  "name": "kotoe-e2e",
+  "version": "1.0.0",
+  "description": "Kotoe の E2E テスト（Playwright）",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "local": "scripts/run-local.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}

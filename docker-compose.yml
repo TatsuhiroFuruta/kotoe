@@ -23,6 +23,9 @@ services:
       retries: 5
 
   backend:
+    # イメージ名を固定する。backend-e2e がこの名前で同じイメージを使い回すため、
+    # プロジェクト名（既定はディレクトリ名）から決まる名前に頼らない。
+    image: kotoe-backend
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
@@ -103,6 +106,66 @@ services:
     restart: on-failure
     # HTTP を受けないのでポートは公開しない。
     command: bundle exec bin/jobs
+
+  # ---- E2E 専用（profile: e2e）。`docker compose up` の既定では起動しない。----
+  # e2e/scripts/run-local.sh から使う。開発環境（backend :3000 / frontend :3001 / DB kotoe_development）
+  # には触れず、別ポート・別 DB（kotoe_e2e）・別 Cloudinary フォルダで動かす。
+  backend-e2e:
+    profiles: ["e2e"]
+    # backend と同じイメージを使い回す（同じ Dockerfile.dev なので、別名で再ビルドすると
+    # apt / gem の取得がもう一度走る）。backend のイメージが無いときだけここで build される。
+    image: kotoe-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env.development
+      - backend/.env.development
+    environment:
+      RAILS_ENV: development
+      TZ: Asia/Tokyo
+      CORS_ALLOWED_ORIGINS: http://localhost:3101
+      # E2E ではワーカーを別に立てず、Puma 内で Solid Queue を動かす。
+      SOLID_QUEUE_IN_PUMA: "true"
+      RAILS_LOG_TO_STDOUT: "true"
+      # backend/.env.development で openai に切り替えていても、E2E では本物の画像生成 API を
+      # 呼ばない（課金される）。environment は env_file より優先される。
+      KOTOE_IMAGE_PROVIDER: dummy
+      # 未設定でも compose 全体が読めるよう既定値を置く（:? で必須にすると通常の docker compose が全部落ちる）。
+      # 通常は run-local.sh が実行ごとの値を export する。
+      KOTOE_CLOUDINARY_FOLDER: ${KOTOE_CLOUDINARY_FOLDER:-kotoe/e2e/manual}
+    ports:
+      - "3100:3000"
+    volumes:
+      - ./backend:/app
+      - bundle:/usr/local/bundle
+      # 下の entrypoint。読み取り専用で載せる。
+      - ./e2e/docker/backend-e2e-env.sh:/e2e/backend-e2e-env.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    # entrypoint.dev.sh は共有の tmp/pids/server.pid を消す。開発の backend の pid を
+    # 巻き添えにしないよう entrypoint を差し替え、pid ファイルは /tmp に置く。
+    # 差し替え先は DATABASE_URL の DB 名を kotoe_e2e にしてからコマンドを実行する。
+    # run-local.sh の DB の作り直しと後片付け（docker compose run）も同じ entrypoint を通る。
+    entrypoint: ["sh", "/e2e/backend-e2e-env.sh"]
+    command: ["bin/rails", "server", "-b", "0.0.0.0", "-p", "3000", "-P", "/tmp/server.pid"]
+
+  # ソースは COPY して本番ビルドする。バインドマウントしないので、ホストの .next と
+  # 開発用の frontend には触れない。
+  frontend-e2e:
+    profiles: ["e2e"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    env_file:
+      - frontend/.env.development
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3100
+      TZ: Asia/Tokyo
+    ports:
+      - "3101:3000"
+    command: sh -c "npx next build && npx next start -p 3000"
 
 volumes:
   db_data:
