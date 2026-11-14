@@ -7,22 +7,38 @@ import { createPost, createUser, POST_IMAGE_PATH, uniqueSuffix } from "../suppor
 // Cloudinary の配信 URL で始まること。ドットはエスケープする（素のままだと任意の 1 文字に一致する）。
 const CLOUDINARY_SRC = /^https:\/\/res\.cloudinary\.com\//;
 
+// Cloudinary を通る待ち（アップロード・初回の変換画像の生成）の上限。既定の 5 秒では足りない。
+// アプリ側の投稿の待ち上限（post-form.tsx の POST_TIMEOUT_MS）より短く、テストの上限より短くする。
+const CLOUDINARY_WAIT_MS = 60_000;
+
+// 正規表現の中で特別な意味を持つ文字をエスケープする（APP_BASE_URL のドットなど）。
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // 画像が Cloudinary から実際に読み込めたか。URL の形だけでは 404 でも通ってしまう。
 async function expectImageLoaded(img: Locator) {
   await img.scrollIntoViewIfNeeded();
   await expect
-    .poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0))
+    .poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), {
+      timeout: CLOUDINARY_WAIT_MS,
+    })
     .toBe(true);
 }
 
 // お題の投稿画面（/posts/new）。コアループの前提となるお題を、画面から作れることを確かめる。
 // 2026-11-11 にユーザーの判断で追加（設計書のシナリオ E2E② の補足）。
 test("ヘッダーの「お題を投稿」から画像とタイトルでお題を投稿できる", async ({ page, request }) => {
+  // 既定のテストタイムアウト（30 秒）は、Cloudinary を通る待ち（CLOUDINARY_WAIT_MS）より短い。
+  test.setTimeout(120_000);
+
   const owner = await createUser(request);
+  // お題のタイトルの上限は 30 文字（backend の Post・frontend の TITLE_MAX_LENGTH）。今は 27 文字で収まる。
   const title = `E2E 投稿 ${uniqueSuffix()}`.slice(0, 30);
 
   await loginViaUi(page, owner);
-  await page.getByRole("link", { name: "お題を投稿" }).click();
+  // ページ本文に同じ名前のリンク（トップの CTA など）ができても取り違えないよう、ヘッダーの中に絞る。
+  await page.getByRole("banner").getByRole("link", { name: "お題を投稿" }).click();
   await expect(page).toHaveURL(`${APP_BASE_URL}/posts/new`);
 
   await page.getByLabel(/画像を選ぶ/).setInputFiles(POST_IMAGE_PATH);
@@ -30,8 +46,9 @@ test("ヘッダーの「お題を投稿」から画像とタイトルでお題�
   await page.getByLabel("タイトル（任意）").fill(title);
   await page.getByRole("button", { name: "投稿する" }).click();
 
-  await expect(page.getByText("お題を投稿しました")).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`^${APP_BASE_URL}/posts/\\d+$`));
+  // トーストは POST（Rails → Cloudinary へのアップロード）が成功した後に出る。
+  await expect(page.getByText("お題を投稿しました")).toBeVisible({ timeout: CLOUDINARY_WAIT_MS });
+  await expect(page).toHaveURL(new RegExp(`^${escapeRegExp(APP_BASE_URL)}/posts/\\d+$`));
   await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
   const hero = page.getByRole("img", { name: title, exact: true });
   await expect(hero).toHaveAttribute("src", CLOUDINARY_SRC);
@@ -81,7 +98,7 @@ test("お題を見て描写し、生成して公開され、別のユーザー�
 
   // 比較ビュー
   await page.getByRole("link", { name: "お題と見比べる" }).click();
-  await expect(page).toHaveURL(new RegExp(`^${APP_BASE_URL}/attempts/\\d+$`));
+  await expect(page).toHaveURL(new RegExp(`^${escapeRegExp(APP_BASE_URL)}/attempts/\\d+$`));
   const attemptUrl = page.url();
 
   const original = page.getByRole("img", { name: title, exact: true });

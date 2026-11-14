@@ -167,7 +167,7 @@ jobs:
     # ローカルの E2E（e2e/scripts/run-local.sh の backend-e2e）と同じく、Rails は development 環境で
     # 動かし、Solid Queue は Puma の中で動かす。
     #
-    # CLOUDINARY_URL（本番と共用のアカウントの管理キー）はジョブ全体の env に置かず、Rails の起動と
+    # CLOUDINARY_URL（本番と同じ Cloudinary アカウントの、CI 専用の管理キー）はジョブ全体の env に置かず、Rails の起動と
     # 後片付けの手順にだけ渡す。npm ci の postinstall・next build などの手順の環境変数には入らない。
     # ただし、これでキーが依存のコードから隔離されるわけではない。バックグラウンドで動く Rails の
     # 環境変数は、同じユーザーのプロセスから /proc/<pid>/environ で読める。Rails の起動後も
@@ -175,7 +175,9 @@ jobs:
     # バックグラウンドに残したプロセスがあれば、それも動き続ける。手順の並び順では防げない。
     # そのため Secrets の CLOUDINARY_URL（Actions と Dependabot の両方）には、本番（Render）とは別の
     # CI 専用キーを入れている。漏れたときはそのキーだけを無効にすれば、本番のキーは影響を受けない。
-    # ただし権限は全権限（Master Admin）のままで、扱えるフォルダは絞っていない。
+    # ただし権限は全権限（Master Admin）のままで、扱えるフォルダは絞っていない。漏れたキーを無効にする
+    # までの間は、同じアカウントにある本番の画像（kotoe/production/）も読み書き・削除されうる。
+    # 守れるのは本番のキーであって、本番の画像ではない。
     env:
       RAILS_ENV: development
       TZ: Asia/Tokyo
@@ -270,7 +272,8 @@ jobs:
       # 残るリスク：Playwright（テストランナーとブラウザ）と、先に起動した next start は、Rails と
       # 同じユーザーで動くので Rails の環境変数（CLOUDINARY_URL）を読める。依存の更新（Dependabot の PR を
       # 含む）で悪意あるコードが入れば、ここからキーが漏れうる。漏れるのは CI 専用キー（ジョブの env の
-      # コメント参照）なので、そのキーを無効にすれば本番のキーは守れる。
+      # コメント参照）なので、そのキーを無効にすれば本番のキーは守れる。無効にするまでの間は、本番の画像も
+      # 操作されうる（同じアカウントで、フォルダを絞っていないため）。
       - name: E2E（playwright）
         working-directory: e2e
         run: npm test

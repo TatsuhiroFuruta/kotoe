@@ -187,17 +187,26 @@ test("ログイン済みで /login・/signup を開くと戻り先へ送られ�
   const user = await createUser(request);
   await loginViaUi(page, user);
 
+  // 着地先の中身まで確かめる（URL だけでなく、そのページが描かれていること）。
+  const topHeading = page.getByRole("heading", { level: 1, name: "言葉だけで、その絵を伝えられますか。" });
+  const mypageHeading = page.getByRole("heading", { level: 1, name: user.name });
+
   await page.goto("/login");
   await expect(page).toHaveURL(`${APP_BASE_URL}/`);
-  await expect(page.getByRole("heading", { level: 1, name: "ログイン" })).toHaveCount(0);
+  await expect(topHeading).toBeVisible();
 
   await page.goto("/login?next=%2Fmypage");
   await expect(page).toHaveURL(`${APP_BASE_URL}/mypage`);
-  await expect(page.getByRole("heading", { level: 1, name: user.name })).toBeVisible();
+  await expect(mypageHeading).toBeVisible();
 
   await page.goto("/signup");
   await expect(page).toHaveURL(`${APP_BASE_URL}/`);
-  await expect(page.getByRole("heading", { level: 1, name: "新規登録" })).toHaveCount(0);
+  await expect(topHeading).toBeVisible();
+
+  // /signup も ?next= を読んで戻り先へ送る（signup/page.tsx の resolveNextPath）。
+  await page.goto("/signup?next=%2Fmypage");
+  await expect(page).toHaveURL(`${APP_BASE_URL}/mypage`);
+  await expect(mypageHeading).toBeVisible();
 });
 
 for (const next of ["//evil.example", "%2F%09%2Fevil.example"]) {
