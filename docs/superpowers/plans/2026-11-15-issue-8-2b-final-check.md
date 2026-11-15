@@ -54,7 +54,7 @@ Expected: どちらも main の最新（`e7c16b3` かそれ以降）。違えば
 
 - [ ] **Step 3: Render を起こす（コアループの手順 1）**
 
-Run: `curl -s -w "\n%{http_code} %{time_total}\n" https://kotoe-api.onrender.com/up`
+Run: `curl -s -w "\n%{http_code} %{time_total}\n" https://kotoe-api.onrender.com/api/health`（`/up` は Rails 既定の HTML を返すだけで DB を見ない）
 Expected: `{"status":"ok","database":"ok"}` と `200`。時間をメモする。
 
 ### Task 2: 本番でコアループを 1 周する

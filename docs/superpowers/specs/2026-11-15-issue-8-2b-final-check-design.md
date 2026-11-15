@@ -51,7 +51,7 @@
 
 | # | 操作 | 見ること（つなぎ目） |
 |---|---|---|
-| 1 | `/up` を叩いて Render を起こす | `{"status":"ok","database":"ok"}`（Neon のプール接続） |
+| 1 | `/api/health` を叩いて Render を起こす | `{"status":"ok","database":"ok"}`（Neon のプール接続） |
 | 2 | 登録 → ログイン状態になる | Vercel↔Render の CORS、JWT の受け渡し |
 | 3 | お題を投稿（画像＋タイトル） | Rails → Cloudinary（`kotoe/production/posts/`）へのアップロード、配信画像の表示 |
 | 4 | お題の詳細で描写を書き「保存」 | 下書き（`draft`）の保存 |
