@@ -194,9 +194,10 @@ curl -si -X POST "$API/api/auth/sign_in" \
 |---|---|
 | `smoke@kotoe.test` | 8-2a（本番スケルトン疎通） |
 | `smoke-3-1@example.com` | 3-1（Cloudinary 疎通） |
-| `kotoe-8-2b-202611151629@example.com` | 8-2b（コアループの確認）。お題・挑戦を持つ（どちらも論理削除済み） |
+| 名前「8-2b確認」のアカウント | 8-2b（コアループの確認）。お題・挑戦を持つ（どちらも論理削除済み） |
 
-消すときの手順は下のとおり（上の 2 件だけ。8-2b のアカウントは投稿・挑戦を持つので、物理削除しない）。
+消すときの手順は下のとおり。**対象は `smoke@kotoe.test`・`smoke-3-1@example.com` の 2 件だけ**。
+8-2b のアカウントは投稿・挑戦を持つので物理削除しない（外部キーで失敗する。消すなら discard）。
 **Render の Shell / ワンオフジョブは free プランでは使えない**ため、Neon に直接つないで削除する。
 接続文字列は Render の `DATABASE_URL` と同じもの（Neon ダッシュボードでも確認できる）。
 
@@ -205,7 +206,7 @@ psql "<Neon のプール接続文字列>" \
   -c "DELETE FROM users WHERE email IN ('smoke@kotoe.test', 'smoke-3-1@example.com');"
 ```
 
-`users` は他テーブルから参照されうるが、これらのユーザーは投稿も挑戦も作っていないため
+`users` は他テーブルから参照されうるが、この 2 件のユーザーは投稿も挑戦も作っていないため
 物理削除して問題ない（通常のユーザーは discard を使うこと）。
 
 Cloudinary 側にも疎通確認で上げた 1x1 の PNG が `kotoe/production/posts/` に残っている（これも残している）。
