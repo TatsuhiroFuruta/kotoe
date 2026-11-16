@@ -187,13 +187,18 @@ curl -si -X POST "$API/api/auth/sign_in" \
 
 ## スモークユーザーの cleanup
 
-疎通確認で作ったユーザーが本番 DB に残っている。**未処理**：
+疎通確認で作ったユーザーが本番 DB に残っている。**残すことにした**（2026-11-15、8-2b）。
+試験的に使ってもらう中で、一覧などに出て紛らわしいと分かったら見直す。
 
 | メール | 作成した issue |
 |---|---|
 | `smoke@kotoe.test` | 8-2a（本番スケルトン疎通） |
 | `smoke-3-1@example.com` | 3-1（Cloudinary 疎通） |
+| `kotoe-8-2b-202611151629@example.com` | 8-2b（コアループの確認）。お題・挑戦を持つ（どちらも論理削除済み） |
 
+消すときの手順は下のとおり。**対象は `smoke@kotoe.test`・`smoke-3-1@example.com` の 2 件だけ**。
+8-2b のアカウントは物理削除しない（CLAUDE.md の原則。投稿・挑戦が参照しているので、外部キーで失敗もする）。
+`User` には論理削除がまだ無いので、そのまま残す。
 **Render の Shell / ワンオフジョブは free プランでは使えない**ため、Neon に直接つないで削除する。
 接続文字列は Render の `DATABASE_URL` と同じもの（Neon ダッシュボードでも確認できる）。
 
@@ -202,11 +207,13 @@ psql "<Neon のプール接続文字列>" \
   -c "DELETE FROM users WHERE email IN ('smoke@kotoe.test', 'smoke-3-1@example.com');"
 ```
 
-`users` は他テーブルから参照されうるが、これらのユーザーは投稿も挑戦も作っていないため
-物理削除して問題ない（通常のユーザーは discard を使うこと）。
+`users` は posts・attempts・likes・favorites・reports から参照される。消す前に、この 2 件がどれからも参照されていないことを
+`SELECT` で確かめる（参照があると外部キーで失敗する）。この 2 件のユーザーは投稿も挑戦も作っていないため
+物理削除して問題ない（通常のユーザーは物理削除しない。`User` の論理削除は未実装）。
 
-Cloudinary 側にも疎通確認で上げた 1x1 の PNG が `kotoe/production/posts/` に残る。
-Media Library から削除する。
+Cloudinary 側にも疎通確認で上げた 1x1 の PNG が `kotoe/production/posts/` に残っている（これも残している）。
+8-2b の確認で使ったお題の画像と生成画像の 2 枚も、`kotoe/production/` 配下に残している（お題・挑戦は論理削除済み）。
+消すときは Media Library から削除する。
 
 ## 運用上の注意
 
@@ -264,6 +271,6 @@ Media Library から削除する。
       併せて設定する（マスターにアプリを読ませないと同じ落ち方をする）。
 - **ジョブテーブルはアプリと同じ DB にある**：マイグレーションは通常どおり
   `backend/bin/render-build.sh` の `db:migrate` で適用される。追加の DB や環境変数は要らない。
-- **範囲外**：カスタムドメイン/DNS（8-2b）、Cloudinary（3-1）、画像生成キー（4-3）。
+- **範囲外**：カスタムドメイン/DNS（8-12）、Cloudinary（3-1）、画像生成キー（4-3）。
   スケルトンでは `config.active_storage.service = :local` のまま。これらの本番固有の統合は、
   その機能を実装した回にその都度スモーク確認して積み増す。
