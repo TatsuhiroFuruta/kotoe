@@ -18,7 +18,7 @@
 - 生成は 2 アカウントで 3 回ずつ、**1 回ずつ順番に**。公開まで終わってから約 30 秒おいて次へ進む。お題は既存のものを使う
 - 記録・会話・コミットに、トークンや個人情報（メールアドレス）を出さない。`/api/health` は認証不要なので Authorization は送らない
 - Render の環境変数は変えない（再起動が入るため）
-- コミットは `Co-Authored-By:` で止める。PR 本文は `Closes #165`。プッシュ前に `/code-review high` を通す
+- コミットは `Co-Authored-By:` で止める。PR 本文は `Closes #165`（実施時に変更：1 回目の計測の PR は `Refs #165`）。プッシュ前に `/code-review high` を通す
 
 ## Review Focus
 
@@ -105,7 +105,7 @@ Expected: 総行数と、エラー行の数（0 が望ましい。0 でなけれ
 
 **Files:**
 - Modify: `docs/README.md`（「本物の画像生成での実測」の節の後、「Cloudinary の無料枠の数え方」の前に新しい節を足す）
-- Modify: `docs/issues_backlog.md`（8-13 の見出しの 🔵 を 🟢 にする）
+- Modify: `docs/issues_backlog.md`（8-13 の見出しに ✅ を付ける。🟢/🔵 は優先度で完了ではない。実施時に変更：24 時間の計測を終えるまで付けない）
 
 - [ ] **Step 1: 節を足す**
 
@@ -134,4 +134,4 @@ git commit -m "docs: 8-13 生成を重ねた後のメモリを実測して READM
 
 - [ ] **Step 5: レビューを通してから PR を作る**
 
-`/code-review high` を通す → プッシュ → PR を作る（本文に `Closes #165`、表の要約、8-6 への一言）。
+`/code-review high` を通す → プッシュ → PR を作る（本文に `Closes #165`（実施時に変更：1 回目は `Refs #165`）、表の要約、8-6 への一言）。
