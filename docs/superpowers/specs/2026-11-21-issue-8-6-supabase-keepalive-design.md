@@ -70,7 +70,7 @@ Neon が使われていない無料プロジェクトを自動で削除する方
 ## 構成（移した後）
 
 ```
-cron-job.org ──10 分おき──▶ Render /up（DB に触れない）
+GAS ──10 分おき──▶ Render /up（DB に触れない）
                               │ 起き続ける
                               ▼
                         Puma + Solid Queue ──Transaction pooler(6543)──▶ Supabase（Singapore）
@@ -83,13 +83,13 @@ Neon ──（何もしない。戻り先として残す）
 ### 0. 進め方（PR と切り替えの順番）（Claude の判断）
 
 schedule のワークフローは main に入って初めて動く。切り替えより先に動くと、Neon 構成の Render を毎晩再デプロイしたり、
-空の Supabase を「成功」としてバックアップしたりする。cron-job.org を先に登録すると「Neon のままキープアライブ」になる（README で禁止）。
+空の Supabase を「成功」としてバックアップしたりする。GAS のトリガーを先に有効にすると「Neon のままキープアライブ」になる（README で禁止）。
 
 1. **PR 1（`Refs #137`）**：ワークフロー 2 本・手順書（`docs/deployment.md`）・README / CLAUDE.md の更新。
    ワークフローは **リポジトリ変数 `KOTOE_DB` が `supabase` のときだけ動く**ようにする（未設定なら何もせず成功で終わる）。`workflow_dispatch` も付ける。
    README などは「切り替えた後の構成」として書く（マージから切り替えまでの数日のずれは許容する）
 2. PR 1 をマージ（Render は再デプロイされるが Neon のまま。ワークフローは `KOTOE_DB` 未設定なので動かない）
-3. **切り替え当日**：下の「移行の手順」→ `KOTOE_DB=supabase` を設定 → 2 本を `workflow_dispatch` で 1 回ずつ流して成功を確かめる → cron-job.org を登録
+3. **切り替え当日**：下の「移行の手順」→ `KOTOE_DB=supabase` を設定 → 2 本を `workflow_dispatch` で 1 回ずつ流して成功を確かめる → GAS のトリガーを有効にする
 4. **PR 2（`Closes #137`）**：1 週間の実測（egress・anon・ビルド時間・バックアップの成功）と月の見込みを README と backlog に追記
 
 B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは止まる。
@@ -121,11 +121,16 @@ B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは
 
 ### 3. キープアライブ
 
-- **cron-job.org** から `https://kotoe-api.onrender.com/up` を **10 分おき**に GET する（15 分未満であればよく、取りこぼし 1 回まで耐える間隔）
+- **GAS（Google Apps Script）** の時間主導型トリガーで、`https://kotoe-api.onrender.com/up` を **10 分おき**に GET する
+  （ユーザーが選んだ、2026-11-21。外部サービスのアカウントを増やさず、ユーザーの Google アカウントで済むため。cron-job.org も候補だった）
+  - スクリプトは `UrlFetchApp.fetch(url, { muteHttpExceptions: true })` の数行。`docs/deployment.md` に載せる
+  - トリガーの「10 分おき」は数分ずれることがあるが、15 分未満なら眠らない。1 回飛ぶと間が 20 分になって一度眠り、次に開いた人が 1 回コールドスタートを踏む。これは許容する
+  - 無料アカウントの上限（URL の取得・トリガーの合計実行時間）に 1 日 144 回が収まることを、実装時に Google の公式ページで確かめる
+  - 失敗時のメール通知を有効にする
   - `/up` は DB に触れない（`/api/health` は `SELECT 1` する）。Supabase では DB に触れても困らないが、余計な egress を増やさない
-  - URL に秘密は含まれないので、外部サービスに置いてよい
+  - URL に秘密は含まれないので、外部に置いてよい
   - GitHub Actions の schedule は数十分遅れることがあり、10 分間隔の用途には使わない
-- アカウントはユーザーが作る（外部サービス）
+- GAS のプロジェクトとトリガーはユーザーが作る（手順は書く）
 
 ### 4. 毎晩の再起動（メモリ対策）
 
@@ -188,7 +193,7 @@ Render のログは保持期間の公式な記載が見つからない（第三�
 - **B に戻す手順**：2 の逆（Supabase から書き出し → Neon に流し込み → 件数を比べる → `DATABASE_URL` を Neon のプール接続に戻す）。
   **流し込む前に、Neon で今の main からブランチ（例：`pre-supabase-2026-xx-xx`）を切って移行前のデータを残す**（Claude の判断。無料プランでもブランチは作れる）。
   そのうえで Neon の main の `public` の Kotoe のテーブルを消して流し込む。手元の移行時のダンプ（`~/kotoe-migration/`）は二重の保険
-  そのうえで cron-job.org の時間帯を絞り、毎晩の再起動のワークフローを止める（B では毎晩眠るので不要）。
+  そのうえで GAS のトリガーを時間帯で絞り（スクリプトで JST の時刻を見て、時間外は何もしない）、毎晩の再起動のワークフローを止める（B では毎晩眠るので不要）。
   バックアップのワークフローも止める（Neon は自前で履歴を持つ）
 
 ## 文書の更新
@@ -202,7 +207,7 @@ Render のログは保持期間の公式な記載が見つからない（第三�
 
 ## ユーザーが行うこと
 
-- cron-job.org のアカウント作成とジョブの登録（手順は書く）
+- GAS のプロジェクト作成とトリガーの設定（手順は書く）
 - GitHub Secrets の登録：`RENDER_DEPLOY_HOOK_URL`、バックアップ用の接続文字列（`kotoe_backup`）、`gpg` のパスフレーズ。リポジトリ変数 `KOTOE_DB`
 - `backend/.env.spike` に `NEON_DIRECT_URL` を足す（移行の直前）
 - Render のダッシュボードでの Suspend・Resume・環境変数の差し替え（作業日時を一緒に決める）
