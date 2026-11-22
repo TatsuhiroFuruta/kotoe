@@ -1,6 +1,8 @@
-# デプロイ手順（本番：Render / Vercel / Neon）
+# デプロイ手順（本番：Render / Vercel / Supabase）
 
-本番は **Render（Rails・ネイティブ Ruby）/ Vercel（Next.js）/ Neon（Postgres）** で動かす。
+本番は **Render（Rails・ネイティブ Ruby）/ Vercel（Next.js）/ Supabase（Postgres）** で動かす。
+8-2a〜8-2b は Neon で立ち上げ、issue 8-6 で Supabase に移した（下の「Supabase と 24 時間キープアライブ」）。
+下の「デプロイ順序」は 8-2a 当時の Neon での手順として残している。
 この文書は issue 8-2a で立ち上げる**本番スケルトン**の手順。以降のマイルストーンでも
 環境変数の追加や再デプロイの参照先として使う。
 
@@ -19,7 +21,7 @@
 | `RAILS_MAX_THREADS` | `render.yaml` | `3`（puma スレッド数） |
 | `JWT_SECRET_KEY` | Render 自動生成（`generateValue`） | devise-jwt の署名鍵。サービス再作成で値が変わり既存トークンは無効化される |
 | `RAILS_MASTER_KEY` | **手入力** | `backend/config/master.key` の中身（credentials 復号鍵） |
-| `DATABASE_URL` | **手入力** | Neon の**プール接続文字列**（`-pooler` 付きホスト） |
+| `DATABASE_URL` | **手入力** | Supabase の **Transaction pooler**（ポート 6543、`pooler.supabase.com`）。8-6 より前は Neon のプール接続文字列（`-pooler` 付きホスト） |
 | `CORS_ALLOWED_ORIGINS` | **手入力** | Vercel 本番URL（完全一致、カンマ区切り可） |
 | `CORS_ALLOWED_ORIGIN_REGEX` | **手入力** | Vercel プレビュー用。**チーム slug を必ず含める**（`\A \z` は実装側が付けるので書かない） |
 | `CLOUDINARY_URL` | **手入力** | Cloudinary の API Environment variable。api_secret を含むためサーバー専用。未設定だと boot で raise する |
@@ -142,9 +144,9 @@ Render は production で許可オリジン未設定だと boot で raise する
 ```bash
 API="https://kotoe-api.onrender.com"   # ← Render の URL
 
-# 1. health（Neon 接続まで含めて確認）
+# 1. health（DB 接続まで含めて確認）
 curl -s "$API/api/health"
-# 期待: {"status":"ok","database":"ok"}
+# 期待: {"status":"ok","database":"ok","memory":{...}}
 
 # 2. スモークユーザー作成（既に存在すれば 422。name 必須）
 curl -s -o /dev/null -w "sign_up=%{http_code}\n" -X POST "$API/api/auth/sign_up" \
@@ -199,11 +201,11 @@ curl -si -X POST "$API/api/auth/sign_in" \
 消すときの手順は下のとおり。**対象は `smoke@kotoe.test`・`smoke-3-1@example.com` の 2 件だけ**。
 8-2b のアカウントは物理削除しない（CLAUDE.md の原則。投稿・挑戦が参照しているので、外部キーで失敗もする）。
 `User` には論理削除がまだ無いので、そのまま残す。
-**Render の Shell / ワンオフジョブは free プランでは使えない**ため、Neon に直接つないで削除する。
-接続文字列は Render の `DATABASE_URL` と同じもの（Neon ダッシュボードでも確認できる）。
+**Render の Shell / ワンオフジョブは free プランでは使えない**ため、DB に直接つないで削除する。
+接続文字列は Supabase の **Session pooler**（ポート 5432、`pooler.supabase.com`。Connect ボタンから取れる）。
 
 ```bash
-psql "<Neon のプール接続文字列>" \
+psql "<Supabase の Session pooler の接続文字列>" \
   -c "DELETE FROM users WHERE email IN ('smoke@kotoe.test', 'smoke-3-1@example.com');"
 ```
 
@@ -215,16 +217,217 @@ Cloudinary 側にも疎通確認で上げた 1x1 の PNG が `kotoe/production/p
 8-2b の確認で使ったお題の画像と生成画像の 2 枚も、`kotoe/production/` 配下に残している（お題・挑戦は論理削除済み）。
 消すときは Media Library から削除する。
 
+## Supabase と 24 時間キープアライブ（issue 8-6）
+
+設計：`docs/superpowers/specs/2026-11-21-issue-8-6-supabase-keepalive-design.md`
+
+```
+GAS ──10 分おき──▶ Render /up（DB に触れない）
+                     │ 起き続ける
+                     ▼
+               Puma + Solid Queue ──Transaction pooler(6543)──▶ Supabase（Singapore）
+                     ▲
+GitHub Actions（04:00 JST）── /api/health を記録 → Deploy Hook で再デプロイ（メモリのリセット）
+GitHub Actions（03:00 JST）── Session pooler で pg_dump → gpg で暗号化 → artifact（7 日）
+Neon ──（何もしない。B に戻すときの受け皿として残す）
+```
+
+### 接続文字列の使い分け
+
+| 用途 | 種類 | ホスト / ポート |
+|---|---|---|
+| Render の `DATABASE_URL` | Transaction pooler | `aws-1-ap-southeast-1.pooler.supabase.com:6543` |
+| `pg_dump` / `pg_restore` / 手動の `psql` | Session pooler | `aws-1-ap-southeast-1.pooler.supabase.com:5432` |
+| （使わない） | Direct connection | `db.<参照>.supabase.co:5432`。IPv6 専用で、Render からも手元からもつながらない |
+
+ユーザー名は `postgres.<プロジェクト参照>` の形（プーラー経由のため）。Supabase のプロジェクトは
+Data API・新しいテーブルへの API 権限の自動付与・RLS の自動有効化をすべて無効にして作った。
+**Data API は必ず無効のままにする**（Kotoe のテーブルは RLS が無く、有効にすると公開鍵で読み書きされうる）。
+
+### GitHub の Secrets と変数
+
+Settings → Secrets and variables → Actions。
+
+| 名前 | 種類 | 中身 | 使うワークフロー |
+|---|---|---|---|
+| `KOTOE_DB` | 変数（Variables） | `supabase`。**未設定のあいだ、下の 2 本は何もしない（skipped）** | 両方 |
+| `RENDER_DEPLOY_HOOK_URL` | Secret | Render の `kotoe-api` → Settings → Deploy Hook の URL。知っていれば誰でもデプロイを起こせる | `nightly-restart.yml` |
+| `SUPABASE_BACKUP_URL` | Secret | `kotoe_backup` の Session pooler の接続文字列 | `db-backup.yml` |
+| `BACKUP_PASSPHRASE` | Secret | バックアップの暗号化のパスフレーズ。**リポジトリの外（パスワードマネージャーなど）にも控える。無くすと復元できない** | `db-backup.yml` |
+
+公開リポジトリでは、**60 日間コミットが無いと schedule のワークフローが無効化される**。開発が止まる時期は、
+Actions の画面で 2 本が有効なままかを確かめる。
+
+### バックアップ用の読み取り専用ロール `kotoe_backup`
+
+公開リポジトリの Secrets に `postgres` の接続文字列を置かないため、読むことしかできないロールで接続する。
+Session pooler に `postgres` で接続して流す（パスワードは `openssl rand -hex 24` などで作る）。
+
+```sql
+CREATE ROLE kotoe_backup LOGIN PASSWORD '<パスワード>';
+GRANT USAGE ON SCHEMA public TO kotoe_backup;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO kotoe_backup;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO kotoe_backup;
+-- postgres がこの後に作るテーブル・シーケンスにも SELECT を付ける
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO kotoe_backup;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_backup;
+```
+
+接続文字列のユーザー名は `kotoe_backup.<プロジェクト参照>`。`select count(*) from users` が返り、
+`insert into users default values` が `permission denied` になることを確かめる。
+移行で Kotoe のテーブルを作り直したら、上の `GRANT SELECT ON ALL ...` の 2 行を流し直す
+（`ALTER DEFAULT PRIVILEGES` が効くのは `postgres` が作ったものだけなので、念のため）。
+
+### Neon から Supabase への移行（2026-xx-xx 実施）
+
+止める時間の目安は数分。`pg_dump` / `pg_restore` は **PostgreSQL 17 のクライアント**（`postgres:17` イメージ、
+または開発コンテナ）で流す。接続文字列は `backend/.env.spike`（git 管理外）に置き、表示しない。
+
+1. **Neon のサーバーバージョンが 17 以下か確かめる**（`select version()`）。18 以上なら 17 の `pg_dump` では書き出せない
+2. **生成中が無いことを確かめる**（Neon）：
+   ```sql
+   select count(*) from attempts where status = 'generating';
+   select (select count(*) from solid_queue_ready_executions)
+        + (select count(*) from solid_queue_claimed_executions)
+        + (select count(*) from solid_queue_scheduled_executions);
+   ```
+   どちらも 0 になるまで待つ
+3. **Render のダッシュボードで `kotoe-api` を Suspend する**（フロントは数分エラー表示になる）
+4. **Neon から書き出す**（Neon の**プールしない**接続文字列。ダンプはリポジトリの外の `~/kotoe-migration/`、権限 700）：
+   ```bash
+   pg_dump -Fc -n public --no-owner --no-privileges -f ~/kotoe-migration/neon-<日付>.dump "$NEON_DIRECT_URL"
+   ```
+5. **Supabase の受け皿を空にする**（Session pooler。`public` スキーマ自体は消さない）：
+   ```sql
+   DROP TABLE IF EXISTS attempts, favorites, jwt_denylist, likes, posts, reports, users,
+     solid_queue_blocked_executions, solid_queue_claimed_executions, solid_queue_failed_executions,
+     solid_queue_jobs, solid_queue_pauses, solid_queue_processes, solid_queue_ready_executions,
+     solid_queue_recurring_executions, solid_queue_recurring_tasks, solid_queue_scheduled_executions,
+     solid_queue_semaphores, ar_internal_metadata, schema_migrations CASCADE;
+   ```
+6. **Supabase に流し込む**。`-n public` のダンプは `CREATE SCHEMA public` を含み、既に `public` がある DB では
+   その 1 行がエラーになる。一覧からその行を除いて復元すると、本当のエラーだけで止まる：
+   ```bash
+   pg_restore -l neon-<日付>.dump | grep -v " SCHEMA - public " > restore.list
+   pg_restore --no-owner --no-privileges --exit-on-error -L restore.list -d "$SUPABASE_SESSION_URL" neon-<日付>.dump
+   ```
+   続けて `kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直す
+7. **件数を比べる**。Kotoe のテーブルは 18（＋ `ar_internal_metadata`・`schema_migrations` で 20）。
+   同じ SQL を Neon と Supabase の両方に流し、全部一致することを確かめる。シーケンスも 1 つ比べる（`select last_value from users_id_seq`）
+8. **Render の `DATABASE_URL` を Supabase の Transaction pooler に差し替えて Resume する**
+9. **確かめる**：`/api/health` が `"database":"ok"`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
+10. **`KOTOE_DB=supabase` を設定し、2 本のワークフローを Actions の画面から手動実行（Run workflow）する**。
+    バックアップの artifact ができ、再起動のログに `memory=` の行が出て、Render の Events に再デプロイが出ること。
+    **そのビルドにかかった時間を記録する**（Hobby のビルド枠は月 500 分。毎晩なら 30 回分）
+11. **最後に GAS のトリガーを有効にする**（下）。**先に有効にしない**（Neon のまま起こし続けると、月の途中で Neon の無料枠が尽きる）
+12. Neon は消さない（B に戻すときの受け皿）
+
+### キープアライブ（GAS）
+
+1. <https://script.google.com> で新しいプロジェクトを作る（例：`kotoe-keepalive`）
+2. 次を貼って保存する：
+   ```javascript
+   // Render の無料 Web は 15 分アクセスが無いと眠る。10 分おきに /up（DB に触れない）を叩いて起こしておく（issue 8-6）
+   function keepAlive() {
+     UrlFetchApp.fetch("https://kotoe-api.onrender.com/up", { muteHttpExceptions: true });
+   }
+   ```
+3. 関数 `keepAlive` を一度手で実行し、外部への接続の許可を承認する
+4. 左の「トリガー」→ 追加：関数 `keepAlive`、イベントのソース「時間主導型」、タイプ「分ベースのタイマー」、間隔「10 分おき」。
+   エラー通知は「毎日通知を受け取る」など
+5. 無料（gmail.com）アカウントの上限：トリガーの合計実行時間 90 分/日、URL の取得 2 万回/日
+   （<https://developers.google.com/apps-script/guides/services/quotas>、2026-11-22 確認）。10 分おきは 1 日 144 回・1 回 1 秒前後で収まる
+
+トリガーの「10 分おき」は数分ずれることがある。1 回飛ぶと間が 20 分になって一度眠り、次に開いた人が 1 回コールドスタートを踏む（許容）。
+
+### 毎晩の再起動とバックアップ
+
+- **再起動**（`.github/workflows/nightly-restart.yml`、04:00 JST）：Render のメモリ（anon）のリセットのため。Supabase のためではない。
+  キープアライブで眠らなくなると、15 分アイドルで眠ることによる自然なリセットが無くなる。
+  ログの `memory=` の行が、その日の再起動直前の値（**anon が 470 MB を超えたら B に戻す**）。
+  ビルド枠（月 500 分）に収まらなければ、cron を `0 19 */2 * *`（2 日に 1 回）にする。Render API の restart は使わない
+- **バックアップ**（`.github/workflows/db-backup.yml`、03:00 JST）：`kotoe_backup` で `pg_dump` → `users` のデータが入っていることを確認 →
+  `gpg` で暗号化 → artifact（7 日）。**公開リポジトリの artifact はログインした誰でも取れるので、平文では置かない**。
+  毎日 DB に触れるので、Supabase の「7 日間無活動で一時停止」の保険も兼ねる
+
+### バックアップからの復元
+
+1. Actions → `DB backup` の実行 → artifact をダウンロードして展開（`kotoe-<日付>.dump.gpg`）
+2. 復号：`gpg --batch --pinentry-mode loopback --passphrase-fd 0 -d -o kotoe.dump kotoe-<日付>.dump.gpg`（パスフレーズを標準入力で渡す）
+3. 流し込む：上の移行の手順 5・6 と同じ（受け皿を空にして、`CREATE SCHEMA public` を除いた一覧で `pg_restore`）。
+   空の DB に戻すだけなら `-L` は要らない
+
+8-6 の実装時に、`postgres:17` で「書き出し → 中身の確認 → 暗号化 → 復号 → 空の DB に復元」まで通し、20 テーブルと件数が戻ることを確かめた。
+
+### 見張りと B に戻る条件
+
+| 見るもの | どこで | 頻度 | B に戻る条件 |
+|---|---|---|---|
+| メモリ（anon） | `Nightly restart` のログの `memory=` | 週 1 回 | anon が 470 MB を超えた日がある |
+| egress | Supabase の Usage（Shared Pooler Egress を含む合計） | 週 1 回 | 月の見込みが 5GB を超える（スパイクの見込みは何もしなくて月 約 1.8〜2.1 GB） |
+| 一時停止 | Supabase のダッシュボード・サイトの表示 | 起きたら気づく | 1 回でも起きる |
+| Render の稼働時間・ビルド時間 | Render の Billing | 月 1 回 | 750h / 500 分に届きそう |
+
+### B（Neon・時間帯を絞る）に戻す
+
+1. 上の移行の手順 2・3 と同じく、生成中が無いことを確かめて Render を Suspend する
+2. **Neon でブランチを切り、移行前のデータを残す**（例：`pre-supabase-<日付>`）
+3. Supabase（Session pooler）から `pg_dump`（移行の手順 4 と同じオプション）
+4. Neon の main の Kotoe のテーブルを消し（移行の手順 5 の `DROP TABLE`）、`CREATE SCHEMA public` を除いた一覧で流し込む
+5. 件数を比べ、Render の `DATABASE_URL` を Neon のプール接続文字列に戻して Resume する
+6. GitHub の変数 `KOTOE_DB` を消す（再起動とバックアップが止まる。B は毎晩眠るので再起動は要らず、Neon は自前で履歴を持つ）
+7. GAS のスクリプトで時間外は何もしないようにする（例：9〜19 時。Neon の実測 約 0.255 CU-h/時で 10h/日 ≒ 77 CU-h/月、無料 100）：
+   ```javascript
+   function keepAlive() {
+     const hour = Number(Utilities.formatDate(new Date(), "Asia/Tokyo", "H"));
+     if (hour < 9 || hour >= 19) return;
+     UrlFetchApp.fetch("https://kotoe-api.onrender.com/up", { muteHttpExceptions: true });
+   }
+   ```
+8. `docs/README.md` の「無料枠の制約」と CLAUDE.md の技術スタックを Neon に戻す
+
+### 利用時間帯を見る
+
+書き込みのある利用（登録・お題・描写・いいね・お気に入り）の時刻を、JST の時ごとに数える。
+**閲覧だけの訪問は数えられない**（記録が無い）。論理削除済みの行も利用の記録として数える。
+期間は `since` の 1 か所で変える。Neon（移行前の分）にも Supabase にも同じ SQL を流せる。
+
+```sql
+WITH since AS (SELECT timestamp '2000-01-01' AS t),  -- created_at は UTC で入っている
+events AS (
+  SELECT 'users' AS tbl, created_at FROM users
+  UNION ALL SELECT 'posts', created_at FROM posts
+  UNION ALL SELECT 'attempts', created_at FROM attempts
+  UNION ALL SELECT 'likes', created_at FROM likes
+  UNION ALL SELECT 'favorites', created_at FROM favorites
+)
+SELECT
+  to_char(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo', 'HH24') AS hour_jst,
+  count(*) FILTER (WHERE tbl = 'users')     AS users,
+  count(*) FILTER (WHERE tbl = 'posts')     AS posts,
+  count(*) FILTER (WHERE tbl = 'attempts')  AS attempts,
+  count(*) FILTER (WHERE tbl = 'likes')     AS likes,
+  count(*) FILTER (WHERE tbl = 'favorites') AS favorites,
+  count(*) AS total
+FROM events, since
+WHERE created_at >= since.t
+GROUP BY 1
+ORDER BY 1;
+```
+
 ## 運用上の注意
 
 - **free プランはスリープする**：無操作で約15分後に spin down し、次アクセスのコールドスタートに
-  数十秒かかる。スモークや E2E の初回が遅く見える点に留意。
-- **Neon はプール接続を使う**：`-pooler` 付きホストの接続文字列を使う（直接接続だと接続数を
-  枯渇させる）。マイグレーションは `backend/bin/render-build.sh` のビルドフェーズで走る。
+  数十秒かかる。8-6 からは GAS のキープアライブで眠らせていない（下の「Supabase と 24 時間キープアライブ」）。
+- **DB はプーラー経由で接続する**：Rails は Supabase の Transaction pooler（6543）。Direct connection は
+  IPv6 専用で Render からもローカルからもつながらない。マイグレーションは `backend/bin/render-build.sh` の
+  ビルドフェーズで走り、Transaction pooler 経由で通ることを確認済み（8-6 のスパイク）。
+  **開発環境から Supabase に `db:migrate` を流さない**（`schema.rb` に Supabase の拡張と `public.` 付きの
+  テーブル名が書き出される。流してしまったら `git restore backend/db/schema.rb`）。
 - **ジョブワーカーは Web プロセスに同居する**：Render の無料プランではバックグラウンド
   ワーカーが別サービス扱いで有料になるため、`plugin :solid_queue` で Puma から fork する
-  （`SOLID_QUEUE_IN_PUMA=true`）。free のスリープでワーカーごと止まるが、これは Neon の
-  オートサスペンドを促す面もあり、無料枠を維持する前提になっている。
+  （`SOLID_QUEUE_IN_PUMA=true`）。Neon のころは、free のスリープでワーカーごと止まることが Neon の
+  オートサスペンドを促し、無料枠を維持する前提になっていた（Supabase は計算時間の上限が無く、この前提は要らない）。
   - メモリ 512 MB は **Puma・supervisor・dispatcher・worker・scheduler の 5 プロセス**で
     分け合う。scheduler は `config/recurring.yml` に `production:` のタスク（完了ジョブの
     毎時掃除）があるため fork される。ローカルには `development:` キーが無いので起動せず、
@@ -249,7 +452,7 @@ Cloudinary 側にも疎通確認で上げた 1x1 の PNG が `kotoe/production/p
     **4-3 で本物の画像生成 API を載せる前に必ず読むこと。**
   - 収まらない場合は `plugin :solid_queue` を外し、`render.yaml` に `type: worker` の
     サービス（$7/月〜）を足して切り出す（アプリのコードは変わらない）。ただし常駐ワーカーは
-    Neon のサスペンドも妨げるため、`docs/README.md` の試算を読んでから判断すること。
+    Neon のサスペンドも妨げる（DB が Neon のとき。8-6 からの Supabase では問題にならない）ため、`docs/README.md` の試算を読んでから判断すること。
   - **デプロイ後、Render ダッシュボードの Environment に `SOLID_QUEUE_IN_PUMA` が
     実在することを目視確認する。** このサービスが Blueprint ではなく手動で作られていた
     場合、`render.yaml` の変更は反映されない。未設定でもデプロイもヘルスチェックも成功し、

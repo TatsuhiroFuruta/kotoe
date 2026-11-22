@@ -50,7 +50,7 @@ Supabase のプロジェクト：Free プラン、`ap-southeast-1`（Singapore�
 | 項目 | 結果 |
 |---|---|
 | Direct connection（5432） | **つながらない**（IPv6 専用。`Network is unreachable`）。Render からも使えない前提にする |
-| Session pooler（5432、`pooler.supabase.com`） | つながる。`db:schema:load` が通った |
+| Session pooler（5432、`pooler.supabase.com`） | つながる。`db:schema:load` が通った（Kotoe のテーブル 18 ＋ 管理用 2） |
 | Transaction pooler（6543） | Solid Queue の 3 プロセスが登録され、PingJob 2 件（即時・5 秒後の予約）が完了、失敗 0。設定の変更なし（プリペアドステートメントも既定のまま） |
 | `db:migrate`（Transaction pooler 経由） | 未適用のマイグレーションを 1 本作って流し、適用された。advisory lock の取り残し 0 |
 | 何もしないときの egress | 10 分ごとに 403 / 472 / 463 / 481 / 410 / 294 KB。**月 約 1.8 GB（平均）〜 2.1 GB（最大の区間）**。無料枠 5GB の約 4 割 |
@@ -108,13 +108,13 @@ B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは
 ユーザーが `NEON_DIRECT_URL`（Neon のプールしない接続文字列）を足して受け渡す。値は表示しない。
 ダンプの保存先はリポジトリの外の `~/kotoe-migration/`（権限 700）。
 
-1. **Supabase の受け皿を空にする。** スパイクで作ったテーブルを消す（`public` の Kotoe のテーブルと `ar_internal_metadata`・`schema_migrations` だけ。`public` スキーマ自体は消さない）
+1. **Supabase の受け皿を空にする。** スパイクで作ったテーブルを消す（`public` の Kotoe のテーブル 18 個と `ar_internal_metadata`・`schema_migrations` だけ。`public` スキーマ自体は消さない）
 2. **生成中が無いことを確かめる。** Neon で `attempts` の `status = generating` が 0 件、Solid Queue の ready・claimed・scheduled が 0 件
 3. **書き込みを止める。** Render のダッシュボードでサービスを Suspend する（フロントは数分エラー表示になる。許容する）
 4. **Neon から書き出す。** Neon の**プールしない**接続文字列で `pg_dump -Fc -n public --no-owner --no-privileges`。Neon のサーバーバージョンが 17 を超えていたら、それ以上の `pg_dump` を使う。
    ダンプは**リポジトリの外**（手元）に保存し、戻すときのために残す
 5. **Supabase に流し込む。** Session pooler で `pg_restore --no-owner --no-privileges -d ...`
-6. **件数を比べる。** 全テーブルの件数を Neon と Supabase で比べ、一致を確かめる。シーケンスの現在値も 1 つ（`users`）比べる
+6. **件数を比べる。** 全 20 テーブルの件数を Neon と Supabase で比べ、一致を確かめる。シーケンスの現在値も 1 つ（`users`）比べる
 7. **切り替える。** Render の `DATABASE_URL` を Supabase の Transaction pooler に差し替え、Resume する
 8. **確かめる。** `/api/health`（DB 接続を含む）、ログイン、一覧・詳細の表示、生成 1 回（即公開まで）、いいね。終わったら生成した挑戦はマイページから削除してよい
 9. **Neon はそのまま残す**（削除しない。プロジェクトも接続文字列も変えない）
