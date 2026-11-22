@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 本番の `DATABASE_URL` は Supabase の **Session pooler（5432、Pool Size 30）**（2026-11-22 に Transaction pooler から変更。設計書の「1. 接続」）。`pg_dump` / `pg_restore` / `psql` は **Session pooler（5432、`pooler.supabase.com`）**。Direct connection は使わない（IPv6 専用）
-- `backend/config/database.yml` などアプリのコードは変えない
+- `backend/config/database.yml` の設定などアプリのコードは変えない（`database.yml` はコメントだけ直す）
 - **開発環境から Supabase に `db:migrate` を流さない**（`schema.rb` に Supabase の拡張と `public.` 付きの名前が書き出される）。もし流して `schema.rb` が変わったら `git restore backend/db/schema.rb`
 - ワークフローは **`vars.KOTOE_DB == 'supabase'` のときだけジョブを実行**する。`workflow_dispatch` も付ける
 - 再起動：毎晩 **04:00 JST（cron `0 19 * * *`）**。ビルド枠（月 500 分）に収まらなければ **2 日に 1 回（`0 19 */2 * *`）**。Render API の restart は使わない

@@ -51,8 +51,8 @@ Supabase のプロジェクト：Free プラン、`ap-southeast-1`（Singapore�
 |---|---|
 | Direct connection（5432） | **つながらない**（IPv6 専用。`Network is unreachable`）。Render からも使えない前提にする |
 | Session pooler（5432、`pooler.supabase.com`） | つながる。`db:schema:load` が通った（Kotoe のテーブル 18 ＋ 管理用 2） |
-| Transaction pooler（6543） | Solid Queue の 3 プロセスが登録され、PingJob 2 件（即時・5 秒後の予約）が完了、失敗 0。設定の変更なし（プリペアドステートメントも既定のまま） |
-| `db:migrate`（Transaction pooler 経由） | 未適用のマイグレーションを 1 本作って流し、適用された。advisory lock の取り残し 0 |
+| Transaction pooler（6543） | **（2026-11-22 に、本番では使わないと決めた。下の「1. 接続」）** Solid Queue の 3 プロセスが登録され、PingJob 2 件（即時・5 秒後の予約）が完了、失敗 0。設定の変更なし（プリペアドステートメントも既定のまま） |
+| `db:migrate`（Transaction pooler 経由） | 未適用のマイグレーションを 1 本作って流し、適用された。advisory lock の取り残し 0（**他に接続が無い状態での結果。後でワーカーと並べた検証では 6 回中 5 回失敗した。エラーの中身は取り損ねたが、同じ時間帯にワーカーが `relation ... does not exist` を出しており、`search_path` の持ち越しと見ている。下の「1. 接続」**） |
 | 何もしないときの egress | 10 分ごとに 403 / 472 / 463 / 481 / 410 / 294 KB。**月 約 1.8 GB（平均）〜 2.1 GB（最大の区間）**。無料枠 5GB の約 4 割 |
 | `pg_dump` | 開発コンテナのものが 17.12 で Supabase と一致 |
 

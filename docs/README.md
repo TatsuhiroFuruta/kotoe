@@ -155,7 +155,7 @@ Sidekiq と比較した結果、**Solid Queue を採用する**（導入は issu
 >
 > | | 上限 | 24 時間起こし続けたとき |
 > |---|---|---|
-> | Supabase（無料） | egress 5GB/月、計算時間の上限なし、7 日無活動で一時停止 | Solid Queue のポーリングだけで egress 月 約 1.8〜2.1 GB（8-6 のスパイク、2026-11-21 に 1 時間計測）。一時停止は、常時のポーリングと毎日のバックアップで起きない見込み |
+> | Supabase（無料） | egress 5GB/月、計算時間の上限なし、7 日無活動で一時停止 | Solid Queue のポーリングだけで egress 月 約 1.8〜2.1 GB（8-6 のスパイク、2026-11-21 に Transaction pooler 経由で 1 時間計測。本番は Session pooler で、切り替え後に Supabase の Usage で確かめる）。一時停止は、常時のポーリングと毎日のバックアップで起きない見込み |
 > | Render（無料 Web） | 750 instance-hours/月・ワークスペース、ビルド 500 分/月 | 730h。毎晩の再デプロイのビルドは 1 回の時間 × 30 回（切り替え時に計測） |
 > | Render のメモリ | 512 MB（anon の天井 約 480 MB） | 24 時間で anon 339 → 443 MB（8-13）。毎晩の再デプロイでリセットする |
 
@@ -557,7 +557,7 @@ Favorite（お気に入り）
 
 ```bash
 # Rails (Render)
-DATABASE_URL=        # Neon のプール接続文字列
+DATABASE_URL=        # 本番は Supabase の Session pooler（5432、pooler.supabase.com）。docs/deployment.md
 RAILS_MASTER_KEY=
 OPENAI_API_KEY=      # 画像生成 API キー（サーバー側のみ）
 CLOUDINARY_URL=
