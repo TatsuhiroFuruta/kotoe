@@ -384,7 +384,7 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 1. Actions → `DB backup` の実行 → artifact をダウンロードして展開（`kotoe-<日付>.dump.gpg`）
 2. 復号：`gpg --batch --pinentry-mode loopback --passphrase-fd 0 -d -o kotoe.dump kotoe-<日付>.dump.gpg`（パスフレーズを標準入力で渡す）
 3. 流し込む：上の移行の手順 5・6 と同じ（受け皿を空にして、`CREATE SCHEMA public` を除いた一覧で `pg_restore`）。
-   空の DB に戻すだけなら `-L` は要らない
+   **新しく作った空の DB でも `-L` は要る**（`public` スキーマは最初からあり、`CREATE SCHEMA public` が衝突して止まる。8-6 の実装時に確認）
 
 8-6 の実装時に、`postgres:17` で「書き出し → 中身の確認 → 暗号化 → 復号 → 空のローカル DB に復元」まで通し、20 テーブルと件数が戻ることを確かめた。
 Supabase への流し込みは上の移行の注記のとおり、開発の DB のダンプで確かめた。
@@ -394,7 +394,8 @@ Supabase への流し込みは上の移行の注記のとおり、開発の DB �
 | 見るもの | どこで | 頻度 | B に戻る条件 |
 |---|---|---|---|
 | メモリ（anon） | `Nightly restart` のログの `memory=` | 週 1 回 | anon が 470 MB を超えた日がある |
-| egress | Supabase の Usage（Shared Pooler Egress を含む合計） | 週 1 回 | 月の見込みが 5GB を超える（スパイクの見込みは何もしなくて月 約 1.8〜2.1 GB） |
+| egress | Supabase の Usage（Shared Pooler Egress を含む合計） | 週 1 回 | 月の見込みが 5GB を超える（スパイクの見込みは何もしなくて月 約 1.8〜2.1 GB。毎日のバックアップも egress に数えられるが、開発の DB（挑戦 118 件）のダンプが約 80 KB なので、月 30 回でも数 MB） |
+| 取り残された生成 | `select id, updated_at from attempts where status = 'generating' and updated_at < now() - interval '10 minutes'` | 週 1 回 | （戻る条件ではない）毎晩の再デプロイで生成が途中で止まると残りうる。見つけたら `failed` にする |
 | 一時停止 | Supabase のダッシュボード・サイトの表示 | 起きたら気づく | 1 回でも起きる |
 | Render の稼働時間・ビルド時間 | Render の Billing | 月 1 回 | 750h / 500 分に届きそう |
 

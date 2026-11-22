@@ -44,7 +44,8 @@ jobs:
         env:
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
-          name="kotoe-$(date -u +%Y%m%d).dump.gpg"
+          # 日付は JST（03:00 JST の実行に、UTC だと前日の日付が付く）
+          name="kotoe-$(TZ=Asia/Tokyo date +%Y%m%d).dump.gpg"
           printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
             --symmetric --cipher-algo AES256 -o "$name" kotoe.dump
           rm -f kotoe.dump
