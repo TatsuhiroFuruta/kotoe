@@ -240,7 +240,18 @@ Neon ──（何もしない。B に戻すときの受け皿として残す）
 | （使わない） | Transaction pooler | `aws-1-ap-southeast-1.pooler.supabase.com:6543`。下の理由 |
 | （使わない） | Direct connection | `db.<参照>.supabase.co:5432`。IPv6 専用で、Render からも手元からもつながらない |
 
-**Transaction pooler（6543）は使わない**（2026-11-22 に変更）。1 つの DB 接続を複数のクライアントで使い回すため、接続ごとの設定（`search_path` など）が別のクライアントに持ち越される。8-6 の実装中、開発環境から Supabase にマイグレーションを流した後、`search_path` が `extensions` だけになった接続が残り、Rails から `public` のテーブルが見えなくなった（`relation ... does not exist`。何が変えたかは未確認で、Rails のスキーマの書き出しを疑っている）。マイグレーションの advisory lock も、取得と解放が別の接続に振られうる。Session pooler は 1 クライアントが 1 接続を占有するので、どちらも起きない。代わりに **Pool Size（同時接続の上限）** に当たりうる。計測（ローカルの Rails を Session pooler に接続、Puma の中で Solid Queue）ではアプリの接続は待機中 4 本・負荷の後 10 本。本番は scheduler の分を足して約 5〜11 本、再デプロイの最中は新旧のインスタンスが重なって 16〜22 本になりうるので、**Pool Size を 15 から 30 に上げた**（DB の `max_connections` は 60。30 にした後、25 本の同時接続を確認）。プロセスごとの接続プールの上限（`RAILS_MAX_THREADS`+2 = 5）から見た**理論上の最大は 1 インスタンス 13〜15 本**で、再デプロイ中に新旧が重なり、どちらも満杯なら 26〜30 本＋ビルドの `db:migrate` 1〜2 本で 30 に届きうる。04:00 の再デプロイでは古い方はほぼ待機中（5 本前後）なので受け入れた。**デプロイが `ConnectionNotEstablished` などの接続エラーで失敗したら、Pool Size を上げる**（`max_connections` 60 のうち、Supabase 自身の機能の分を残す）。Session pooler は、クライアントが切断すると接続の設定をリセットしてから次のクライアントに渡す（2026-11-22 に確認：同じ DB 接続が使い回される中で、`SET search_path TO extensions` をして切断した後、15 回つなぎ直してすべて既定値に戻っていた）Session pooler では、ワーカーを動かしたまま `db:migrate` を 6 回流してすべて成功した
+**Transaction pooler（6543）は使わない**（2026-11-22 に変更）。1 つの DB 接続を複数のクライアントで使い回すため、接続ごとの設定（`search_path` など）が別のクライアントに持ち越される。8-6 の実装中、開発環境から Supabase にマイグレーションを流した後、`search_path` が `extensions` だけになった接続が残り、Rails から `public` のテーブルが見えなくなった（`relation ... does not exist`。何が変えたかは未確認で、Rails のスキーマの書き出しを疑っている）。マイグレーションの advisory lock も、取得と解放が別の接続に振られうる。Session pooler は 1 クライアントが 1 接続を占有するので、どちらも起きない。代わりに **Pool Size（同時接続の上限）** に当たりうる。数字は次のとおりで、**Pool Size は 15 から 30 に上げた**（2026-11-22。DB の `max_connections` は 60。30 にした後、25 本の同時接続を確認）。
+
+| | 1 インスタンス | 再デプロイ中（新旧が重なる） |
+|---|---|---|
+| 計測（ローカルの Rails、Puma の中で Solid Queue、scheduler 無しの 4 プロセス） | 待機中 4 本、負荷の後 10 本 | ― |
+| 本番の見込み（scheduler を足す） | 約 5〜11 本 | 約 10〜22 本 |
+| 接続プールの上限（5 プロセス × `RAILS_MAX_THREADS`+2 = 5） | 25 本 | 50 本 |
+
+30 は**見込みに合わせた値で、上限には足りない**。04:00 の再デプロイでは古い方はほぼ待機中なので受け入れた。ビルドの `db:migrate` は新しいインスタンスが起動する前に終わるので、重なるのは古い方とだけ。Pool Size はロール・DB・モードの組ごとに数えられる（<https://supabase.com/docs/guides/troubleshooting/supavisor-faq-YyP5tI>）ので、バックアップ（`kotoe_backup`）は別枠の見込み（未計測）。手動の `psql` を `postgres` でつなぐと 1 本使う。
+**あふれたときの見え方**：Render のヘルスチェック（`/up`）は DB に触れないので、**デプロイは成功のまま**になる。症状は、その後のリクエストやジョブのログに出る `ActiveRecord::ConnectionNotEstablished` などの接続エラー（Supabase 側の文言は未確認）。見つけたら Pool Size を上げる（`max_connections` 60 のうち、Supabase 自身の機能の分を残す）か、`RAILS_MAX_THREADS` を下げる。
+
+Session pooler は、クライアントが切断すると接続の設定をリセットしてから次のクライアントに渡す（2026-11-22 に確認：同じ DB 接続が使い回される中で、`SET search_path TO extensions` をして切断した後、15 回つなぎ直してすべて既定値に戻っていた）。Session pooler では、ワーカーを動かしたまま `db:migrate` を 6 回流してすべて成功した。
 
 ユーザー名は `postgres.<プロジェクト参照>` の形（プーラー経由のため）。Supabase のプロジェクトは
 Data API・新しいテーブルへの API 権限の自動付与・RLS の自動有効化をすべて無効にして作った。
