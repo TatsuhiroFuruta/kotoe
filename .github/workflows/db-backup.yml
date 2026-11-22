@@ -1,0 +1,60 @@
+name: DB backup
+
+# Supabase（本番 DB）を毎日 pg_dump し、暗号化して artifact に 7 日残す（issue 8-6）。
+#
+# - Supabase の無料プランには自動バックアップが無い（https://supabase.com/docs/guides/platform/backups）
+# - 毎日 DB に触れるので、Supabase の「7 日間無活動で一時停止」の保険も兼ねる
+# - **必ず暗号化してから上げる。** 公開リポジトリの artifact は、GitHub にログインした誰でもダウンロードできる。
+#   ダンプには users のメールアドレスなどが入る
+# - 接続は読み取り専用ロール kotoe_backup（Session pooler）。作り方と復元の手順は docs/deployment.md
+# - リポジトリ変数 KOTOE_DB が supabase のときだけ動く（Neon のまま、空の Supabase を「成功」としてダンプしないため）
+# - 公開リポジトリでは、60 日間コミットが無いと schedule のワークフローが無効化される
+on:
+  schedule:
+    # 03:00 JST（毎晩の再起動 04:00 の前）
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  backup:
+    if: vars.KOTOE_DB == 'supabase'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # pg_dump のメジャーはサーバー（Supabase、17）以上が要る。gpg も入っている
+    container: postgres:17
+    steps:
+      - name: Dump
+        env:
+          SUPABASE_BACKUP_URL: ${{ secrets.SUPABASE_BACKUP_URL }}
+        run: |
+          pg_dump --version
+          pg_dump -Fc -n public --no-owner --no-privileges -f kotoe.dump "$SUPABASE_BACKUP_URL"
+
+      # 中身の無いダンプを「成功」として残さないよう、users が 1 行以上入っていることを確かめてから上げる。
+      # 目次の TABLE DATA の行は 0 行のテーブルでも出るので、COPY の行を数える
+      - name: Check contents
+        run: |
+          rows=$(pg_restore -a -t users -f - kotoe.dump | awk '/^COPY public\.users /{f=1; next} /^\\\.$/{f=0} f{n++} END{print n+0}')
+          echo "users rows in dump: $rows"
+          [ "$rows" -gt 0 ] || { echo "::error::ダンプの users が 0 行です（接続先と kotoe_backup の権限を確認）"; exit 1; }
+
+      - name: Encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          # 日付は JST（03:00 JST の実行に、UTC だと前日の日付が付く）
+          name="kotoe-$(TZ=Asia/Tokyo date +%Y%m%d).dump.gpg"
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 -o "$name" kotoe.dump
+          rm -f kotoe.dump
+          echo "BACKUP_FILE=$name" >> "$GITHUB_ENV"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotoe-db-${{ github.run_id }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 7
+          if-no-files-found: error

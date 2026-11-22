@@ -1,7 +1,7 @@
 # 接続情報は DATABASE_URL 環境変数から取る（値をこのファイルに書かない）。
 #   開発: docker compose が .env.development の値を渡す
-#   本番: Render のダッシュボードに Neon の「プール接続文字列」を設定する
-#         （プール接続を使わないと Neon の接続数を枯渇させる）
+#   本番: Render のダッシュボードに Supabase の Session pooler（ポート 5432、pooler.supabase.com）の接続文字列を設定する
+#         （issue 8-6 で Neon から移した。Direct connection は IPv6 専用で使えない。docs/deployment.md）
 default: &default
   adapter: postgresql
   encoding: unicode

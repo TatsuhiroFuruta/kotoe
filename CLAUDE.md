@@ -25,7 +25,8 @@ kotoe/
 ## 技術スタック
 - バックエンド：Ruby on Rails 8（API モード）
 - フロントエンド：Next.js（App Router）+ TypeScript + TailwindCSS
-- DB：PostgreSQL（本番は Neon、プール接続文字列を使用）
+- DB：PostgreSQL（本番は Supabase の Session pooler（Transaction pooler は接続の設定が持ち越されるので使わない）。issue 8-6 で Neon から移行し、GAS で 24 時間キープアライブ。手順・B に戻す条件は `docs/deployment.md`）
+  - **開発環境から Supabase に `db:migrate` を流さない**（`schema.rb` に Supabase の拡張と `public.` 付きのテーブル名が書き出される）
 - 認証：devise + devise-jwt（Rails が JWT を発行・検証。フロントは Authorization ヘッダで送信）
 - 画像保存：Cloudinary
 - 論理削除：discard
@@ -45,10 +46,10 @@ kotoe/
 
 - **① issue を実装するたび**：ローカル（`docker compose up`）でブラウザから動作確認 ＋ 該当する RSpec / E2E を回す。本番には出さない。
 - **② PR を出すたび**：CI（GitHub Actions）で rubocop / rspec が回る。Vercel の**プレビューURL**（PRごとに自動発行）でフロントの見た目・動作を確認する。
-- **③ マイルストーンが一区切りしたら**：本番（Render + Vercel + Neon）へ反映する。
+- **③ マイルストーンが一区切りしたら**：本番（Render + Vercel + Supabase）へ反映する。
 - **MVP の定義**：ローカルで動くだけでなく、**本番で動く（デプロイ済み）＋ コアループの E2E が green** までを MVP とする（8-1・8-2a/8-2b は 🟢）。
-- **早期スケルトン（8-2a）**：認証・CORS（2-2）が通った直後に、最小構成（health＋認証1本）の本番環境を一度立て、Vercel↔Render の CORS/JWT・Neon プール接続を**差分が小さいうちに**固定する。後段の一括デプロイで原因特定が難しくなるのを防ぐ。以降は Vercel の**プレビューURL**を本番バックエンドに向けて継続検証する。**フル継続"本番"デプロイ（半完成機能を毎回本番へ出す）は行わない**。
-- 本番環境に依存する部分（Vercel↔Render の CORS/JWT、Neon への本番DB接続、画像生成APIの本番キー、カスタムドメインのDNS）は、その統合を実装した回に**最小の疎通確認**をその都度足していく（ローカルでは再現しきれないため）。
+- **早期スケルトン（8-2a）**：認証・CORS（2-2）が通った直後に、最小構成（health＋認証1本）の本番環境を一度立て、Vercel↔Render の CORS/JWT・DB のプール接続を**差分が小さいうちに**固定する。後段の一括デプロイで原因特定が難しくなるのを防ぐ。以降は Vercel の**プレビューURL**を本番バックエンドに向けて継続検証する。**フル継続"本番"デプロイ（半完成機能を毎回本番へ出す）は行わない**。
+- 本番環境に依存する部分（Vercel↔Render の CORS/JWT、本番 DB への接続、画像生成APIの本番キー、カスタムドメインのDNS）は、その統合を実装した回に**最小の疎通確認**をその都度足していく（ローカルでは再現しきれないため）。
 
 ## 依存の脆弱性への対応
 CI の bundler-audit は**脆弱性DBが更新された時点で落ちる**。コードを変えていなくても、ある日突然すべての PR が赤くなる。実装中の issue と切り離して扱う。

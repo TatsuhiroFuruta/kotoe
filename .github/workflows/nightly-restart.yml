@@ -1,0 +1,40 @@
+name: Nightly restart
+
+# 毎晩 Render を再デプロイして、Rails のメモリ（cgroup の anon）をリセットする（issue 8-6）。
+#
+# 目的は Render のメモリで、Supabase のためではない。24 時間キープアライブ（GAS から /up を 10 分おき）で
+# Render が眠らなくなると、15 分アイドルで眠ることによる自然なリセットが無くなる。8-13 の実測では、
+# 生成なしでも anon が 24 時間で 339 → 443 MB（天井 約 480）まで増え、止まっていなかった（docs/README.md）。
+#
+# - リポジトリ変数 KOTOE_DB が supabase のときだけ動く。Neon のまま毎晩再デプロイしないため。
+#   B（Neon・時間帯を絞る）に戻すときは KOTOE_DB を消す
+# - Deploy Hook はビルドを伴う。Render の Hobby のビルド枠は月 500 分。収まらなければ cron を
+#   "0 19 */2 * *"（2 日に 1 回）にする。Render API の restart は使わない（API キーがアカウント全体の権限を持つため）
+# - 公開リポジトリでは、60 日間コミットが無いと schedule のワークフローが無効化される
+on:
+  schedule:
+    # 04:00 JST。GitHub の schedule は数十分遅れることがあるが、この用途では困らない
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  restart:
+    if: vars.KOTOE_DB == 'supabase'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # 再起動の直前のメモリを 1 行で残す（B に戻る条件：anon が 470 MB を超える）。
+      # 取れなくても再起動は止めない（Render が不調な夜こそリセットが要る）。
+      - name: Record memory before restart
+        env:
+          HEALTH_URL: https://kotoe-api.onrender.com/api/health
+        run: |
+          body=$(curl -sS --max-time 120 "$HEALTH_URL") && memory=$(printf '%s' "$body" | jq -ce '.memory') \
+            && echo "memory=$memory" || echo "memory=unavailable"
+
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl -fsS --max-time 60 -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
