@@ -88,7 +88,7 @@
 |---|---|---|
 | フロントエンド | Next.js (App Router) / TypeScript / TailwindCSS | Vercel デプロイ |
 | バックエンド | Ruby on Rails (API) | Render デプロイ |
-| データベース | PostgreSQL (Supabase) | Transaction pooler で接続。issue 8-6 で Neon から移し、24 時間キープアライブ（下の「無料枠の制約」） |
+| データベース | PostgreSQL (Supabase) | Session pooler で接続（Pool Size 30）。issue 8-6 で Neon から移し、24 時間キープアライブ（下の「無料枠の制約」） |
 | 画像ストレージ | Cloudinary | モデレーションアドオンも検討 |
 | **画像生成 API** | OpenAI GPT Image / Google Imagen 4 / Flux 等 | **コア機能（要選定・下記参照）** |
 | 非同期処理 | Solid Queue | 画像生成をジョブ化（**選定理由は下記**） |

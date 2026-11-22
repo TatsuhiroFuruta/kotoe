@@ -73,7 +73,7 @@ Neon が使われていない無料プロジェクトを自動で削除する方
 GAS ──10 分おき──▶ Render /up（DB に触れない）
                               │ 起き続ける
                               ▼
-                        Puma + Solid Queue ──Transaction pooler(6543)──▶ Supabase（Singapore）
+                        Puma + Solid Queue ──Session pooler(5432)──▶ Supabase（Singapore、Pool Size 30）
                               ▲
 GitHub Actions（毎晩）── /api/health を記録 → Deploy Hook で再デプロイ（メモリのリセット）
 GitHub Actions（毎日）── Session pooler 経由で pg_dump → 暗号化 → artifact（一時停止の予防も兼ねる）
@@ -96,7 +96,8 @@ B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは
 
 ### 1. 接続
 
-- Render の `DATABASE_URL` を **Supabase の Transaction pooler（6543）** にする。`database.yml` は変えない
+- Render の `DATABASE_URL` を **Supabase の Session pooler（5432）** にする。`database.yml` の設定は変えない（コメントだけ直す）
+- **Transaction pooler（6543）は使わない**（2026-11-22 に変更）。1 つの DB 接続を複数のクライアントで使い回すため、接続ごとの設定（`search_path` など）が別のクライアントに持ち越される。8-6 の実装中、開発環境から Supabase にマイグレーションを流した後、`search_path` が `extensions` だけになった接続が残り、Rails から `public` のテーブルが見えなくなった（`relation ... does not exist`。何が変えたかは未確認で、Rails のスキーマの書き出しを疑っている）。マイグレーションの advisory lock も、取得と解放が別の接続に振られうる。Session pooler は 1 クライアントが 1 接続を占有するので、どちらも起きない。代わりに **Pool Size（同時接続の上限）** に当たりうる。計測（ローカルの Rails を Session pooler に接続、Puma の中で Solid Queue）ではアプリの接続は待機中 4 本・負荷の後 10 本。本番は scheduler の分を足して約 5〜11 本、再デプロイの最中は新旧のインスタンスが重なって 16〜22 本になりうるので、**Pool Size を 15 から 30 に上げた**（DB の `max_connections` は 60。30 にした後、25 本の同時接続を確認）。Session pooler では、ワーカーを動かしたまま `db:migrate` を 6 回流してすべて成功した（ユーザーと合意、2026-11-22）
 - `pg_dump` / `pg_restore` / 手動の `psql` は **Session pooler（5432、`pooler.supabase.com`）** を使う（Direct は IPv6 専用で使えない）
 - Supabase の Settings で Data API が無効になっていることを移行前に確かめる（スクリーンショット不要、目視でよい）
 
@@ -115,7 +116,7 @@ B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは
    ダンプは**リポジトリの外**（手元）に保存し、戻すときのために残す
 5. **Supabase に流し込む。** Session pooler で `pg_restore --no-owner --no-privileges -d ...`
 6. **件数を比べる。** 全 20 テーブルの件数を Neon と Supabase で比べ、一致を確かめる。シーケンスの現在値も 1 つ（`users`）比べる
-7. **切り替える。** Render の `DATABASE_URL` を Supabase の Transaction pooler に差し替え、Resume する
+7. **切り替える。** Render の `DATABASE_URL` を Supabase の Session pooler に差し替え、Resume する
 8. **確かめる。** `/api/health`（DB 接続を含む）、ログイン、一覧・詳細の表示、生成 1 回（即公開まで）、いいね。終わったら生成した挑戦はマイページから削除してよい
 9. **Neon はそのまま残す**（削除しない。プロジェクトも接続文字列も変えない）
 
@@ -201,7 +202,7 @@ Render のログは保持期間の公式な記載が見つからない（第三�
 - `docs/README.md`：「無料枠の制約」（連動して眠る仕組みは Supabase では成り立たない）、「やってはいけないこと：キープアライブ」（Neon のときの話として残し、今の構成を書く）、
   「DB を Neon 以外に移す場合」（Supabase の行：RAM は共有、Direct は IPv6 専用、egress の実測）
 - `docs/deployment.md`：Neon の手順を Supabase に置き換え、移行・戻し・復元・利用時間帯の SQL を足す
-- `CLAUDE.md`：技術スタックの DB（本番は Supabase、Transaction pooler）。開発から Supabase にマイグレーションを流さない旨
+- `CLAUDE.md`：技術スタックの DB（本番は Supabase、Session pooler）。開発から Supabase にマイグレーションを流さない旨
 - `docs/issues_backlog.md` 8-6：結果と完了
 - `render.yaml`：`DATABASE_URL` のコメントのみ（値は手入力のまま）
 

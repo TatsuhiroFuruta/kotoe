@@ -1274,7 +1274,7 @@ ER図・画面・API設計をもとに、実装を**依存関係の順**にマ�
 - **8-13 の 1 回目の計測（2026-11-17）**：起きたままだと anon が増え続け、直線で延ばすと起動から 12 時間で天井（約 480 MB）付近〜超え（外挿は当てにならない）。原因の候補に Solid Queue のポーリング（キープアライブ中も続く）があり、A・B のどちらにも効く（`docs/README.md`「生成を重ねた後の実測」）
 - **8-13 の 24 時間の計測（2026-11-17〜18）**：生成も画面表示もしない条件で、24 時間起こし続けても anon 443 MB で天井（約 480 MB）に届かなかった。ただし増加は止まっておらず（1 日で十数 MB）、生成の上乗せ（8-13 の 1 回目の計測では、生成 1 回目 +26、以降 1 回 +2〜5 MB）を足すと余裕は数回〜十数回分しかない。**メモリの面では毎晩リセットされる B のほうが余裕があり、A を選ぶなら定期的な再起動などの対策を 8-6 の中で入れる**（`docs/README.md`「24 時間起こし続けた実測」）
 - **方式の決定（2026-11-21）：A（Supabase に移して 24 時間キープアライブ）。** ユーザーの理由：全体の利用時間帯を見たい、戻せるなら A で試したい。設計書 `docs/superpowers/specs/2026-11-21-issue-8-6-supabase-keepalive-design.md`、手順 `docs/deployment.md`「Supabase と 24 時間キープアライブ」
-  - スパイク（ローカルの Rails → Supabase、Singapore）：Transaction pooler で Solid Queue（即時・予約のジョブ）と `db:migrate` が動いた。Direct connection は IPv6 専用でつながらない。何もしないときの egress は月 約 1.8〜2.1 GB（無料 5GB）
+  - スパイク（ローカルの Rails → Supabase、Singapore）：Solid Queue（即時・予約のジョブ）と `db:migrate` が動いた。本番の接続は **Session pooler**（Transaction pooler は `search_path` などの設定が接続をまたいで持ち越され、実装中に実際に `public` のテーブルが見えなくなった。Pool Size を 15 → 30 に上げた）。Direct connection は IPv6 専用でつながらない。何もしないときの egress は月 約 1.8〜2.1 GB（無料 5GB）
   - キープアライブは GAS（10 分おきに `/up`）。メモリ対策に毎晩 04:00 JST の再デプロイ（ビルド枠 月 500 分に収まらなければ 2 日に 1 回）、毎日の暗号化バックアップ（GitHub Actions、`kotoe_backup` ロール）。どちらもリポジトリ変数 `KOTOE_DB=supabase` のときだけ動く
   - B に戻る条件：anon が 470 MB を超える、egress の月の見込みが 5GB を超える、Supabase の一時停止が 1 回でも起きる。移してから 2 週間後と 1 か月後に見直す
   - PR 1（`Refs #137`）でワークフローと文書 → 本番の切り替え → 1 週間の実測を PR 2（`Closes #137`）

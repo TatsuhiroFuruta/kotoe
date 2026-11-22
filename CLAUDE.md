@@ -25,7 +25,7 @@ kotoe/
 ## 技術スタック
 - バックエンド：Ruby on Rails 8（API モード）
 - フロントエンド：Next.js（App Router）+ TypeScript + TailwindCSS
-- DB：PostgreSQL（本番は Supabase の Transaction pooler。issue 8-6 で Neon から移行し、GAS で 24 時間キープアライブ。手順・B に戻す条件は `docs/deployment.md`）
+- DB：PostgreSQL（本番は Supabase の Session pooler（Transaction pooler は接続の設定が持ち越されるので使わない）。issue 8-6 で Neon から移行し、GAS で 24 時間キープアライブ。手順・B に戻す条件は `docs/deployment.md`）
   - **開発環境から Supabase に `db:migrate` を流さない**（`schema.rb` に Supabase の拡張と `public.` 付きのテーブル名が書き出される）
 - 認証：devise + devise-jwt（Rails が JWT を発行・検証。フロントは Authorization ヘッダで送信）
 - 画像保存：Cloudinary

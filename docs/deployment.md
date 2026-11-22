@@ -21,7 +21,7 @@
 | `RAILS_MAX_THREADS` | `render.yaml` | `3`（puma スレッド数） |
 | `JWT_SECRET_KEY` | Render 自動生成（`generateValue`） | devise-jwt の署名鍵。サービス再作成で値が変わり既存トークンは無効化される |
 | `RAILS_MASTER_KEY` | **手入力** | `backend/config/master.key` の中身（credentials 復号鍵） |
-| `DATABASE_URL` | **手入力** | Supabase の **Transaction pooler**（ポート 6543、`pooler.supabase.com`）。8-6 より前は Neon のプール接続文字列（`-pooler` 付きホスト） |
+| `DATABASE_URL` | **手入力** | Supabase の **Session pooler**（ポート 5432、`pooler.supabase.com`）。8-6 より前は Neon のプール接続文字列（`-pooler` 付きホスト） |
 | `CORS_ALLOWED_ORIGINS` | **手入力** | Vercel 本番URL（完全一致、カンマ区切り可） |
 | `CORS_ALLOWED_ORIGIN_REGEX` | **手入力** | Vercel プレビュー用。**チーム slug を必ず含める**（`\A \z` は実装側が付けるので書かない） |
 | `CLOUDINARY_URL` | **手入力** | Cloudinary の API Environment variable。api_secret を含むためサーバー専用。未設定だと boot で raise する |
@@ -225,7 +225,7 @@ Cloudinary 側にも疎通確認で上げた 1x1 の PNG が `kotoe/production/p
 GAS ──10 分おき──▶ Render /up（DB に触れない）
                      │ 起き続ける
                      ▼
-               Puma + Solid Queue ──Transaction pooler(6543)──▶ Supabase（Singapore）
+               Puma + Solid Queue ──Session pooler(5432)──▶ Supabase（Singapore、Pool Size 30）
                      ▲
 GitHub Actions（04:00 JST）── /api/health を記録 → Deploy Hook で再デプロイ（メモリのリセット）
 GitHub Actions（03:00 JST）── Session pooler で pg_dump → gpg で暗号化 → artifact（7 日）
@@ -236,9 +236,11 @@ Neon ──（何もしない。B に戻すときの受け皿として残す）
 
 | 用途 | 種類 | ホスト / ポート |
 |---|---|---|
-| Render の `DATABASE_URL` | Transaction pooler | `aws-1-ap-southeast-1.pooler.supabase.com:6543` |
-| `pg_dump` / `pg_restore` / 手動の `psql` | Session pooler | `aws-1-ap-southeast-1.pooler.supabase.com:5432` |
+| Render の `DATABASE_URL`、`pg_dump` / `pg_restore` / 手動の `psql` | Session pooler | `aws-1-ap-southeast-1.pooler.supabase.com:5432` |
+| （使わない） | Transaction pooler | `aws-1-ap-southeast-1.pooler.supabase.com:6543`。下の理由 |
 | （使わない） | Direct connection | `db.<参照>.supabase.co:5432`。IPv6 専用で、Render からも手元からもつながらない |
+
+**Transaction pooler（6543）は使わない**（2026-11-22 に変更）。1 つの DB 接続を複数のクライアントで使い回すため、接続ごとの設定（`search_path` など）が別のクライアントに持ち越される。8-6 の実装中、開発環境から Supabase にマイグレーションを流した後、`search_path` が `extensions` だけになった接続が残り、Rails から `public` のテーブルが見えなくなった（`relation ... does not exist`。何が変えたかは未確認で、Rails のスキーマの書き出しを疑っている）。マイグレーションの advisory lock も、取得と解放が別の接続に振られうる。Session pooler は 1 クライアントが 1 接続を占有するので、どちらも起きない。代わりに **Pool Size（同時接続の上限）** に当たりうる。計測（ローカルの Rails を Session pooler に接続、Puma の中で Solid Queue）ではアプリの接続は待機中 4 本・負荷の後 10 本。本番は scheduler の分を足して約 5〜11 本、再デプロイの最中は新旧のインスタンスが重なって 16〜22 本になりうるので、**Pool Size を 15 から 30 に上げた**（DB の `max_connections` は 60。30 にした後、25 本の同時接続を確認）。Session pooler では、ワーカーを動かしたまま `db:migrate` を 6 回流してすべて成功した
 
 ユーザー名は `postgres.<プロジェクト参照>` の形（プーラー経由のため）。Supabase のプロジェクトは
 Data API・新しいテーブルへの API 権限の自動付与・RLS の自動有効化をすべて無効にして作った。
@@ -343,7 +345,7 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
    UNION ALL SELECT 'users_id_seq', last_value FROM users_id_seq
    ORDER BY 1;
    ```
-8. **Render の `DATABASE_URL` を Supabase の Transaction pooler に差し替えて Resume する**
+8. **Render の `DATABASE_URL` を Supabase の Session pooler に差し替えて Resume する**
 9. **確かめる**：`/api/health` が `"database":"ok"`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
 10. **`KOTOE_DB=supabase` を設定し、2 本のワークフローを Actions の画面から手動実行（Run workflow）する**。
     バックアップの artifact ができ、再起動のログに `memory=` の行が出て、Render の Events に再デプロイが出ること。
@@ -450,9 +452,9 @@ ORDER BY 1;
 
 - **free プランはスリープする**：無操作で約15分後に spin down し、次アクセスのコールドスタートに
   数十秒かかる。8-6 からは GAS のキープアライブで眠らせていない（下の「Supabase と 24 時間キープアライブ」）。
-- **DB はプーラー経由で接続する**：Rails は Supabase の Transaction pooler（6543）。Direct connection は
+- **DB はプーラー経由で接続する**：Rails は Supabase の Session pooler（5432、Pool Size 30）。Direct connection は
   IPv6 専用で Render からもローカルからもつながらない。マイグレーションは `backend/bin/render-build.sh` の
-  ビルドフェーズで走り、Transaction pooler 経由で通ることを確認済み（8-6 のスパイク）。
+  ビルドフェーズで走り、Session pooler 経由で通ることを確認済み（8-6）。上の「接続文字列の使い分け」の理由も読むこと。
   **開発環境から Supabase に `db:migrate` を流さない**（`schema.rb` に Supabase の拡張と `public.` 付きの
   テーブル名が書き出される。流してしまったら `git restore backend/db/schema.rb`）。
 - **ジョブワーカーは Web プロセスに同居する**：Render の無料プランではバックグラウンド

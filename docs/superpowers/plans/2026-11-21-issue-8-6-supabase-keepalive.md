@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- 本番の `DATABASE_URL` は Supabase の **Transaction pooler（6543）**。`pg_dump` / `pg_restore` / `psql` は **Session pooler（5432、`pooler.supabase.com`）**。Direct connection は使わない（IPv6 専用）
+- 本番の `DATABASE_URL` は Supabase の **Session pooler（5432、Pool Size 30）**（2026-11-22 に Transaction pooler から変更。設計書の「1. 接続」）。`pg_dump` / `pg_restore` / `psql` は **Session pooler（5432、`pooler.supabase.com`）**。Direct connection は使わない（IPv6 専用）
 - `backend/config/database.yml` などアプリのコードは変えない
 - **開発環境から Supabase に `db:migrate` を流さない**（`schema.rb` に Supabase の拡張と `public.` 付きの名前が書き出される）。もし流して `schema.rb` が変わったら `git restore backend/db/schema.rb`
 - ワークフローは **`vars.KOTOE_DB == 'supabase'` のときだけジョブを実行**する。`workflow_dispatch` も付ける
@@ -216,7 +216,7 @@ git commit -m "docs: 8-6 の本番を Supabase＋24 時間キープアライブ�
 - [ ] **Step 3: ユーザーが Render を Suspend**
 - [ ] **Step 4: 受け皿を空にする → `pg_dump`（Neon）→ `~/kotoe-migration/`（権限 700）→ `pg_restore`（Supabase）→ `kotoe_backup` に GRANT し直す**
 - [ ] **Step 5: 19 テーブルの件数とシーケンス（`users`）が一致**
-- [ ] **Step 6: ユーザーが Render の `DATABASE_URL` を Supabase の Transaction pooler に差し替えて Resume**
+- [ ] **Step 6: ユーザーが Render の `DATABASE_URL` を Supabase の Session pooler に差し替えて Resume**
 - [ ] **Step 7: 本番の確認**：`/api/health` が `{"status":"ok","database":"ok",...}`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
 - [ ] **Step 8: ユーザーが Secret `SUPABASE_BACKUP_URL`（`kotoe_backup`）と変数 `KOTOE_DB=supabase` を登録**
 - [ ] **Step 9: 2 本を `workflow_dispatch` で流す**：バックアップが成功し artifact ができる。再起動のログに `memory=` の行があり、Render の Events に再デプロイが出る。**そのビルドにかかった時間を記録**（月 500 分の見込みに使う）
