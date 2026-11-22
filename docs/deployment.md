@@ -253,7 +253,7 @@ Settings → Secrets and variables → Actions。
 | `KOTOE_DB` | 変数（Variables） | `supabase`。**未設定のあいだ、下の 2 本は何もしない（skipped）** | 両方 |
 | `RENDER_DEPLOY_HOOK_URL` | Secret | Render の `kotoe-api` → Settings → Deploy Hook の URL。知っていれば誰でもデプロイを起こせる | `nightly-restart.yml` |
 | `SUPABASE_BACKUP_URL` | Secret | `kotoe_backup` の Session pooler の接続文字列 | `db-backup.yml` |
-| `BACKUP_PASSPHRASE` | Secret | バックアップの暗号化のパスフレーズ。**リポジトリの外（パスワードマネージャーなど）にも控える。無くすと復元できない** | `db-backup.yml` |
+| `BACKUP_PASSPHRASE` | Secret | バックアップの暗号化のパスフレーズ。**`openssl rand -base64 32` などで作り、人が考えた文字列にしない**（artifact はログインした誰でも取れ、手元で総当たりできるので、強さだけが守り）。**リポジトリの外（パスワードマネージャーなど）にも控える。無くすと復元できない** | `db-backup.yml` |
 
 公開リポジトリでは、**60 日間コミットが無いと schedule のワークフローが無効化される**。開発が止まる時期は、
 Actions の画面で 2 本が有効なままかを確かめる。
@@ -280,6 +280,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
 
 ### Neon から Supabase への移行（2026-xx-xx 実施）
 
+**切り替え当日より前に、予行演習として手順 4〜7 を一度通す**（Neon はそのまま使いながら Supabase に流し、件数を比べる。当日は手順 5 でまた空にする）。
+Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで確かめた（スーパーユーザーではない `postgres` で `--exit-on-error` が exit 0、20 テーブルとシーケンスの件数が一致、その後 `kotoe_backup` のバックアップも通った）。Neon のダンプで通すのは予行演習が初めてになる。
+
 止める時間の目安は数分。`pg_dump` / `pg_restore` は **PostgreSQL 17 のクライアント**（`postgres:17` イメージ、
 または開発コンテナ）で流す。接続文字列は `backend/.env.spike`（git 管理外）に置き、表示しない。
 
@@ -292,7 +295,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
         + (select count(*) from solid_queue_scheduled_executions);
    ```
    どちらも 0 になるまで待つ
-3. **Render のダッシュボードで `kotoe-api` を Suspend する**（フロントは数分エラー表示になる）
+3. **Render のダッシュボードで `kotoe-api` を Suspend する**（フロントは数分エラー表示になる）。
+   **Suspend の後に、手順 2 の SQL をもう一度流す**（確かめてから Suspend までの間に生成が始まりうる）。1 件目が 0 でなければ、その挑戦は途中で止まっているので
+   `update attempts set status = 'failed' where status = 'generating';` で失敗にする（キューの側が 0 でなければ、その件数を記録しておく）
 4. **Neon から書き出す**（Neon の**プールしない**接続文字列。ダンプはリポジトリの外の `~/kotoe-migration/`、権限 700）：
    ```bash
    pg_dump -Fc -n public --no-owner --no-privileges -f ~/kotoe-migration/neon-<日付>.dump "$NEON_DIRECT_URL"
@@ -308,12 +313,36 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
 6. **Supabase に流し込む**。`-n public` のダンプは `CREATE SCHEMA public` を含み、既に `public` がある DB では
    その 1 行がエラーになる。一覧からその行を除いて復元すると、本当のエラーだけで止まる：
    ```bash
-   pg_restore -l neon-<日付>.dump | grep -v " SCHEMA - public " > restore.list
-   pg_restore --no-owner --no-privileges --exit-on-error -L restore.list -d "$SUPABASE_SESSION_URL" neon-<日付>.dump
+   pg_restore -l ~/kotoe-migration/neon-<日付>.dump | grep -v " SCHEMA - public " > ~/kotoe-migration/restore.list
+   pg_restore --no-owner --no-privileges --exit-on-error -L ~/kotoe-migration/restore.list -d "$SUPABASE_SESSION_URL" ~/kotoe-migration/neon-<日付>.dump
    ```
    続けて `kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直す
 7. **件数を比べる**。Kotoe のテーブルは 18（＋ `ar_internal_metadata`・`schema_migrations` で 20）。
-   同じ SQL を Neon と Supabase の両方に流し、全部一致することを確かめる。シーケンスも 1 つ比べる（`select last_value from users_id_seq`）
+   次の SQL を Neon と Supabase の両方に流して結果をファイルに保存し、`diff` で全部一致することを確かめる（最後の行はシーケンス）：
+   ```sql
+   SELECT 'ar_internal_metadata' AS tbl, count(*) FROM ar_internal_metadata
+   UNION ALL SELECT 'attempts' AS tbl, count(*) FROM attempts
+   UNION ALL SELECT 'favorites' AS tbl, count(*) FROM favorites
+   UNION ALL SELECT 'jwt_denylist' AS tbl, count(*) FROM jwt_denylist
+   UNION ALL SELECT 'likes' AS tbl, count(*) FROM likes
+   UNION ALL SELECT 'posts' AS tbl, count(*) FROM posts
+   UNION ALL SELECT 'reports' AS tbl, count(*) FROM reports
+   UNION ALL SELECT 'schema_migrations' AS tbl, count(*) FROM schema_migrations
+   UNION ALL SELECT 'solid_queue_blocked_executions' AS tbl, count(*) FROM solid_queue_blocked_executions
+   UNION ALL SELECT 'solid_queue_claimed_executions' AS tbl, count(*) FROM solid_queue_claimed_executions
+   UNION ALL SELECT 'solid_queue_failed_executions' AS tbl, count(*) FROM solid_queue_failed_executions
+   UNION ALL SELECT 'solid_queue_jobs' AS tbl, count(*) FROM solid_queue_jobs
+   UNION ALL SELECT 'solid_queue_pauses' AS tbl, count(*) FROM solid_queue_pauses
+   UNION ALL SELECT 'solid_queue_processes' AS tbl, count(*) FROM solid_queue_processes
+   UNION ALL SELECT 'solid_queue_ready_executions' AS tbl, count(*) FROM solid_queue_ready_executions
+   UNION ALL SELECT 'solid_queue_recurring_executions' AS tbl, count(*) FROM solid_queue_recurring_executions
+   UNION ALL SELECT 'solid_queue_recurring_tasks' AS tbl, count(*) FROM solid_queue_recurring_tasks
+   UNION ALL SELECT 'solid_queue_scheduled_executions' AS tbl, count(*) FROM solid_queue_scheduled_executions
+   UNION ALL SELECT 'solid_queue_semaphores' AS tbl, count(*) FROM solid_queue_semaphores
+   UNION ALL SELECT 'users' AS tbl, count(*) FROM users
+   UNION ALL SELECT 'users_id_seq', last_value FROM users_id_seq
+   ORDER BY 1;
+   ```
 8. **Render の `DATABASE_URL` を Supabase の Transaction pooler に差し替えて Resume する**
 9. **確かめる**：`/api/health` が `"database":"ok"`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
 10. **`KOTOE_DB=supabase` を設定し、2 本のワークフローを Actions の画面から手動実行（Run workflow）する**。
@@ -346,7 +375,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
   キープアライブで眠らなくなると、15 分アイドルで眠ることによる自然なリセットが無くなる。
   ログの `memory=` の行が、その日の再起動直前の値（**anon が 470 MB を超えたら B に戻す**）。
   ビルド枠（月 500 分）に収まらなければ、cron を `0 19 */2 * *`（2 日に 1 回）にする。Render API の restart は使わない
-- **バックアップ**（`.github/workflows/db-backup.yml`、03:00 JST）：`kotoe_backup` で `pg_dump` → `users` のデータが入っていることを確認 →
+- **バックアップ**（`.github/workflows/db-backup.yml`、03:00 JST）：`kotoe_backup` で `pg_dump` → `users` が 1 行以上入っていることを確認（0 行なら失敗）→
   `gpg` で暗号化 → artifact（7 日）。**公開リポジトリの artifact はログインした誰でも取れるので、平文では置かない**。
   毎日 DB に触れるので、Supabase の「7 日間無活動で一時停止」の保険も兼ねる
 
@@ -357,7 +386,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
 3. 流し込む：上の移行の手順 5・6 と同じ（受け皿を空にして、`CREATE SCHEMA public` を除いた一覧で `pg_restore`）。
    空の DB に戻すだけなら `-L` は要らない
 
-8-6 の実装時に、`postgres:17` で「書き出し → 中身の確認 → 暗号化 → 復号 → 空の DB に復元」まで通し、20 テーブルと件数が戻ることを確かめた。
+8-6 の実装時に、`postgres:17` で「書き出し → 中身の確認 → 暗号化 → 復号 → 空のローカル DB に復元」まで通し、20 テーブルと件数が戻ることを確かめた。
+Supabase への流し込みは上の移行の注記のとおり、開発の DB のダンプで確かめた。
 
 ### 見張りと B に戻る条件
 
@@ -373,7 +403,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
 1. 上の移行の手順 2・3 と同じく、生成中が無いことを確かめて Render を Suspend する
 2. **Neon でブランチを切り、移行前のデータを残す**（例：`pre-supabase-<日付>`）
 3. Supabase（Session pooler）から `pg_dump`（移行の手順 4 と同じオプション）
-4. Neon の main の Kotoe のテーブルを消し（移行の手順 5 の `DROP TABLE`）、`CREATE SCHEMA public` を除いた一覧で流し込む
+4. Neon の main の Kotoe のテーブルを消し（移行の手順 5 の `DROP TABLE`）、`CREATE SCHEMA public` を除いた一覧で流し込む（Neon への流し込みは未確認。戻すと決めたら、先に Neon のブランチで予行演習する）
 5. 件数を比べ、Render の `DATABASE_URL` を Neon のプール接続文字列に戻して Resume する
 6. GitHub の変数 `KOTOE_DB` を消す（再起動とバックアップが止まる。B は毎晩眠るので再起動は要らず、Neon は自前で履歴を持つ）
 7. GAS のスクリプトで時間外は何もしないようにする（例：9〜19 時。Neon の実測 約 0.255 CU-h/時で 10h/日 ≒ 77 CU-h/月、無料 100）：

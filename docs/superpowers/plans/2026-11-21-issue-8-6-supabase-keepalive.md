@@ -211,7 +211,8 @@ git commit -m "docs: 8-6 の本番を Supabase＋24 時間キープアライブ�
   - Supabase の Settings で Data API が無効（ユーザーが目視）
   - Task 3 の SQL を Neon に流し、移行前の利用時間帯を記録する（Task 7 の比較の基準）
   - ユーザーが Render の Deploy Hook の URL を Secret `RENDER_DEPLOY_HOOK_URL` に、パスフレーズを `BACKUP_PASSPHRASE` に登録し、パスフレーズを手元にも控える
-- [ ] **Step 2: Neon に `generating` が 0、Solid Queue の ready・claimed・scheduled が 0**（Review Focus 4）。0 でなければ待つ
+- [ ] **Step 1b: 当日より前に予行演習**：Neon を使ったまま、`docs/deployment.md` の移行の手順 4〜7 を Supabase に流して件数が一致することを確かめる（Supabase は当日の手順 5 でまた空にする）
+- [ ] **Step 2: Neon に `generating` が 0、Solid Queue の ready・claimed・scheduled が 0**（Review Focus 4）。0 でなければ待つ。**Suspend の後にもう一度確かめ、`generating` が残っていれば `failed` にする**
 - [ ] **Step 3: ユーザーが Render を Suspend**
 - [ ] **Step 4: 受け皿を空にする → `pg_dump`（Neon）→ `~/kotoe-migration/`（権限 700）→ `pg_restore`（Supabase）→ `kotoe_backup` に GRANT し直す**
 - [ ] **Step 5: 19 テーブルの件数とシーケンス（`users`）が一致**

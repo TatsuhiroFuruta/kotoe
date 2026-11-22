@@ -32,11 +32,13 @@ jobs:
           pg_dump --version
           pg_dump -Fc -n public --no-owner --no-privileges -f kotoe.dump "$SUPABASE_BACKUP_URL"
 
-      # 中身の無いダンプを「成功」として残さないよう、users のデータが入っていることを確かめてから上げる
+      # 中身の無いダンプを「成功」として残さないよう、users が 1 行以上入っていることを確かめてから上げる。
+      # 目次の TABLE DATA の行は 0 行のテーブルでも出るので、COPY の行を数える
       - name: Check contents
         run: |
-          pg_restore -l kotoe.dump | grep -q "TABLE DATA public users " \
-            || { echo "::error::ダンプに users のデータがありません（接続先と kotoe_backup の権限を確認）"; exit 1; }
+          rows=$(pg_restore -a -t users -f - kotoe.dump | awk '/^COPY public\.users /{f=1; next} /^\\\.$/{f=0} f{n++} END{print n+0}')
+          echo "users rows in dump: $rows"
+          [ "$rows" -gt 0 ] || { echo "::error::ダンプの users が 0 行です（接続先と kotoe_backup の権限を確認）"; exit 1; }
 
       - name: Encrypt
         env:
