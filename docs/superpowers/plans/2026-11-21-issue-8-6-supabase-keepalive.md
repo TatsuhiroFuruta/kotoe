@@ -199,7 +199,7 @@ git commit -m "docs: 8-6 の本番を Supabase＋24 時間キープアライブ�
 
   本文：`Refs #137`、スパイクの結果、`KOTOE_DB` 未設定のうちはワークフローが動かないこと、マージ後にユーザーが行うこと（Task 6）。
   末尾は `🤖 Generated with [Claude Code](https://claude.com/claude-code)`。CI が green になること。
-  **マージしても本番は Neon のまま**（Render は再デプロイされるがコードの変更が無い）
+  **マージしても本番は Neon のまま**（`backend/config/database.yml` のコメントを変えているので、Render の再デプロイが 1 回走る。動きは変わらない）
 
 ### Task 6: 本番の切り替え（ユーザーと一緒に、PR 1 のマージ後）
 
@@ -219,7 +219,7 @@ git commit -m "docs: 8-6 の本番を Supabase＋24 時間キープアライブ�
 - [ ] **Step 6: ユーザーが Render の `DATABASE_URL` を Supabase の Session pooler に差し替えて Resume**
 - [ ] **Step 7: 本番の確認**：`/api/health` が `{"status":"ok","database":"ok",...}`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
 - [ ] **Step 8: ユーザーが Secret `SUPABASE_BACKUP_URL`（`kotoe_backup`）と変数 `KOTOE_DB=supabase` を登録**
-- [ ] **Step 9: 2 本を `workflow_dispatch` で流す**：バックアップが成功し artifact ができる。再起動のログに `memory=` の行があり、Render の Events に再デプロイが出る。**そのビルドにかかった時間を記録**（月 500 分の見込みに使う）
+- [ ] **Step 9: 2 本を `workflow_dispatch` で流す**：バックアップが成功し artifact ができる。再起動のログに `memory=` の行があり、Render の Events に再デプロイが出る。**そのビルドにかかった時間と、バックアップの artifact の大きさを記録**（月 500 分と egress の見込みに使う）
 - [ ] **Step 10: ユーザーが GAS のスクリプトとトリガーを作る**
 - [ ] **Step 11: コールドスタートが無いことを確かめる**：20 分以上アクセスしないで置き、`/up` と `/api/health` が数百ミリ秒で返る
 

@@ -316,7 +316,9 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
    ```bash
    pg_dump -Fc -n public --no-owner --no-privileges -f ~/kotoe-migration/neon-<日付>.dump "$NEON_DIRECT_URL"
    ```
-5. **Supabase の受け皿を空にする**（Session pooler。`public` スキーマ自体は消さない）：
+5. **Supabase の受け皿を空にする**（Session pooler。`public` スキーマ自体は消さない）。
+   **テーブル名は手で並べている。マイグレーションでテーブルを足したら、この `DROP TABLE` と手順 7 の件数比較の SQL の 2 か所も更新する**（漏れると復元が `--exit-on-error` で止まる）。
+   `select tablename from pg_tables where schemaname = 'public' order by 1;` の結果と見比べてから流す：
    ```sql
    DROP TABLE IF EXISTS attempts, favorites, jwt_denylist, likes, posts, reports, users,
      solid_queue_blocked_executions, solid_queue_claimed_executions, solid_queue_failed_executions,
@@ -332,7 +334,7 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
    ```
    続けて `kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直す
 7. **件数を比べる**。Kotoe のテーブルは 18（＋ `ar_internal_metadata`・`schema_migrations` で 20）。
-   次の SQL を Neon と Supabase の両方に流して結果をファイルに保存し、`diff` で全部一致することを確かめる（最後の行はシーケンス）：
+   次の SQL を Neon と Supabase の両方に流して結果をファイルに保存し、`diff` で全部一致することを確かめる（最後の行はシーケンス。シーケンスは代表として `users_id_seq` だけを見る。値はダンプにすべて入っている）：
    ```sql
    SELECT 'ar_internal_metadata' AS tbl, count(*) FROM ar_internal_metadata
    UNION ALL SELECT 'attempts' AS tbl, count(*) FROM attempts
