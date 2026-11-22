@@ -248,8 +248,9 @@ Neon ──（何もしない。B に戻すときの受け皿として残す）
 | 本番の見込み（scheduler を足す） | 約 5〜11 本 | 約 10〜22 本 |
 | 接続プールの上限（5 プロセス × `RAILS_MAX_THREADS`+2 = 5） | 25 本 | 50 本 |
 
-30 は**見込みに合わせた値で、上限には足りない**。04:00 の再デプロイでは古い方はほぼ待機中なので受け入れた。ビルドの `db:migrate` は新しいインスタンスが起動する前に終わるので、重なるのは古い方とだけ。Pool Size はロール・DB・モードの組ごとに数えられる（<https://supabase.com/docs/guides/troubleshooting/supavisor-faq-YyP5tI>）ので、バックアップ（`kotoe_backup`）は別枠の見込み（未計測）。手動の `psql` を `postgres` でつなぐと 1 本使う。
-**あふれたときの見え方**：Render のヘルスチェック（`/up`）は DB に触れないので、**デプロイは成功のまま**になる。症状は、その後のリクエストやジョブのログに出る `ActiveRecord::ConnectionNotEstablished` などの接続エラー（Supabase 側の文言は未確認）。見つけたら Pool Size を上げる（`max_connections` 60 のうち、Supabase 自身の機能の分を残す）か、`RAILS_MAX_THREADS` を下げる。
+30 は**見込みに合わせた値で、上限には足りない**。04:00 の再デプロイでは古い方はほぼ待機中なので受け入れた。ただし Render は main を追っているので、**マージのたびに時刻を問わず再デプロイされる**。生成が走っている時間帯のマージでは、あふれうる（マージは空いている時間に行うのが無難）。ビルドの `db:migrate` は新しいインスタンスが起動する前に終わるので、重なるのは古い方とだけ。Pool Size はロール・DB・モードの組ごとに数えられる（<https://supabase.com/docs/guides/troubleshooting/supavisor-faq-YyP5tI>）ので、バックアップ（`kotoe_backup`）は別枠の見込み（未計測）。ただし、どのロールの分も DB 本体の `max_connections` 60 を分け合い、Supabase 自身の機能（認証など）もそこから使う。手動の `psql` を `postgres` でつなぐと 1 本使う。
+
+**あふれたときの見え方は確かめていない。** 再デプロイの後に DB の接続に関わるエラーや、新しいインスタンスの起動の失敗が出たら、まず Pool Size を疑う。対処は Pool Size を上げる（`max_connections` 60 のうち、Supabase 自身の機能の分を残す）。`RAILS_MAX_THREADS` は下げない（接続プールは `RAILS_MAX_THREADS`+2 で、Solid Queue のワーカーは `config/queue.yml` の `threads: 3` にポーリングとハートビートを足した 5 本を要る。`backend/config/database.yml` のコメント）。
 
 Session pooler は、クライアントが切断すると接続の設定をリセットしてから次のクライアントに渡す（2026-11-22 に確認：同じ DB 接続が使い回される中で、`SET search_path TO extensions` をして切断した後、15 回つなぎ直してすべて既定値に戻っていた）。Session pooler では、ワーカーを動かしたまま `db:migrate` を 6 回流してすべて成功した。
 
