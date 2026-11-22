@@ -259,7 +259,7 @@ Solid Queue の 4 プロセスは Puma からの fork なので、この RSS は
 - ~~`config/queue.yml` の `workers.threads` は 3。1 に下げれば worker のメモリを削れる可能性がある~~
   → **効果が薄いと判明**（上記）。増分の実体は copy-on-write の解消でスレッド数と無関係。
   下げるとレイテンシだけ悪化する
-- `RAILS_MAX_THREADS`（現在 3）を下げる
+- `RAILS_MAX_THREADS`（現在 3）を下げる → **下げない**（issue 8-6 で追記）。接続プールが `RAILS_MAX_THREADS`+2 なので、3 未満にすると Solid Queue のワーカーが要る 5 本（`config/queue.yml` の `threads: 3`＋ポーリング＋ハートビート）を割り、生成が重なると `ActiveRecord::ConnectionTimeoutError` になる（`backend/config/database.yml` のコメント）
 - ~~画像データをメモリに載せず Cloudinary へ渡す（生成 API が URL を返すなら、その URL を
   Cloudinary に取り込ませる経路が使える）~~
   → **成立しない**（issue 4-3 で判明）。gpt-image 系は **base64（`b64_json`）でしか画像を
