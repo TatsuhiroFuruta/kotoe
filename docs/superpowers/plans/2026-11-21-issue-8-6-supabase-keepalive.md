@@ -157,7 +157,7 @@ git commit -m "ci: Supabase を毎日 pg_dump し、暗号化して artifact に
 - [ ] **Step 1: `docs/deployment.md` を書く**
 
   移行の手順は spec の 2 の 9 ステップをそのまま、コマンド付きで。加える点：
-  - 受け皿を空にする SQL は Kotoe のテーブル 17 個＋`ar_internal_metadata`・`schema_migrations` を名前で列挙して `DROP TABLE ... CASCADE`（`public` スキーマは消さない）
+  - 受け皿を空にする SQL は Kotoe のテーブル 18 個＋`ar_internal_metadata`・`schema_migrations` を名前で列挙して `DROP TABLE ... CASCADE`（`public` スキーマは消さない）
   - 流し込んだ後に `kotoe_backup` への `GRANT` をやり直す（テーブルを作り直すと消える）
   - 件数比較は 20 テーブル全部（Kotoe の 18 ＋管理用 2）、Neon と Supabase の両方で `select count(*)` を並べて出す形
   - B に戻す手順の先頭に「Neon でブランチ `pre-supabase-<日付>` を切る」

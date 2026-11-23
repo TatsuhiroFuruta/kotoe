@@ -112,7 +112,7 @@ B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは
 1. **Supabase の受け皿を空にする。** スパイクで作ったテーブルを消す（`public` の Kotoe のテーブル 18 個と `ar_internal_metadata`・`schema_migrations` だけ。`public` スキーマ自体は消さない）
 2. **生成中が無いことを確かめる。** Neon で `attempts` の `status = generating` が 0 件、Solid Queue の ready・claimed・scheduled が 0 件
 3. **書き込みを止める。** Render のダッシュボードでサービスを Suspend する（Resume するまでフロントはエラー表示になる。許容する）
-4. **Neon から書き出す。** Neon の**プールしない**接続文字列で `pg_dump -Fc -n public --no-owner --no-privileges`。Neon のサーバーバージョンが 17 を超えていたら、それ以上の `pg_dump` を使う。
+4. **Neon から書き出す。** Neon の**プールしない**接続文字列で `pg_dump -Fc -n public --no-owner --no-privileges`。Neon は 18.7 なので `pg_dump` 18 を使う（予行演習で確認）。**19 以上に上がっていたら作業を止めて相談する**（19 → 17 の流し込みは確かめていない）。
    **予行演習（2026-11-23）で Neon は PostgreSQL 18.7 と判明。** `pg_dump`/`pg_restore` 18 で書き出して Supabase（17）に流し込み、件数の一致まで確かめた（`docs/deployment.md` の移行の節）
    ダンプは**リポジトリの外**（手元）に保存し、戻すときのために残す
 5. **Supabase に流し込む。** Session pooler で `pg_restore --no-owner --no-privileges -d ...`
