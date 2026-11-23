@@ -295,12 +295,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
 ### Neon から Supabase への移行（2026-xx-xx 実施）
 
 **切り替え当日より前に、予行演習として手順 4〜7 を一度通す**（Neon はそのまま使いながら Supabase に流し、件数を比べる。当日は手順 5 でまた空にする）。
-Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで確かめた（スーパーユーザーではない `postgres` で `--exit-on-error` が exit 0、20 テーブルとシーケンスの件数が一致、その後 `kotoe_backup` のバックアップも通った）。Neon のダンプで通すのは予行演習が初めてになる。
+Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで確かめた（スーパーユーザーではない `postgres` で `--exit-on-error` が exit 0、20 テーブルとシーケンスの件数が一致、その後 `kotoe_backup` のバックアップも通った）。**予行演習（2026-11-23）：本番の Neon のダンプで手順 4〜7 を通した。** Neon は **PostgreSQL 18.7**、Supabase は 17.12。
+`pg_dump` 18.6 で書き出し（92 秒、約 74 KB）、`pg_restore` 18.6 で Supabase に流し込み（83 秒、`--exit-on-error` で exit 0）、
+20 テーブルとシーケンスの件数が一致、`kotoe_backup` のバックアップの確認（`users` 7 行）も通った。流し込んだデータでローカルの Rails から一覧 API と health が 200。
+**18 → 17 の流し込みは PostgreSQL として保証された向きではない**（Kotoe のテーブルが単純なので通った、という実測）。B に戻す向き（17 → 18）は保証された向き。
 
-止める時間の目安は数分。`pg_dump` / `pg_restore` は **PostgreSQL 17 のクライアント**（`postgres:17` イメージ、
-または開発コンテナ）で流す。接続文字列は `backend/.env.spike`（git 管理外）に置き、表示しない。
+止める時間の目安は **10 分前後**（書き出し 92 秒＋流し込み 83 秒＋確認と Render の切り替え。手元から Singapore への往復で時間がかかる）。
+`pg_dump` / `pg_restore` は **PostgreSQL 18 のクライアント**（`postgres:18` のイメージ）で流す。`pg_dump` は相手のサーバーと同じか新しいメジャーでないと書き出せないため
+（開発コンテナと `db-backup.yml` の `postgres:17` は Supabase 用で、Neon からは書き出せない）。接続文字列は `backend/.env.spike`（git 管理外）に置き、表示しない。
 
-1. **Neon のサーバーバージョンが 17 以下か確かめる**（`select version()`）。18 以上なら 17 の `pg_dump` では書き出せない
+1. **Neon のサーバーバージョンを確かめる**（`select version()`）。予行演習の時点で 18.7。19 以上に上がっていたら、19 のクライアントで書き出し、予行演習をやり直す
 2. **生成中が無いことを確かめる**（Neon）：
    ```sql
    select count(*) from attempts where status = 'generating';
@@ -309,7 +313,7 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
         + (select count(*) from solid_queue_scheduled_executions);
    ```
    どちらも 0 になるまで待つ
-3. **Render のダッシュボードで `kotoe-api` を Suspend する**（フロントは数分エラー表示になる）。
+3. **Render のダッシュボードで `kotoe-api` を Suspend する**（フロントは 10 分前後エラー表示になる）。
    **Suspend の後に、手順 2 の SQL をもう一度流す**（確かめてから Suspend までの間に生成が始まりうる）。1 件目が 0 でなければ、その挑戦は途中で止まっているので
    `update attempts set status = 'failed' where status = 'generating';` で失敗にする（キューの側が 0 でなければ、その件数を記録しておく）
 4. **Neon から書き出す**（Neon の**プールしない**接続文字列。ダンプはリポジトリの外の `~/kotoe-migration/`、権限 700）：

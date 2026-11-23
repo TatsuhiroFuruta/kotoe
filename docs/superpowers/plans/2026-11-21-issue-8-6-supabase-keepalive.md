@@ -207,7 +207,7 @@ git commit -m "docs: 8-6 の本番を Supabase＋24 時間キープアライブ�
 
 - [ ] **Step 1: 事前の確認**
   - ユーザーが `backend/.env.spike` に `NEON_DIRECT_URL` を足す → キー名と値の有無だけ確かめる
-  - Neon のサーバーバージョンが 17 以下（Review Focus 5）。18 以上なら作業を止めて相談
+  - Neon のサーバーバージョンを確かめる（Review Focus 5）。**予行演習（2026-11-23）で 18.7 と判明**し、`pg_dump`/`pg_restore` 18 で Supabase（17）に流し込めることを確かめた。19 以上なら作業を止めて相談
   - Supabase の Settings で Data API が無効（ユーザーが目視）
   - Task 3 の SQL を Neon に流し、移行前の利用時間帯を記録する（Task 7 の比較の基準）
   - ユーザーが Render の Deploy Hook の URL を Secret `RENDER_DEPLOY_HOOK_URL` に、パスフレーズを `BACKUP_PASSPHRASE` に登録し、パスフレーズを手元にも控える
