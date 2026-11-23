@@ -103,18 +103,18 @@ B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは
 
 ### 2. 移行の手順（本番）
 
-止める時間の目安は数分。利用の少ない時間帯にユーザーと日時を決めて行う。
+止める時間の目安は DB の作業で 5 分前後（予行演習の実測）、Render の切り替えと確認を含めて 20〜30 分の枠を取る（`docs/deployment.md`）。利用の少ない時間帯にユーザーと日時を決めて行う。
 
-実行するのは Claude（開発コンテナの `pg_dump` 17.12 から）（Claude の判断）。接続文字列は `backend/.env.spike`（git 管理外、権限 600）に
+実行するのは Claude（`postgres:18` イメージの `pg_dump`/`pg_restore` 18 から。Neon が 18.7 のため。当初は開発コンテナの 17.12 の予定だった）（Claude の判断）。接続文字列は `backend/.env.spike`（git 管理外、権限 600）に
 ユーザーが `NEON_DIRECT_URL`（Neon のプールしない接続文字列）を足して受け渡す。値は表示しない。
 ダンプの保存先はリポジトリの外の `~/kotoe-migration/`（権限 700）。
 
 1. **Supabase の受け皿を空にする。** スパイクで作ったテーブルを消す（`public` の Kotoe のテーブル 18 個と `ar_internal_metadata`・`schema_migrations` だけ。`public` スキーマ自体は消さない）
 2. **生成中が無いことを確かめる。** Neon で `attempts` の `status = generating` が 0 件、Solid Queue の ready・claimed・scheduled が 0 件
-3. **書き込みを止める。** Render のダッシュボードでサービスを Suspend する（フロントは数分エラー表示になる。許容する）
-4. **Neon から書き出す。** Neon の**プールしない**接続文字列で `pg_dump -Fc -n public --no-owner --no-privileges`。Neon のサーバーバージョンが 17 を超えていたら、それ以上の `pg_dump` を使う。
+3. **書き込みを止める。** Render のダッシュボードでサービスを Suspend する（Resume するまでフロントはエラー表示になる。許容する）
+4. **Neon から書き出す。** Neon の**プールしない**接続文字列で `pg_dump -Fc -n public --no-owner --no-privileges`。**予行演習（2026-11-23）で Neon は PostgreSQL 18.7 と判明**したので、`pg_dump` 18 を使う。**19 以上に上がっていたら作業を止めて相談する**（19 → 17 の流し込みは確かめていない）。
    ダンプは**リポジトリの外**（手元）に保存し、戻すときのために残す
-5. **Supabase に流し込む。** Session pooler で `pg_restore --no-owner --no-privileges -d ...`
+5. **Supabase に流し込む。** Session pooler に `pg_restore` 18 で流す。`CREATE SCHEMA public` を除いた一覧（`-L`）と `--exit-on-error` を使う（予行演習で、Supabase 17 に件数の一致まで確かめた。コマンドは `docs/deployment.md`）
 6. **件数を比べる。** 全 20 テーブルの件数を Neon と Supabase で比べ、一致を確かめる。シーケンスの現在値も 1 つ（`users`）比べる
 7. **切り替える。** Render の `DATABASE_URL` を Supabase の Session pooler に差し替え、Resume する
 8. **確かめる。** `/api/health`（DB 接続を含む）、ログイン、一覧・詳細の表示、生成 1 回（即公開まで）、いいね。終わったら生成した挑戦はマイページから削除してよい

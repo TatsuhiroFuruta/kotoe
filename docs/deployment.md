@@ -295,12 +295,21 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO kotoe_bac
 ### Neon から Supabase への移行（2026-xx-xx 実施）
 
 **切り替え当日より前に、予行演習として手順 4〜7 を一度通す**（Neon はそのまま使いながら Supabase に流し、件数を比べる。当日は手順 5 でまた空にする）。
-Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで確かめた（スーパーユーザーではない `postgres` で `--exit-on-error` が exit 0、20 テーブルとシーケンスの件数が一致、その後 `kotoe_backup` のバックアップも通った）。Neon のダンプで通すのは予行演習が初めてになる。
+Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで確かめた（スーパーユーザーではない `postgres` で `--exit-on-error` が exit 0、20 テーブルとシーケンスの件数が一致、その後 `kotoe_backup` のバックアップも通った）。**予行演習（2026-11-23）：本番の Neon のダンプで手順 4〜7 を通した。** Neon は **PostgreSQL 18.7**、Supabase は 17.12。
+`pg_dump` 18.6 で書き出し（92 秒、約 74 KB）、`pg_restore` 18.6 で Supabase に流し込み（83 秒、`--exit-on-error` で exit 0）、
+20 テーブルとシーケンスの件数が一致、`kotoe_backup` のバックアップの確認（`users` 7 行）も通った。流し込んだデータでローカルの Rails から一覧 API と health が 200。
+**18 → 17 の流し込みは PostgreSQL として保証された向きではない**（Kotoe のテーブルが単純なので通った、という実測）。B に戻す向き（17 → 18）は保証された向き。
 
-止める時間の目安は数分。`pg_dump` / `pg_restore` は **PostgreSQL 17 のクライアント**（`postgres:17` イメージ、
-または開発コンテナ）で流す。接続文字列は `backend/.env.spike`（git 管理外）に置き、表示しない。
+コマンドは**リポジトリの直下**で流す（`--env-file backend/.env.spike` が相対パスのため）。最初に `mkdir -p ~/kotoe-migration && chmod 700 ~/kotoe-migration` でダンプの置き場を作っておく
+（無いまま `docker run -v` に渡すと Docker が 755 で作り、`mkdir -m 700 -p` はすでにあるフォルダの権限を変えないので、`chmod` まで行う）。`backend/.env.spike` の `SPIKE_SESSION_URL` は、スパイクから使っている**本番の移行先の Supabase プロジェクト**の Session pooler
+（名前に SPIKE と付いているが、移行先はこのプロジェクト。Render の `DATABASE_URL` にも同じプロジェクトの Session pooler を入れる）。
 
-1. **Neon のサーバーバージョンが 17 以下か確かめる**（`select version()`）。18 以上なら 17 の `pg_dump` では書き出せない
+止める時間の目安：**DB の作業は 5 分前後**（予行演習の実測：書き出し 92 秒＋流し込み 83 秒＋件数の確認。手元から Singapore への往復で時間がかかる）。
+これに、Render の環境変数の変更・Resume・起動と、手順 9 の確認（生成 1 回を含む）が加わる。こちらは測っていないので、全体では余裕を見て 20〜30 分の枠を取る。
+`pg_dump` / `pg_restore` は **PostgreSQL 18 のクライアント**（`postgres:18` のイメージ）で流す。`pg_dump` は相手のサーバーと同じか新しいメジャーでないと書き出せないため
+（開発コンテナと `db-backup.yml` の `postgres:17` は Supabase 用で、Neon からは書き出せない）。接続文字列は `backend/.env.spike`（git 管理外）に置き、表示しない。
+
+1. **Neon のサーバーバージョンを確かめる**（`select version()`）。予行演習の時点で 18.7。**19 以上に上がっていたら作業を止めて相談する**（19 → 17 の流し込みは確かめていない）
 2. **生成中が無いことを確かめる**（Neon）：
    ```sql
    select count(*) from attempts where status = 'generating';
@@ -309,12 +318,14 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
         + (select count(*) from solid_queue_scheduled_executions);
    ```
    どちらも 0 になるまで待つ
-3. **Render のダッシュボードで `kotoe-api` を Suspend する**（フロントは数分エラー表示になる）。
+3. **Render のダッシュボードで `kotoe-api` を Suspend する**（Resume するまでフロントはエラー表示になる）。
    **Suspend の後に、手順 2 の SQL をもう一度流す**（確かめてから Suspend までの間に生成が始まりうる）。1 件目が 0 でなければ、その挑戦は途中で止まっているので
-   `update attempts set status = 'failed' where status = 'generating';` で失敗にする（キューの側が 0 でなければ、その件数を記録しておく）
+   `update attempts set status = 'failed', failure_reason = 'internal_error' where status = 'generating';` で失敗にする（キューの側が 0 でなければ、その件数を記録しておく）
 4. **Neon から書き出す**（Neon の**プールしない**接続文字列。ダンプはリポジトリの外の `~/kotoe-migration/`、権限 700）：
    ```bash
-   pg_dump -Fc -n public --no-owner --no-privileges -f ~/kotoe-migration/neon-<日付>.dump "$NEON_DIRECT_URL"
+   # 予行演習と同じ形。~/kotoe-migration をコンテナの /w に、接続文字列は env ファイルで渡す（コマンドに書かない）
+   docker run --rm --env-file backend/.env.spike -v ~/kotoe-migration:/w postgres:18 \
+     sh -c 'pg_dump -Fc -n public --no-owner --no-privileges -f /w/neon-<日付>.dump "$NEON_DIRECT_URL"'
    ```
 5. **Supabase の受け皿を空にする**（Session pooler。`public` スキーマ自体は消さない）。
    **テーブル名は手で並べている。マイグレーションでテーブルを足したら、この `DROP TABLE` と手順 7 の件数比較の SQL の 2 か所も更新する**（漏れると復元が `--exit-on-error` で止まる）。
@@ -329,8 +340,9 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 6. **Supabase に流し込む**。`-n public` のダンプは `CREATE SCHEMA public` を含み、既に `public` がある DB では
    その 1 行がエラーになる。一覧からその行を除いて復元すると、本当のエラーだけで止まる：
    ```bash
-   pg_restore -l ~/kotoe-migration/neon-<日付>.dump | grep -v " SCHEMA - public " > ~/kotoe-migration/restore.list
-   pg_restore --no-owner --no-privileges --exit-on-error -L ~/kotoe-migration/restore.list -d "$SUPABASE_SESSION_URL" ~/kotoe-migration/neon-<日付>.dump
+   docker run --rm --env-file backend/.env.spike -v ~/kotoe-migration:/w postgres:18 sh -c '
+     pg_restore -l /w/neon-<日付>.dump | grep -v " SCHEMA - public " > /w/restore.list &&
+     pg_restore --no-owner --no-privileges --exit-on-error -L /w/restore.list -d "$SPIKE_SESSION_URL" /w/neon-<日付>.dump'
    ```
    続けて `kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直す
 7. **件数を比べる**。Kotoe のテーブルは 18（＋ `ar_internal_metadata`・`schema_migrations` で 20）。
@@ -397,13 +409,54 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 
 ### バックアップからの復元
 
-1. Actions → `DB backup` の実行 → artifact をダウンロードして展開（`kotoe-<日付>.dump.gpg`）
-2. 復号：`gpg --batch --pinentry-mode loopback --passphrase-fd 0 -d -o kotoe.dump kotoe-<日付>.dump.gpg`（パスフレーズを標準入力で渡す）
-3. 流し込む：上の移行の手順 5・6 と同じ（受け皿を空にして、`CREATE SCHEMA public` を除いた一覧で `pg_restore`）。
+バックアップは Supabase（17）から `pg_dump` 17 で取っているので、流し込みは Supabase・Neon（18）のどちらに戻す場合も `postgres:17` を使う
+（古いクライアントから新しいサーバーへの流し込みは PostgreSQL の通常の使い方。ただし Neon に戻す向きは試していない）。
+
+| 戻す先 | 流し込みに使う接続文字列 | 戻した後の Render の `DATABASE_URL` |
+|---|---|---|
+| Supabase | Session pooler（5432、`pooler.supabase.com`） | 同じ Session pooler |
+| Neon | **プールしない**接続文字列（ホストに `-pooler` が無いもの。プール接続は設定が持ち越される） | **プール接続**（`-pooler` 付き）。あわせて「B に戻す」の手順 6〜8 を行う |
+| 新しい Supabase プロジェクト | そのプロジェクトの Session pooler | 同じ Session pooler。**`kotoe_backup` を作り直し**（上の「バックアップ用の読み取り専用ロール」の SQL を全部）、Secret `SUPABASE_BACKUP_URL` を新しいプロジェクトのものに替える |
+
+1. **アプリとワークフローを止める**：Render の `kotoe-api` を Suspend し、GitHub の変数 `KOTOE_DB` を消す（復元の最中に、03:00 のバックアップや 04:00 の再デプロイが走らないようにするため）。
+   **Neon に戻すときは、ここで Neon のブランチを切る**（例：`before-restore-<日付>`。手順 7 の `DROP TABLE` で Neon に残してある移行前のデータを消すので、その前に残す）
+2. **置き場を用意する**：`mkdir -p ~/kotoe-migration && chmod 700 ~/kotoe-migration`（すでにあっても 700 にする）。以下はこのフォルダで行う
+3. Actions → `DB backup` の実行 → artifact（`kotoe-db-<run_id>.zip`。`run_id` は実行の画面の URL にある長い番号で、一覧の #番号とは違う）をダウンロードし、展開して中の `kotoe-<日付>.dump.gpg` を `~/kotoe-migration` に移す
+4. 復号：`gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 -d -o kotoe.dump kotoe-<日付>.dump.gpg`（パスフレーズを標準入力で渡す）
+5. 移行の手順 7 の SQL を `~/kotoe-migration/counts.sql` として保存する（手順 10 で使う）
+6. 戻す先の接続文字列（上の表）を、画面に出さずに環境変数に入れる：`read -rs TARGET_URL && export TARGET_URL`
+7. **受け皿を空にする**：移行の手順 5 の `DROP TABLE` を戻す先に流す（空の新しい DB なら不要）
+8. **流し込む**：
+   ```bash
+   docker run --rm -e TARGET_URL -v "$PWD":/w postgres:17 sh -c '
+     pg_restore -l /w/kotoe.dump | grep -v " SCHEMA - public " > /w/restore.list &&
+     pg_restore --no-owner --no-privileges --exit-on-error -L /w/restore.list -d "$TARGET_URL" /w/kotoe.dump'
+   ```
    **新しく作った空の DB でも `-L` は要る**（`public` スキーマは最初からあり、`CREATE SCHEMA public` が衝突して止まる。8-6 の実装時に確認）
+9. **Supabase に戻したときだけ**、`kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直す（このロールは Supabase にしか無い）
+10. **件数を確かめる**：ダンプの中の行数と、戻した先の行数を比べる（どちらも `テーブル名|行数` の形で出る）：
+    ```bash
+    # ダンプの中の行数（COPY のブロックの行を数える）
+    docker run --rm -v "$PWD":/w postgres:17 sh -c 'pg_restore -a -f - /w/kotoe.dump' \
+      | awk '/^COPY public\./{split($2,a,"."); t=a[2]; n=0; f=1; next} /^\\\.$/{if(f) print t"|"n; f=0; next} f{n++}' | sort > dump-counts.txt
+    # 戻した先の行数（counts.sql から、最後のシーケンスの行を除いたもの）
+    docker run --rm -e TARGET_URL -v "$PWD":/w postgres:17 sh -c 'psql "$TARGET_URL" -At -f /w/counts.sql' | grep -v _seq | sort > target-counts.txt
+    diff dump-counts.txt target-counts.txt && echo "一致"
+    ```
+11. **バックアップの時点で走っていた生成を片付ける**。バックアップに `generating` の挑戦が入っていると、Resume した後に、実行待ちのまま残ったジョブが
+    その生成をやり直しうる（画像生成 API の料金がまたかかる）。生成のジョブは `generating` の挑戦にしか作用しない（`app/jobs/generate_image_job.rb` の `perform`）ので、
+    挑戦を失敗にすれば、残ったジョブは何もせずに終わる。戻した先で流す：
+    ```bash
+    docker run --rm -i -e TARGET_URL postgres:17 sh -c 'psql "$TARGET_URL" -v ON_ERROR_STOP=1' <<'SQL'
+    select count(*) as generating from attempts where status = 'generating';
+    update attempts set status = 'failed', failure_reason = 'internal_error' where status = 'generating';
+    SQL
+    ```
+12. **後片付け**：`rm -f kotoe.dump restore.list dump-counts.txt target-counts.txt; unset TARGET_URL`（暗号化した `.gpg` は残してよい）
+13. Render の `DATABASE_URL` を上の表の「戻した後」の値にして Resume する。Supabase に戻したときは、GitHub の変数 `KOTOE_DB=supabase` を設定し直す（Neon に戻したときは設定しない）
 
 8-6 の実装時に、`postgres:17` で「書き出し → 中身の確認 → 暗号化 → 復号 → 空のローカル DB に復元」まで通し、20 テーブルと件数が戻ることを確かめた。
-Supabase への流し込みは上の移行の注記のとおり、開発の DB のダンプで確かめた。
+Supabase への流し込みは上の移行の注記のとおり、開発の DB のダンプと、本番の Neon のダンプ（2026-11-23 の予行演習）で確かめた。
 
 ### 見張りと B に戻る条件
 
