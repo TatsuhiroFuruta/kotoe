@@ -300,8 +300,8 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 20 テーブルとシーケンスの件数が一致、`kotoe_backup` のバックアップの確認（`users` 7 行）も通った。流し込んだデータでローカルの Rails から一覧 API と health が 200。
 **18 → 17 の流し込みは PostgreSQL として保証された向きではない**（Kotoe のテーブルが単純なので通った、という実測）。B に戻す向き（17 → 18）は保証された向き。
 
-コマンドは**リポジトリの直下**で流す（`--env-file backend/.env.spike` が相対パスのため）。最初に `mkdir -m 700 -p ~/kotoe-migration` でダンプの置き場を作っておく
-（無いまま `docker run -v` に渡すと、Docker が 755 で作る）。`backend/.env.spike` の `SPIKE_SESSION_URL` は、スパイクから使っている**本番の移行先の Supabase プロジェクト**の Session pooler
+コマンドは**リポジトリの直下**で流す（`--env-file backend/.env.spike` が相対パスのため）。最初に `mkdir -p ~/kotoe-migration && chmod 700 ~/kotoe-migration` でダンプの置き場を作っておく
+（無いまま `docker run -v` に渡すと Docker が 755 で作り、`mkdir -m 700 -p` はすでにあるフォルダの権限を変えないので、`chmod` まで行う）。`backend/.env.spike` の `SPIKE_SESSION_URL` は、スパイクから使っている**本番の移行先の Supabase プロジェクト**の Session pooler
 （名前に SPIKE と付いているが、移行先はこのプロジェクト。Render の `DATABASE_URL` にも同じプロジェクトの Session pooler を入れる）。
 
 止める時間の目安：**DB の作業は 5 分前後**（予行演習の実測：書き出し 92 秒＋流し込み 83 秒＋件数の確認。手元から Singapore への往復で時間がかかる）。
@@ -409,19 +409,39 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 
 ### バックアップからの復元
 
-1. Actions → `DB backup` の実行 → artifact をダウンロードして展開（`kotoe-<日付>.dump.gpg`）
-2. 復号：`gpg --batch --pinentry-mode loopback --passphrase-fd 0 -d -o kotoe.dump kotoe-<日付>.dump.gpg`（パスフレーズを標準入力で渡す）
-3. 受け皿を空にする：上の移行の手順 5 の `DROP TABLE` を、戻す先に流す（空の新しい DB なら不要）
-4. 流し込む。`kotoe.dump` を置いたフォルダで、戻す先の Session pooler の接続文字列を環境変数 `TARGET_URL` に入れてから流す
-   （接続文字列はコマンドに直接書かない。例：`read -rs TARGET_URL && export TARGET_URL` で、画面に出さずに入れる）：
+Supabase（本番）に戻す場合と、Neon（B）に戻す場合で、接続先とイメージだけが変わる。
+
+| 戻す先 | 接続文字列 | イメージ |
+|---|---|---|
+| Supabase | Session pooler（5432、`pooler.supabase.com`） | `postgres:17` |
+| Neon | **プールしない**接続文字列（ホストに `-pooler` が無いもの。プール接続は設定が持ち越される） | `postgres:18` |
+
+1. **アプリを止める**：移行の手順 2・3 と同じく、生成中が無いことを確かめて Render の `kotoe-api` を Suspend する（復元の最中にアプリが書き込むと、流し込みが主キーの重複で止まる）
+2. **置き場を用意する**：`mkdir -p ~/kotoe-migration && chmod 700 ~/kotoe-migration`（すでにあっても 700 にする）。以下はこのフォルダで行う
+3. Actions → `DB backup` の実行 → artifact をダウンロードし、`kotoe-<日付>.dump.gpg` を `~/kotoe-migration` に移す
+4. 復号：`gpg --batch --pinentry-mode loopback --passphrase-fd 0 -d -o kotoe.dump kotoe-<日付>.dump.gpg`（パスフレーズを標準入力で渡す）
+5. 戻す先の接続文字列を、画面に出さずに環境変数に入れる：`read -rs TARGET_URL && export TARGET_URL`
+6. **受け皿を空にする**：移行の手順 5 の `DROP TABLE` を戻す先に流す（空の新しい DB なら不要）
+7. **流し込む**（イメージは上の表のとおり）：
    ```bash
    docker run --rm -e TARGET_URL -v "$PWD":/w postgres:17 sh -c '
      pg_restore -l /w/kotoe.dump | grep -v " SCHEMA - public " > /w/restore.list &&
      pg_restore --no-owner --no-privileges --exit-on-error -L /w/restore.list -d "$TARGET_URL" /w/kotoe.dump'
    ```
-   **新しく作った空の DB でも `-L` は要る**（`public` スキーマは最初からあり、`CREATE SCHEMA public` が衝突して止まる。8-6 の実装時に確認）。
-   戻す先が Supabase（17）なら `postgres:17`、Neon（18）に戻すなら `postgres:18` のイメージを使う
-5. `kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直し、移行の手順 7 の SQL で件数を確かめる
+   **新しく作った空の DB でも `-L` は要る**（`public` スキーマは最初からあり、`CREATE SCHEMA public` が衝突して止まる。8-6 の実装時に確認）
+8. **Supabase に戻したときだけ**、`kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直す（このロールは Supabase にしか無い）
+9. **件数を確かめる**：ダンプの中の行数と、戻した先の行数を比べる（どちらも `テーブル名|行数` の形で出る）：
+   ```bash
+   # ダンプの中の行数（COPY のブロックの行を数える）
+   docker run --rm -v "$PWD":/w postgres:17 sh -c 'pg_restore -a -f - /w/kotoe.dump' \
+     | awk '/^COPY public\./{split($2,a,"."); t=a[2]; n=0; f=1; next} /^\\\.$/{if(f) print t"|"n; f=0; next} f{n++}' | sort > dump-counts.txt
+   # 戻した先の行数（移行の手順 7 の SQL から、最後のシーケンスの行を除いたもの）
+   docker run --rm -e TARGET_URL -v "$PWD":/w postgres:17 sh -c 'psql "$TARGET_URL" -At -f /w/counts.sql' | grep -v _seq | sort > target-counts.txt
+   diff dump-counts.txt target-counts.txt && echo "一致"
+   ```
+   `counts.sql` は移行の手順 7 の SQL を保存したもの
+10. **後片付け**：`rm kotoe.dump restore.list dump-counts.txt target-counts.txt; unset TARGET_URL`（暗号化した `.gpg` は残してよい）
+11. Render の `DATABASE_URL` が戻した先を指していることを確かめて Resume する
 
 8-6 の実装時に、`postgres:17` で「書き出し → 中身の確認 → 暗号化 → 復号 → 空のローカル DB に復元」まで通し、20 テーブルと件数が戻ることを確かめた。
 Supabase への流し込みは上の移行の注記のとおり、開発の DB のダンプと、本番の Neon のダンプ（2026-11-23 の予行演習）で確かめた。
