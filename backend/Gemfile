@@ -28,7 +28,7 @@ gem "image_processing", "~> 1.2"
 gem "rack-cors"
 
 # 論理削除（ソフトデリート）。物理削除せず discarded_at フラグで消す。
-gem "discard", "~> 1.4"
+gem "discard", "~> 2.0"
 
 # 認証。フロント（Vercel）とバック（Render）は別ドメインで cookie を共有できないため、
 # JWT を Authorization ヘッダで運ぶ。失効は devise-jwt の Denylist 戦略。
