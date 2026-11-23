@@ -103,15 +103,15 @@ B に戻すときは `KOTOE_DB` を消せば、再起動とバックアップは
 
 ### 2. 移行の手順（本番）
 
-止める時間の目安は 10 分前後（予行演習の実測から。`docs/deployment.md`）。利用の少ない時間帯にユーザーと日時を決めて行う。
+止める時間の目安は DB の作業で 5 分前後（予行演習の実測）、Render の切り替えと確認を含めて 20〜30 分の枠を取る（`docs/deployment.md`）。利用の少ない時間帯にユーザーと日時を決めて行う。
 
-実行するのは Claude（開発コンテナの `pg_dump` 17.12 から）（Claude の判断）。接続文字列は `backend/.env.spike`（git 管理外、権限 600）に
+実行するのは Claude（`postgres:18` イメージの `pg_dump`/`pg_restore` 18 から。Neon が 18.7 のため。当初は開発コンテナの 17.12 の予定だった）（Claude の判断）。接続文字列は `backend/.env.spike`（git 管理外、権限 600）に
 ユーザーが `NEON_DIRECT_URL`（Neon のプールしない接続文字列）を足して受け渡す。値は表示しない。
 ダンプの保存先はリポジトリの外の `~/kotoe-migration/`（権限 700）。
 
 1. **Supabase の受け皿を空にする。** スパイクで作ったテーブルを消す（`public` の Kotoe のテーブル 18 個と `ar_internal_metadata`・`schema_migrations` だけ。`public` スキーマ自体は消さない）
 2. **生成中が無いことを確かめる。** Neon で `attempts` の `status = generating` が 0 件、Solid Queue の ready・claimed・scheduled が 0 件
-3. **書き込みを止める。** Render のダッシュボードでサービスを Suspend する（フロントは 10 分前後エラー表示になる。許容する）
+3. **書き込みを止める。** Render のダッシュボードでサービスを Suspend する（Resume するまでフロントはエラー表示になる。許容する）
 4. **Neon から書き出す。** Neon の**プールしない**接続文字列で `pg_dump -Fc -n public --no-owner --no-privileges`。Neon のサーバーバージョンが 17 を超えていたら、それ以上の `pg_dump` を使う。
    **予行演習（2026-11-23）で Neon は PostgreSQL 18.7 と判明。** `pg_dump`/`pg_restore` 18 で書き出して Supabase（17）に流し込み、件数の一致まで確かめた（`docs/deployment.md` の移行の節）
    ダンプは**リポジトリの外**（手元）に保存し、戻すときのために残す

@@ -300,11 +300,12 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 20 テーブルとシーケンスの件数が一致、`kotoe_backup` のバックアップの確認（`users` 7 行）も通った。流し込んだデータでローカルの Rails から一覧 API と health が 200。
 **18 → 17 の流し込みは PostgreSQL として保証された向きではない**（Kotoe のテーブルが単純なので通った、という実測）。B に戻す向き（17 → 18）は保証された向き。
 
-止める時間の目安は **10 分前後**（書き出し 92 秒＋流し込み 83 秒＋確認と Render の切り替え。手元から Singapore への往復で時間がかかる）。
+止める時間の目安：**DB の作業は 5 分前後**（予行演習の実測：書き出し 92 秒＋流し込み 83 秒＋件数の確認。手元から Singapore への往復で時間がかかる）。
+これに、Render の環境変数の変更・Resume・起動と、手順 9 の確認（生成 1 回を含む）が加わる。こちらは測っていないので、全体では余裕を見て 20〜30 分の枠を取る。
 `pg_dump` / `pg_restore` は **PostgreSQL 18 のクライアント**（`postgres:18` のイメージ）で流す。`pg_dump` は相手のサーバーと同じか新しいメジャーでないと書き出せないため
 （開発コンテナと `db-backup.yml` の `postgres:17` は Supabase 用で、Neon からは書き出せない）。接続文字列は `backend/.env.spike`（git 管理外）に置き、表示しない。
 
-1. **Neon のサーバーバージョンを確かめる**（`select version()`）。予行演習の時点で 18.7。19 以上に上がっていたら、19 のクライアントで書き出し、予行演習をやり直す
+1. **Neon のサーバーバージョンを確かめる**（`select version()`）。予行演習の時点で 18.7。**19 以上に上がっていたら作業を止めて相談する**（19 → 17 の流し込みは確かめていない）
 2. **生成中が無いことを確かめる**（Neon）：
    ```sql
    select count(*) from attempts where status = 'generating';
@@ -313,12 +314,14 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
         + (select count(*) from solid_queue_scheduled_executions);
    ```
    どちらも 0 になるまで待つ
-3. **Render のダッシュボードで `kotoe-api` を Suspend する**（フロントは 10 分前後エラー表示になる）。
+3. **Render のダッシュボードで `kotoe-api` を Suspend する**（Resume するまでフロントはエラー表示になる）。
    **Suspend の後に、手順 2 の SQL をもう一度流す**（確かめてから Suspend までの間に生成が始まりうる）。1 件目が 0 でなければ、その挑戦は途中で止まっているので
    `update attempts set status = 'failed' where status = 'generating';` で失敗にする（キューの側が 0 でなければ、その件数を記録しておく）
 4. **Neon から書き出す**（Neon の**プールしない**接続文字列。ダンプはリポジトリの外の `~/kotoe-migration/`、権限 700）：
    ```bash
-   pg_dump -Fc -n public --no-owner --no-privileges -f ~/kotoe-migration/neon-<日付>.dump "$NEON_DIRECT_URL"
+   # 予行演習と同じ形。~/kotoe-migration をコンテナの /w に、接続文字列は env ファイルで渡す（コマンドに書かない）
+   docker run --rm --env-file backend/.env.spike -v ~/kotoe-migration:/w postgres:18 \
+     sh -c 'pg_dump -Fc -n public --no-owner --no-privileges -f /w/neon-<日付>.dump "$NEON_DIRECT_URL"'
    ```
 5. **Supabase の受け皿を空にする**（Session pooler。`public` スキーマ自体は消さない）。
    **テーブル名は手で並べている。マイグレーションでテーブルを足したら、この `DROP TABLE` と手順 7 の件数比較の SQL の 2 か所も更新する**（漏れると復元が `--exit-on-error` で止まる）。
@@ -333,8 +336,9 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 6. **Supabase に流し込む**。`-n public` のダンプは `CREATE SCHEMA public` を含み、既に `public` がある DB では
    その 1 行がエラーになる。一覧からその行を除いて復元すると、本当のエラーだけで止まる：
    ```bash
-   pg_restore -l ~/kotoe-migration/neon-<日付>.dump | grep -v " SCHEMA - public " > ~/kotoe-migration/restore.list
-   pg_restore --no-owner --no-privileges --exit-on-error -L ~/kotoe-migration/restore.list -d "$SUPABASE_SESSION_URL" ~/kotoe-migration/neon-<日付>.dump
+   docker run --rm --env-file backend/.env.spike -v ~/kotoe-migration:/w postgres:18 sh -c '
+     pg_restore -l /w/neon-<日付>.dump | grep -v " SCHEMA - public " > /w/restore.list &&
+     pg_restore --no-owner --no-privileges --exit-on-error -L /w/restore.list -d "$SPIKE_SESSION_URL" /w/neon-<日付>.dump'
    ```
    続けて `kotoe_backup` の `GRANT SELECT ON ALL ...` の 2 行を流し直す
 7. **件数を比べる**。Kotoe のテーブルは 18（＋ `ar_internal_metadata`・`schema_migrations` で 20）。
@@ -407,7 +411,7 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
    **新しく作った空の DB でも `-L` は要る**（`public` スキーマは最初からあり、`CREATE SCHEMA public` が衝突して止まる。8-6 の実装時に確認）
 
 8-6 の実装時に、`postgres:17` で「書き出し → 中身の確認 → 暗号化 → 復号 → 空のローカル DB に復元」まで通し、20 テーブルと件数が戻ることを確かめた。
-Supabase への流し込みは上の移行の注記のとおり、開発の DB のダンプで確かめた。
+Supabase への流し込みは上の移行の注記のとおり、開発の DB のダンプと、本番の Neon のダンプ（2026-11-23 の予行演習）で確かめた。
 
 ### 見張りと B に戻る条件
 

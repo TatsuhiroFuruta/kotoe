@@ -6,7 +6,7 @@
 
 **Architecture:** アプリのコードは変えない（`DATABASE_URL` の差し替えだけ）。足すのは GitHub Actions のワークフロー 2 本（再起動・バックアップ）と手順書・文書。ワークフローはリポジトリ変数 `KOTOE_DB=supabase` のときだけ動き、PR 1 のマージと本番の切り替えを切り離す。切り替え・1 週間の観察・PR 2 は、ユーザーと一緒に行うタスクとして最後に置く。
 
-**Tech Stack:** GitHub Actions、PostgreSQL 17（`pg_dump` / `pg_restore`）、gpg、Supabase（Supavisor）、Render Deploy Hook、Google Apps Script
+**Tech Stack:** GitHub Actions、PostgreSQL 17（Supabase・バックアップ）と 18（Neon からの移行。`pg_dump` / `pg_restore`）、gpg、Supabase（Supavisor）、Render Deploy Hook、Google Apps Script
 
 **Spec:** `docs/superpowers/specs/2026-11-21-issue-8-6-supabase-keepalive-design.md`
 
@@ -29,7 +29,7 @@
 2. **Render が落ちていて `/api/health` が取れない夜**：記録のために再起動まで止まると、メモリのリセットという本来の目的が果たせない → health の失敗は記録して続行し、Deploy Hook の失敗だけをジョブの失敗にする（Task 1）
 3. **`KOTOE_DB` 未設定のままマージ・手動実行**：Neon 構成の Render を再デプロイしたり、空の Supabase をダンプしたりしない → ジョブが skipped になることを確かめる（Task 1・2）
 4. **移行中に生成が走っている**：`generating` の挑戦や実行待ちのジョブを残したまま移すと、宙に浮く → 切り替えの前に 0 件を確かめ、0 件でなければ待つ（Task 6）
-5. **Neon のサーバーが PostgreSQL 18 以上**：開発コンテナの `pg_dump` 17.12 では書き出せない → 切り替えの前にサーバーのバージョンを確かめる（Task 6）
+5. **Neon のサーバーが PostgreSQL 18 以上**：開発コンテナの `pg_dump` 17.12 では書き出せない → 切り替えの前にサーバーのバージョンを確かめる（Task 6）。**予行演習（2026-11-23）で 18.7 と判明し、18 のクライアントで移行できることを確かめた**
 
 ---
 
@@ -111,7 +111,7 @@ git commit -m "ci: 毎晩 Render を再デプロイしてメモリをリセッ�
   `postgres:17` コンテナで、`SPIKE_BACKUP_URL` から `pg_dump`、テスト用パスフレーズで `gpg` 暗号化・復号、
   使い捨ての `postgres:17` コンテナ（空の DB）に `pg_restore --no-owner --no-privileges`。
   事前にスパイクの Supabase に PingJob を 1 件流しておくと、データの行があることを見られる（`solid_queue_jobs`）
-  Expected: 復元先で Kotoe の 17 テーブルがあり、`solid_queue_jobs` の件数が Supabase と一致。`pg_restore -l` の確認が `users` で通る
+  Expected: 復元先で Kotoe の 18 テーブル（＋管理用 2）があり、`solid_queue_jobs` の件数が Supabase と一致。`pg_restore -l` の確認が `users` で通る
 
 - [ ] **Step 6: Commit**
 
@@ -159,7 +159,7 @@ git commit -m "ci: Supabase を毎日 pg_dump し、暗号化して artifact に
   移行の手順は spec の 2 の 9 ステップをそのまま、コマンド付きで。加える点：
   - 受け皿を空にする SQL は Kotoe のテーブル 17 個＋`ar_internal_metadata`・`schema_migrations` を名前で列挙して `DROP TABLE ... CASCADE`（`public` スキーマは消さない）
   - 流し込んだ後に `kotoe_backup` への `GRANT` をやり直す（テーブルを作り直すと消える）
-  - 件数比較は 19 テーブル全部、Neon と Supabase の両方で `select count(*)` を並べて出す形
+  - 件数比較は 20 テーブル全部（Kotoe の 18 ＋管理用 2）、Neon と Supabase の両方で `select count(*)` を並べて出す形
   - B に戻す手順の先頭に「Neon でブランチ `pre-supabase-<日付>` を切る」
   - GAS：スクリプト（`UrlFetchApp.fetch("https://kotoe-api.onrender.com/up", { muteHttpExceptions: true })`）、時間主導型・10 分おき、失敗通知、B に戻すときの時間帯の絞り方（JST の時刻を見て時間外は return）
   - GAS の無料の上限（URL の取得・トリガーの合計実行時間）を Google の公式ページで確かめ、数字と URL を載せる（1 日 144 回が収まること）
@@ -215,7 +215,7 @@ git commit -m "docs: 8-6 の本番を Supabase＋24 時間キープアライブ�
 - [ ] **Step 2: Neon に `generating` が 0、Solid Queue の ready・claimed・scheduled が 0**（Review Focus 4）。0 でなければ待つ。**Suspend の後にもう一度確かめ、`generating` が残っていれば `failed` にする**
 - [ ] **Step 3: ユーザーが Render を Suspend**
 - [ ] **Step 4: 受け皿を空にする → `pg_dump`（Neon）→ `~/kotoe-migration/`（権限 700）→ `pg_restore`（Supabase）→ `kotoe_backup` に GRANT し直す**
-- [ ] **Step 5: 19 テーブルの件数とシーケンス（`users`）が一致**
+- [ ] **Step 5: 20 テーブルの件数とシーケンス（`users`）が一致**
 - [ ] **Step 6: ユーザーが Render の `DATABASE_URL` を Supabase の Session pooler に差し替えて Resume**
 - [ ] **Step 7: 本番の確認**：`/api/health` が `{"status":"ok","database":"ok",...}`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
 - [ ] **Step 8: ユーザーが Secret `SUPABASE_BACKUP_URL`（`kotoe_backup`）と変数 `KOTOE_DB=supabase` を登録**
