@@ -391,7 +391,7 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 1. 事前に（ユーザー）：Render の Billing でカードを登録し、**月の上限額（spend limit）を設定**する（Render のビルドの説明に「monthly spend limit」に達したら追加のビルドを止める、とある：<https://render.com/docs/build-pipeline>。帯域の超過にも効くかは未確認なので、Billing の画面で確かめる）。Starter の月額と、日割りかどうかを確かめる
 2. Render の `kotoe-api` → **Settings → Instance Type** で **Starter** を選んで保存する（再デプロイが走る。利用の少ない時間に）
 3. 確かめる：Events にデプロイの成功が出る、`/api/health` が 200、`memory` の `limit_mb` などが今までどおり読める
-4. **GitHub の変数 `KOTOE_RENDER_PLAN=starter` を設定し、`Nightly restart` を手動実行する**。ログに `memory=` の行が出て、Render の Events に再デプロイが出ること。**そのビルドにかかった時間を記録する**（Hobby のビルド枠は月 500 分。毎晩なら 30 回分）
+4. **手順 2 の再デプロイのビルドにかかった時間を、Render の Events で記録する**（Hobby のビルド枠は月 500 分。毎晩なら 30 回分）。そのうえで **GitHub の変数 `KOTOE_RENDER_PLAN=starter` を設定し、`Nightly restart` を手動実行する**。ログに `memory=` の行が出て、Render の Events に再デプロイが出ること（この手動実行で再デプロイがもう 1 回走る。ビルドが 1 回分増え、その間の生成は途中で止まりうるので、利用の少ない時間に）
 5. **20 分以上アクセスせずに置いてから** `/up` を叩き、数百ミリ秒で返る（眠らなくなった）ことを確かめる
 6. 翌月の Billing で、Kotoe の Free instance hours が増えていないこと（別のサービスの分だけになっていること）を確かめる
 7. 切り替えの後の PR 2 で `render.yaml` の `plan: free` を `starter` に直す（このサービスは Blueprint で作っていないので `render.yaml` は反映されないが、設定の正として合わせる）
@@ -435,7 +435,7 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 | 戻す先 | 流し込みに使う接続文字列 | 戻した後の Render の `DATABASE_URL` |
 |---|---|---|
 | Supabase | Session pooler（5432、`pooler.supabase.com`） | 同じ Session pooler |
-| Neon | **プールしない**接続文字列（ホストに `-pooler` が無いもの。プール接続は設定が持ち越される） | **プール接続**（`-pooler` 付き）。あわせて「B に戻す」の手順 6〜8 を行う |
+| Neon | **プールしない**接続文字列（ホストに `-pooler` が無いもの。プール接続は設定が持ち越される） | **プール接続**（`-pooler` 付き）。あわせて「B に戻す」の手順 5〜8 を行う（**Instance Type を Free に戻す**ことを含む。Starter のまま Neon に戻すと、眠らずに Neon の無料枠を約 16 日で使い切る） |
 | 新しい Supabase プロジェクト | そのプロジェクトの Session pooler | 同じ Session pooler。**`kotoe_backup` を作り直し**（上の「バックアップ用の読み取り専用ロール」の SQL を全部）、Secret `SUPABASE_BACKUP_URL` を新しいプロジェクトのものに替える |
 
 1. **アプリとワークフローを止める**：Render の `kotoe-api` を Suspend し、GitHub の変数 `KOTOE_DB` を消す（復元の最中に、03:00 のバックアップや 04:00 の再デプロイが走らないようにするため）。
@@ -484,6 +484,7 @@ Supabase への流し込みは上の移行の注記のとおり、開発の DB �
 |---|---|---|---|
 | メモリ（anon） | `Nightly restart` のログの `memory=` | 週 1 回 | anon が 470 MB を超えた日がある |
 | egress | Supabase の Usage（Shared Pooler Egress を含む合計） | 週 1 回 | 月の見込みが 5GB を超える（スパイクの見込みは何もしなくて月 約 1.8〜2.1 GB。毎日のバックアップも egress に数えられるが、開発の DB（挑戦 118 件）のダンプが約 80 KB なので、月 30 回でも数 MB） |
+| 毎晩の再起動が動いているか | Actions の `Nightly restart` | 週 1 回 | （戻る条件ではない）Starter なのに **skipped が続いていたら** `KOTOE_RENDER_PLAN=starter` の設定漏れ。skipped は失敗の通知が来ないので、目で見る |
 | 取り残された生成 | `select id, updated_at from attempts where status = 'generating' and updated_at < now() - interval '10 minutes'` | 週 1 回 | （戻る条件ではない）毎晩の再デプロイで生成が途中で止まると残りうる。見つけたら `failed` にする |
 | 一時停止 | Supabase のダッシュボード・サイトの表示 | 起きたら気づく | 1 回でも起きる |
 | Render の請求・稼働時間・ビルド時間 | Render の Billing | 月 1 回 | （戻る条件ではない）Kotoe は Starter の定額だけで、ビルド時間（500 分）・帯域の超過が 0 か。Free instance hours は別のサービスの分だけで 750h 未満か |
