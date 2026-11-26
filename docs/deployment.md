@@ -267,7 +267,8 @@ Settings → Secrets and variables → Actions。
 
 | 名前 | 種類 | 中身 | 使うワークフロー |
 |---|---|---|---|
-| `KOTOE_DB` | 変数（Variables） | `supabase`。**未設定のあいだ、下の 2 本は何もしない（skipped）** | 両方 |
+| `KOTOE_DB` | 変数（Variables） | `supabase`。**未設定のあいだ、下の 2 本は何もしない（skipped）**。① で設定する | 両方 |
+| `KOTOE_RENDER_PLAN` | 変数（Variables） | `starter`。**② で設定する**。未設定のあいだ（Render が無料の間）は再起動が動かない（眠ることでメモリはリセットされ、起こすと共有の無料枠を使うため） | `nightly-restart.yml` |
 | `RENDER_DEPLOY_HOOK_URL` | Secret | Render の `kotoe-api` → Settings → Deploy Hook の URL。知っていれば誰でもデプロイを起こせる | `nightly-restart.yml` |
 | `SUPABASE_BACKUP_URL` | Secret | `kotoe_backup` の Session pooler の接続文字列 | `db-backup.yml` |
 | `BACKUP_PASSPHRASE` | Secret | バックアップの暗号化のパスフレーズ。**`openssl rand -base64 32` などで作り、人が考えた文字列にしない**（artifact はログインした誰でも取れ、手元で総当たりできるので、強さだけが守り）。**リポジトリの外（パスワードマネージャーなど）にも控える。無くすと復元できない** | `db-backup.yml` |
@@ -376,9 +377,8 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
    ```
 8. **Render の `DATABASE_URL` を Supabase の Session pooler に差し替えて Resume する**
 9. **確かめる**：`/api/health` が `"database":"ok"`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
-10. **`KOTOE_DB=supabase` を設定し、2 本のワークフローを Actions の画面から手動実行（Run workflow）する**。
-    バックアップの artifact ができ、再起動のログに `memory=` の行が出て、Render の Events に再デプロイが出ること。
-    **そのビルドにかかった時間を記録する**（Hobby のビルド枠は月 500 分。毎晩なら 30 回分）
+10. **`KOTOE_DB=supabase` を設定し、`DB backup` を Actions の画面から手動実行（Run workflow）する**。バックアップの artifact ができること。
+    `Nightly restart` は `KOTOE_RENDER_PLAN` が未設定なので、まだ動かない（② で動かす）
 11. Neon は消さない（B に戻すときの受け皿）
 
 ここまでで ① は終わり。Render は無料のままで、今までどおり 15 分アイドルで眠る。
@@ -386,14 +386,15 @@ Supabase への流し込みは、8-6 の実装時に開発の DB のダンプで
 ### Render を Starter にする（② ）
 
 **① の後に行う。① より先にはしない**（Neon のまま眠らなくなると、Solid Queue のポーリングで Neon の無料枠 100 CU-h を約 16 日で使い切る）。
-目安は 11/30〜12/1 ごろ、遅くとも 12 月の初め（12 月は別のサービスだけで約 744 h なので、Kotoe が無料のまま 12 月に約 6 h 以上起きると月末に 750 h を超える。Starter に変えた後も、12 月のうち無料だった時間は数えられる）。
+目安は 11/30〜12/1 ごろ、遅くとも 12 月の初め（12 月は別のサービスだけで約 744 h なので、Kotoe が無料のまま 12 月に約 6 h 以上起きると月末に 750 h を超える。訪問で起きるたびに最低 15 分は起きているので、1 日 1〜2 回の訪問でも数日で 6 h に近づく。Starter に変えた後も、12 月のうち無料だった時間は数えられる）。
 
-1. 事前に（ユーザー）：Render の Billing でカードを登録し、**上限額（spend limit）を設定**する。Starter の月額と、日割りかどうかを確かめる
+1. 事前に（ユーザー）：Render の Billing でカードを登録し、**月の上限額（spend limit）を設定**する（Render のビルドの説明に「monthly spend limit」に達したら追加のビルドを止める、とある：<https://render.com/docs/build-pipeline>。帯域の超過にも効くかは未確認なので、Billing の画面で確かめる）。Starter の月額と、日割りかどうかを確かめる
 2. Render の `kotoe-api` → **Settings → Instance Type** で **Starter** を選んで保存する（再デプロイが走る。利用の少ない時間に）
 3. 確かめる：Events にデプロイの成功が出る、`/api/health` が 200、`memory` の `limit_mb` などが今までどおり読める
-4. **20 分以上アクセスせずに置いてから** `/up` を叩き、数百ミリ秒で返る（眠らなくなった）ことを確かめる
-5. 翌月の Billing で、Kotoe の Free instance hours が増えていないこと（別のサービスの分だけになっていること）を確かめる
-6. 切り替えの後の PR 2 で `render.yaml` の `plan: free` を `starter` に直す（このサービスは Blueprint で作っていないので `render.yaml` は反映されないが、設定の正として合わせる）
+4. **GitHub の変数 `KOTOE_RENDER_PLAN=starter` を設定し、`Nightly restart` を手動実行する**。ログに `memory=` の行が出て、Render の Events に再デプロイが出ること。**そのビルドにかかった時間を記録する**（Hobby のビルド枠は月 500 分。毎晩なら 30 回分）
+5. **20 分以上アクセスせずに置いてから** `/up` を叩き、数百ミリ秒で返る（眠らなくなった）ことを確かめる
+6. 翌月の Billing で、Kotoe の Free instance hours が増えていないこと（別のサービスの分だけになっていること）を確かめる
+7. 切り替えの後の PR 2 で `render.yaml` の `plan: free` を `starter` に直す（このサービスは Blueprint で作っていないので `render.yaml` は反映されないが、設定の正として合わせる）
 
 ### キープアライブ（GAS）— 使わない（B に戻すとき用）
 
@@ -494,8 +495,8 @@ Supabase への流し込みは上の移行の注記のとおり、開発の DB �
 3. Supabase（Session pooler）から `pg_dump`（移行の手順 4 と同じオプション）
 4. Neon の main の Kotoe のテーブルを消し（移行の手順 5 の `DROP TABLE`）、`CREATE SCHEMA public` を除いた一覧で流し込む（Neon への流し込みは未確認。戻すと決めたら、先に Neon のブランチで予行演習する）
 5. 件数を比べ、Render の `DATABASE_URL` を Neon のプール接続文字列に戻し、**Instance Type を Free に戻して** Resume する
-6. GitHub の変数 `KOTOE_DB` を消す（再起動とバックアップが止まる。B は毎晩眠るので再起動は要らず、Neon は自前で履歴を持つ）
-7. GAS のスクリプトで時間外は何もしないようにする。**同じワークスペースの別のサービスと合わせて 1 日 23 時間以内**にする（750 h ÷ 31 日。例：Kotoe 9 h＋別のサービス 14 h。時間帯は重なってもよい）。Neon は 0.255 CU-h/時の実測で 9h/日 ≒ 71 CU-h/月（無料 100）。例：9〜18 時：
+6. GitHub の変数 `KOTOE_DB` と `KOTOE_RENDER_PLAN` を消す（再起動とバックアップが止まる。B は毎晩眠るので再起動は要らず、Neon は自前で履歴を持つ）
+7. GAS のスクリプトで時間外は何もしないようにする。**同じワークスペースの別のサービスと合わせて 1 日 23 時間以内**にする（750 h ÷ 31 日 ≒ 24.2 h に対し、時間帯の外の訪問と、最後の ping から眠るまでの約 15 分の分の余裕を見て 23 h。例：Kotoe 9 h＋別のサービス 14 h。時間帯は重なってもよい）。Neon は 0.255 CU-h/時の実測で 9h/日 ≒ 71 CU-h/月（無料 100）。例：9〜18 時：
    ```javascript
    function keepAlive() {
      const hour = Number(Utilities.formatDate(new Date(), "Asia/Tokyo", "H"));
@@ -537,7 +538,7 @@ ORDER BY 1;
 ## 運用上の注意
 
 - **free プランはスリープする**：無操作で約15分後に spin down し、次アクセスのコールドスタートに
-  数十秒かかる。8-6 からは Kotoe の Render を Starter（有料）にして眠らせていない（下の「Supabase と Render Starter」。② の後）。
+  数十秒かかる。8-6 からは Kotoe の Render を Starter（有料）にして眠らせていない（上の「Supabase と Render Starter」。② の後）。
 - **DB はプーラー経由で接続する**：Rails は Supabase の Session pooler（5432、Pool Size 30）。Direct connection は
   IPv6 専用で Render からもローカルからもつながらない。マイグレーションは `backend/bin/render-build.sh` の
   ビルドフェーズで走り、Session pooler 経由で通ることを確認済み（8-6）。上の「接続文字列の使い分け」の理由も読むこと。
