@@ -2,8 +2,8 @@ name: Nightly restart
 
 # 毎晩 Render を再デプロイして、Rails のメモリ（cgroup の anon）をリセットする（issue 8-6）。
 #
-# 目的は Render のメモリで、Supabase のためではない。24 時間キープアライブ（GAS から /up を 10 分おき）で
-# Render が眠らなくなると、15 分アイドルで眠ることによる自然なリセットが無くなる。8-13 の実測では、
+# 目的は Render のメモリで、Supabase のためではない。Render を Starter（眠らない）にしたので、
+# 無料のときの「15 分アイドルで眠る」ことによる自然なリセットが無い。8-13 の実測では、
 # 生成なしでも anon が 24 時間で 339 → 443 MB（天井 約 480）まで増え、止まっていなかった（docs/README.md）。
 #
 # - リポジトリ変数 KOTOE_DB が supabase のときだけ動く。Neon のまま毎晩再デプロイしないため。
