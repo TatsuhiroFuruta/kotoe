@@ -88,7 +88,7 @@
 |---|---|---|
 | フロントエンド | Next.js (App Router) / TypeScript / TailwindCSS | Vercel デプロイ |
 | バックエンド | Ruby on Rails (API) | Render デプロイ |
-| データベース | PostgreSQL (Supabase) | Session pooler で接続（Pool Size 30）。issue 8-6 で Neon から移し、24 時間キープアライブ（下の「無料枠の制約」） |
+| データベース | PostgreSQL (Supabase) | Session pooler で接続（Pool Size 30）。issue 8-6 で Neon から移し、Render は Starter で眠らせない（下の「無料枠の制約」） |
 | 画像ストレージ | Cloudinary | モデレーションアドオンも検討 |
 | **画像生成 API** | OpenAI GPT Image / Google Imagen 4 / Flux 等 | **コア機能（要選定・下記参照）** |
 | 非同期処理 | Solid Queue | 画像生成をジョブ化（**選定理由は下記**） |
@@ -151,12 +151,12 @@ Sidekiq と比較した結果、**Solid Queue を採用する**（導入は issu
 
 ## 💰 無料枠の制約（issue 4-1 で調査・2026-07-31 時点）
 
-> **issue 8-6（2026-11）で構成が変わった。** 本番 DB を Supabase に移し、GAS で Render を 24 時間起こし続けている。下の「Render と Neon が連動して寝る」仕組みは Neon のころの話で、今の本番には当てはまらない（Neon に戻すとき＝B のときには、また当てはまる）。今の構成で無料枠に収まる根拠は次のとおり（詳細と B に戻す条件は `docs/deployment.md`「Supabase と 24 時間キープアライブ」）。
+> **issue 8-6（2026-11）で構成が変わった。** 本番 DB を Supabase に移し、Kotoe の Render を Starter（有料・眠らない）にした（当初は無料のまま GAS で 24 時間起こす予定だったが、同じワークスペースの別のサービスと無料の 750 時間を共有しているため 2026-11-26 に変更）。下の「Render と Neon が連動して寝る」仕組みは Neon のころの話で、今の本番には当てはまらない（Neon に戻すとき＝B のときには、また当てはまる）。今の構成の上限と費用は次のとおり（詳細と B に戻す条件は `docs/deployment.md`「Supabase と Render Starter」）。
 >
-> | | 上限 | 24 時間起こし続けたとき |
+> | | 上限・費用 | 24 時間起きているとき |
 > |---|---|---|
 > | Supabase（無料） | egress 5GB/月、計算時間の上限なし、7 日無活動で一時停止 | Solid Queue のポーリングだけで egress 月 約 1.8〜2.1 GB（8-6 のスパイク、2026-11-21 に Transaction pooler 経由で 1 時間計測。本番は Session pooler で、切り替え後に Supabase の Usage で確かめる）。一時停止は、常時のポーリングと毎日のバックアップで起きない見込み |
-> | Render（無料 Web） | 750 instance-hours/月・ワークスペース、ビルド 500 分/月 | 730h。毎晩の再デプロイのビルドは 1 回の時間 × 30 回（切り替え時に計測） |
+> | Render（Kotoe は Starter） | Starter は定額（月額はダッシュボードで確認）。無料の 750 instance-hours/月はワークスペース単位で、Kotoe は使わない。ビルド 500 分/月 | 毎晩の再デプロイのビルドは 1 回の時間 × 30 回（切り替え時に計測）。カード登録後はビルド・帯域の超過分が請求されうるので、上限額（spend limit）を設定する |
 > | Render のメモリ | 512 MB（anon の天井 約 480 MB） | 24 時間で anon 339 → 443 MB（8-13）。毎晩の再デプロイでリセットする |
 
 Kotoe が $0 で動いているのは、各サービスを個別に無料プランにしたからではなく、**Render と Neon が連動して寝るから**である。この連鎖を壊す変更（常駐プロセス、キープアライブ、有料化）は、意図しない形で跳ね返る。
@@ -456,7 +456,7 @@ Render のワークスペースは Hobby（$0）のまま有料インスタン�
 
 → **将来「常時起動が必要」となった場合、Supabase 無料 + Render Starter $7 が有力**（$26 → $7）。ただし RAM 500MB 共有の固定リソースになり、Neon のオートスケールは失う。**今は移す必要がない**（常駐が必要になった時点で、その必要性とセットで判断する。移行コストは今やっても後でやっても同じ）。
 
-→ **issue 8-6（2026-11）で、Render は無料のまま Supabase に移した。** Render の無料 Web は 24 時間でも月 730h で 750h に収まり、眠らせない代わりに毎晩の再デプロイでメモリをリセットしている。$7 の Render Starter は使っていない。
+→ **issue 8-6（2026-11）で、Supabase 無料 ＋ Render Starter にした。** 当初は Render を無料のまま 24 時間起こす予定だったが、同じワークスペースの別のサービスと無料の 750 時間を共有しているため成り立たず、2026-11-26 に Starter に変えた。眠らない代わりに毎晩の再デプロイでメモリをリセットしている。（以下は当初の記述）~~$7 の Render Starter は使っていない。~~
 
 ### ストレージ 0.5 GB は律速にならない
 

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-11-26 の方針変更**：Kotoe の Render を Starter にし、GAS は使わない（設計書の先頭の節）。Task 6 は ①（DB の切り替え）と ②（Starter への変更、Task 6b）の 2 段階。GAS に関する記述は使わない。
+
 **Goal:** 本番の DB を Neon から Supabase に移し、GAS で 24 時間キープアライブしてコールドスタートを消す。メモリ対策の毎晩の再起動と、毎日の暗号化バックアップを GitHub Actions で回す。
 
 **Architecture:** アプリのコードは変えない（`DATABASE_URL` の差し替えだけ）。足すのは GitHub Actions のワークフロー 2 本（再起動・バックアップ）と手順書・文書。ワークフローはリポジトリ変数 `KOTOE_DB=supabase` のときだけ動き、PR 1 のマージと本番の切り替えを切り離す。切り替え・1 週間の観察・PR 2 は、ユーザーと一緒に行うタスクとして最後に置く。
@@ -220,12 +222,19 @@ git commit -m "docs: 8-6 の本番を Supabase＋24 時間キープアライブ�
 - [ ] **Step 7: 本番の確認**：`/api/health` が `{"status":"ok","database":"ok",...}`、ログイン、一覧・詳細、生成 1 回（即公開まで）、いいね
 - [ ] **Step 8: ユーザーが Secret `SUPABASE_BACKUP_URL`（`kotoe_backup`）と変数 `KOTOE_DB=supabase` を登録**
 - [ ] **Step 9: 2 本を `workflow_dispatch` で流す**：バックアップが成功し artifact ができる。再起動のログに `memory=` の行があり、Render の Events に再デプロイが出る。**そのビルドにかかった時間と、バックアップの artifact の大きさを記録**（月 500 分と egress の見込みに使う）
-- [ ] **Step 10: ユーザーが GAS のスクリプトとトリガーを作る**
-- [ ] **Step 11: コールドスタートが無いことを確かめる**：20 分以上アクセスしないで置き、`/up` と `/api/health` が数百ミリ秒で返る
+- [ ] ~~Step 10: ユーザーが GAS のスクリプトとトリガーを作る~~（2026-11-26：不要）
+- [ ] ~~Step 11: コールドスタートが無いことを確かめる~~（2026-11-26：Task 6b に移す。① の後も Render は無料のままなので眠る）
+
+### Task 6b: Render を Starter にする（②、Task 6 の後、11/30〜12/1 ごろ。2026-11-26 追加）
+
+- [ ] **Step 1: ユーザー**：Billing でカードの登録と上限額（spend limit）の設定。Starter の月額と日割りかを確認
+- [ ] **Step 2: ユーザー**：`kotoe-api` → Settings → Instance Type を Starter にする（`docs/deployment.md`「Render を Starter にする」）
+- [ ] **Step 3: 確認**：デプロイの成功、`/api/health` が 200。20 分以上アクセスしないで置いてから `/up` と `/api/health` が数百ミリ秒で返る
+- [ ] **Step 4**：PR 2 で `render.yaml` の `plan: free` を `starter` に直す
 
 ### Task 7: 1 週間の観察と PR 2
 
-- [ ] **Step 1: 1 週間後に集める**：毎晩のログの `memory=`（7 日分の anon）、Supabase の Usage の egress、Render の Billing の稼働時間とビルド時間、バックアップの成否 7 回、GAS の失敗通知の有無
+- [ ] **Step 1: 1 週間後に集める**：毎晩のログの `memory=`（7 日分の anon）、Supabase の Usage の egress、Render の Billing の請求額・ビルド時間・帯域・別のサービスの Free instance hours、バックアップの成否 7 回、GAS の失敗通知（2026-11-26：GAS は使わないので対象外）の有無
 - [ ] **Step 2: 判定**：B に戻る条件（anon 470 MB 超え、egress の月の見込み 5GB 超え、一時停止）に当たっていないか。ビルド時間の月の見込みが 500 分を超えるなら cron を 2 日に 1 回に変える
 - [ ] **Step 3: 新しいブランチで README・backlog に結果を書き、`backend/.env.spike` を削除し、`/code-review high` → PR 2（`Closes #137`）**
 - [ ] **Step 4: 2 週間後・1 か月後の見直しの日付を backlog に書く**（利用時間帯の SQL もそこで回す）
